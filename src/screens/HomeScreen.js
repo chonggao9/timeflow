@@ -9,6 +9,32 @@ import Timeline from '../components/Timeline';
 import CheckInButton from '../components/CheckInButton';
 import TransportPicker from '../components/TransportPicker';
 
+// 快速定位：先上次已知位置（瞬时），再实时低精度（6 秒超时）；都不行返回 null
+async function getPositionFast() {
+  // 定位服务未开启，直接放弃，避免长时间等待
+  try {
+    const on = await Location.hasServicesEnabledAsync();
+    if (!on) return null;
+  } catch (e) { /* 忽略，继续尝试 */ }
+
+  // 1) 上次已知位置，瞬时返回
+  try {
+    const cached = await Location.getLastKnownPositionAsync();
+    if (cached) return cached;
+  } catch (e) { /* 忽略 */ }
+
+  // 2) 实时定位（低精度 + 超时，网络定位通常 1-3 秒返回）
+  try {
+    const loc = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('定位超时')), 6000)),
+    ]);
+    if (loc) return loc;
+  } catch (e) { /* 超时或失败 */ }
+
+  return null;
+}
+
 export default function HomeScreen() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -41,7 +67,7 @@ export default function HomeScreen() {
     })();
   }, [records]);
 
-  // 一键打卡：用当前选中的出行方式直接记录
+  // 一键打卡：用当前选中的出行方式直接记录（定位失败也不阻塞打卡）
   const handleCheckIn = async () => {
     setLoading(true);
     try {
@@ -50,13 +76,19 @@ export default function HomeScreen() {
       let lat = null, lng = null;
 
       if (status === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        lat = loc.coords.latitude;
-        lng = loc.coords.longitude;
-        const [addr] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-        if (addr) {
-          locationName = [addr.street, addr.district, addr.city]
-            .filter(Boolean).join(' ') || addr.name || '未知位置';
+        const loc = await getPositionFast();
+        if (loc) {
+          lat = loc.coords.latitude;
+          lng = loc.coords.longitude;
+          try {
+            const [addr] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+            if (addr) {
+              locationName = [addr.street, addr.district, addr.city]
+                .filter(Boolean).join(' ') || addr.name || '未知位置';
+            }
+          } catch (e) {
+            locationName = '未知位置';
+          }
         }
       }
 
@@ -75,7 +107,7 @@ export default function HomeScreen() {
       setTimeout(() => setSuccess(false), 1200);
     } catch (e) {
       setLoading(false);
-      Alert.alert('定位失败', '无法获取位置，请检查权限设置');
+      Alert.alert('打卡失败', '无法获取位置，请检查权限设置');
     }
   };
 

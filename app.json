@@ -20,8 +20,7 @@
       "adaptiveIcon": {
         "backgroundColor": "#FF6B6B"
       },
-      "package": "com.timeflow.app",
-      "permissions": ["ACCESS_FINE_LOCATION"]
+      "package": "com.timeflow.app"
     },
     "plugins": [
       [
@@ -30,6 +29,12 @@
           "locationWhenInUsePermission": "打卡时记录您的位置"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ded83229-7c7b-4810-b5c9-548bdd306ce1"
+      }
+    },
+    "owner": "chaseli"
   }
 }
