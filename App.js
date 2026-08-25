@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { Alert, Linking } from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
 import InsightsScreen from './src/screens/InsightsScreen';
+import { checkForUpdate } from './src/utils/updater';
 import { colors } from './src/theme';
 
 const Tab = createBottomTabNavigator();
@@ -52,6 +54,21 @@ function TabNavigator() {
 }
 
 export default function App() {
+  // 启动时检查新版本，有则弹窗引导下载
+  useEffect(() => {
+    checkForUpdate().then(u => {
+      if (!u) return;
+      Alert.alert(
+        '发现新版本',
+        `当前版本 ${u.currentVersion}\n最新版本 ${u.latestVersion}\n建议更新以获得最新体验。`,
+        [
+          { text: '稍后', style: 'cancel' },
+          { text: '去更新', onPress: () => Linking.openURL(u.downloadUrl) },
+        ],
+      );
+    });
+  }, []);
+
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
