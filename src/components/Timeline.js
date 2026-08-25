@@ -1,14 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { formatTime, formatDuration } from '../utils/stats';
 import { colors } from '../theme';
+import ModeIcon from './ModeIcon';
 
-const MODE_META = {
-  walk:    { icon: '🚶', label: '步行' },
-  bike:    { icon: '🚲', label: '骑行' },
-  drive:   { icon: '🚗', label: '驾车' },
-  transit: { icon: '🚌', label: '公交' },
-};
+const MODE_LABEL = { walk: '步行', bike: '骑行', drive: '驾车', transit: '公交' };
 
 // 呼吸动效 hook（当前节点）
 function usePulse() {
@@ -70,7 +67,9 @@ export default function Timeline({ records, estimate }) {
   if (!records.length) {
     return (
       <View style={styles.empty}>
-        <View style={styles.emptyRing}><Text style={styles.emptyPin}>📍</Text></View>
+        <View style={styles.emptyRing}>
+          <Ionicons name="location" size={32} color={colors.primary} />
+        </View>
         <Text style={styles.emptyText}>今天还没有打卡</Text>
         <Text style={styles.emptyHint}>选择出行方式，点下方按钮开始记录</Text>
       </View>
@@ -104,8 +103,11 @@ export default function Timeline({ records, estimate }) {
                 <View style={styles.info}>
                   <Text style={[styles.time, isLast && styles.timeCurrent]}>{formatTime(r.timestamp)}</Text>
                   <Text style={[styles.name, isLast && styles.nameCurrent]} numberOfLines={1}>{r.locationName || '未知位置'}</Text>
-                  {r.mode && MODE_META[r.mode] && (
-                    <Text style={styles.modeChip}>{MODE_META[r.mode].icon} {MODE_META[r.mode].label}</Text>
+                  {r.mode && MODE_LABEL[r.mode] && (
+                    <View style={styles.modeChip}>
+                      <ModeIcon mode={r.mode} size={13} color={colors.ink2} />
+                      <Text style={styles.modeChipText}>{MODE_LABEL[r.mode]}</Text>
+                    </View>
                   )}
                 </View>
               </View>
@@ -146,7 +148,6 @@ const styles = StyleSheet.create({
     width: 74, height: 74, borderRadius: 37, marginBottom: 18,
     backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center',
   },
-  emptyPin: { fontSize: 30 },
   emptyText: { fontSize: 16, color: colors.ink, fontWeight: '700', marginBottom: 6 },
   emptyHint: { fontSize: 13, color: colors.ink3 },
 
@@ -173,7 +174,8 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, color: colors.ink, fontWeight: '600', flex: 1 },
   nameCurrent: { color: colors.primaryStrong, fontWeight: '700' },
   nameFuture: { fontSize: 15, color: colors.ink3, fontWeight: '500', flex: 1 },
-  modeChip: { fontSize: 11, color: colors.ink2, marginLeft: 6 },
+  modeChip: { flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 6 },
+  modeChipText: { fontSize: 11, color: colors.ink2 },
 
   segmentRow: { flexDirection: 'row', alignItems: 'center', height: 34 },
   solidLine: { width: 2, flex: 1, backgroundColor: colors.line2 },

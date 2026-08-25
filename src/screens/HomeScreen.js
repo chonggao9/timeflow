@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { saveRecord, getRecords, getTodayRecords } from '../storage/store';
 import { computePathStats } from '../utils/stats';
 import { colors } from '../theme';
@@ -36,6 +37,7 @@ async function getPositionFast() {
 }
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -117,8 +119,8 @@ export default function HomeScreen() {
   return (
     <View style={styles.screen}>
       {/* 头部 */}
-      <View style={styles.header}>
-        <View>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View style={styles.titleBlock}>
           <Text style={styles.title}>今天</Text>
           <Text style={styles.date}>{dateStr}</Text>
         </View>
@@ -151,11 +153,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   header: {
-    flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingBottom: 10,
   },
+  titleBlock: { flex: 1 },
   title: { fontSize: 26, fontWeight: '800', color: colors.ink, letterSpacing: -0.5, lineHeight: 30 },
-  date: { fontSize: 13, color: colors.ink2, marginTop: 4 },
+  date: { fontSize: 13, color: colors.ink2, marginTop: 3 },
   badge: {
     backgroundColor: colors.primarySoft, borderRadius: 999,
     paddingHorizontal: 12, paddingVertical: 7,

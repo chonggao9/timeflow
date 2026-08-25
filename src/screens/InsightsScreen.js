@@ -1,15 +1,16 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords, clearAll } from '../storage/store';
 import { computePathStats } from '../utils/stats';
 import { colors, radius, shadow } from '../theme';
-
-const MODE_ICON = { walk: '🚶', bike: '🚲', drive: '🚗', transit: '🚌', unknown: '•' };
+import ModeIcon from '../components/ModeIcon';
 
 const minutes = (sec) => Math.round(sec / 60);
 
 export default function InsightsScreen() {
+  const insets = useSafeAreaInsets();
   const [stats, setStats] = useState([]);
   const [totalDays, setTotalDays] = useState(0);
   const [totalCheckins, setTotalCheckins] = useState(0);
@@ -37,7 +38,7 @@ export default function InsightsScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       {/* 头部 */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
         <Text style={styles.title}>洞察</Text>
         <Text style={styles.subtitle}>你的路段耗时规律</Text>
       </View>
@@ -70,7 +71,7 @@ export default function InsightsScreen() {
           <View key={i} style={styles.pathCard}>
             <View style={styles.pathHead}>
               <View style={styles.pathIcon}>
-                <Text style={styles.pathIconEmoji}>{MODE_ICON[s.mode] || MODE_ICON.unknown}</Text>
+                <ModeIcon mode={s.mode} size={20} color={colors.primaryStrong} />
               </View>
               <View style={styles.pathRoute}>
                 <Text style={styles.pathRouteText} numberOfLines={1}>
@@ -106,7 +107,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 40 },
 
-  header: { paddingHorizontal: 4, paddingTop: 6, marginBottom: 18 },
+  header: { paddingHorizontal: 4, marginBottom: 18 },
   title: { fontSize: 26, fontWeight: '800', color: colors.ink, letterSpacing: -0.5 },
   subtitle: { fontSize: 13, color: colors.ink2, marginTop: 4 },
 
@@ -133,7 +134,6 @@ const styles = StyleSheet.create({
     width: 38, height: 38, borderRadius: 12, backgroundColor: colors.primarySofter,
     alignItems: 'center', justifyContent: 'center',
   },
-  pathIconEmoji: { fontSize: 20 },
   pathRoute: { flex: 1, minWidth: 0 },
   pathRouteText: { fontSize: 15, color: colors.ink, fontWeight: '700' },
   arrow: { color: colors.primary, fontWeight: '800' },
