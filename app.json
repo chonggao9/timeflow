@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "TimeFlow",
+    "slug": "timeflow",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#FF6B6B"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.timeflow.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "打卡时记录您的位置"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FF6B6B"
+      },
+      "package": "com.timeflow.app",
+      "permissions": ["ACCESS_FINE_LOCATION"]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "打卡时记录您的位置"
+        }
+      ]
+    ]
+  }
+}

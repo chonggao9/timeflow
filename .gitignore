@@ -1,0 +1,25 @@
+# Expo / React Native
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# 原生构建产物（EAS 云端 prebuild，本地无需提交）
+android/
+ios/
+
+# 日志
+*.log
+npm-debug.*
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 密钥
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision

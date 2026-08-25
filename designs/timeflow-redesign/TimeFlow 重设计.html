@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TimeFlow">
+<meta name="theme-color" content="#FBF5EF">
+<title>TimeFlow · 时光流（重设计）</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<style>
+  :root {
+    --bg: #FBF5EF;            /* 暖米白底 */
+    --surface: #FFFFFF;
+    --primary: #FF6B6B;       /* 珊瑚橙 */
+    --primary-strong: #F24E4E;
+    --primary-soft: #FFE9E4;  /* 珊瑚浅色 */
+    --primary-softer: #FFF4F0;
+    --ink: #2B231E;           /* 暖黑 */
+    --ink-2: #7A6F66;         /* 次级文字 */
+    --ink-3: #B6A99E;         /* 弱文字 */
+    --line: #F1E7DD;          /* 发丝分隔线 */
+    --line-2: #E9DCD0;
+    --shadow-sm: 0 1px 2px rgba(43,35,30,.04), 0 2px 8px rgba(43,35,30,.05);
+    --shadow-md: 0 6px 20px rgba(43,35,30,.08);
+    --radius-lg: 22px;
+    --radius-md: 16px;
+    --radius-sm: 12px;
+    --font: -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans SC", "Helvetica Neue", sans-serif;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overscroll-behavior: none; }
+  body {
+    background: #E9DFD4;
+    font-family: var(--font);
+    color: var(--ink);
+    display: grid;
+    place-items: center;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    width: 100vw; height: 100vh;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    position: relative;
+  }
+  @media (min-width: 700px) {
+    #app {
+      width: 390px; height: 844px;
+      border-radius: 44px; overflow: hidden;
+      box-shadow: 0 30px 80px rgba(43,35,30,.35);
+    }
+  }
+
+  /* ---------- 头部 ---------- */
+  .header {
+    padding: 22px 20px 14px;
+    display: flex; align-items: flex-end; justify-content: space-between;
+  }
+  .header-title { font-size: 26px; font-weight: 800; letter-spacing: -.5px; line-height: 1.1; }
+  .header-date { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+  .badge {
+    background: var(--primary-soft); color: var(--primary-strong);
+    font-size: 12px; font-weight: 700; padding: 7px 12px; border-radius: 999px;
+  }
+
+  .summary-line {
+    display: flex; align-items: center; gap: 7px;
+    padding: 0 20px 6px; font-size: 13px; color: var(--ink-3);
+  }
+  .summary-line .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
+
+  /* ---------- 内容区 ---------- */
+  .content { flex: 1; overflow-y: auto; padding: 6px 16px 12px; -webkit-overflow-scrolling: touch; }
+  .content::-webkit-scrollbar { display: none; }
+
+  .section-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin: 14px 4px 10px;
+  }
+  .section-head h2 { font-size: 13px; font-weight: 700; color: var(--ink-2); letter-spacing: .4px; margin: 0; }
+
+  /* ---------- 时间轴 ---------- */
+  .timeline { padding: 2px 4px; }
+  .tl-row { display: flex; align-items: center; min-height: 44px; }
+  .tl-col { width: 34px; flex: none; display: flex; justify-content: center; }
+  .tl-node { width: 12px; height: 12px; border-radius: 50%; }
+  .tl-node.past { background: #E8D9CB; }
+  .tl-node.current { background: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  .tl-node.future { background: #fff; border: 2px dashed var(--ink-3); }
+  .tl-node-wrap { position: relative; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+  .pulse { position: absolute; inset: -4px; border-radius: 50%; background: var(--primary); opacity: .28; animation: pulse 2s ease-out infinite; }
+  @keyframes pulse {
+    0% { transform: scale(.6); opacity: .32; }
+    70% { transform: scale(1.6); opacity: 0; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+
+  .tl-seg { display: flex; height: 34px; }
+  .tl-seg .linecol { width: 34px; flex: none; display: flex; justify-content: center; }
+  .tl-seg .linecol .line { width: 2px; align-self: stretch; background: var(--line-2); }
+  .tl-seg.dashed .linecol .line { background: repeating-linear-gradient(to bottom, var(--ink-3) 0 4px, transparent 4px 9px); }
+  .tl-seg .segtext { flex: none; padding-left: 12px; font-size: 12px; color: var(--ink-3); align-self: center; }
+  .tl-seg .segtext.hot { color: var(--primary-strong); font-weight: 600; }
+
+  .tl-info { flex: 1; display: flex; align-items: center; padding-left: 12px; min-width: 0; }
+  .tl-time { width: 46px; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; flex: none; }
+  .tl-name { font-size: 15px; font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-row.current .tl-time, .tl-row.current .tl-name { color: var(--primary-strong); font-weight: 700; }
+  .tl-row.future .tl-name { color: var(--ink-3); font-weight: 500; }
+  .tl-row.future .tl-time { color: var(--ink-3); }
+  .mode-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--ink-2); margin-left: 6px; flex: none; }
+  .mode-chip svg { width: 14px; height: 14px; }
+
+  .tl-in { animation: in .45s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .empty { text-align: center; padding: 60px 20px 40px; }
+  .empty .ring {
+    width: 74px; height: 74px; border-radius: 50%; margin: 0 auto 18px;
+    background: var(--primary-soft); display: flex; align-items: center; justify-content: center;
+  }
+  .empty .ring svg { width: 34px; height: 34px; color: var(--primary); }
+  .empty h3 { font-size: 16px; margin: 0 0 6px; font-weight: 700; }
+  .empty p { font-size: 13px; color: var(--ink-3); margin: 0; }
+
+  /* ---------- 底部操作区 ---------- */
+  .composer {
+    padding: 12px 16px 14px;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+  }
+  .composer-label { font-size: 12px; color: var(--ink-3); margin: 0 2px 9px; }
+  .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .mode-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 4px 8px; border-radius: 14px;
+    background: #FAF6F1; border: 1.5px solid var(--line);
+    cursor: pointer; transition: all .15s ease;
+  }
+  .mode-btn svg { width: 20px; height: 20px; color: var(--ink-2); }
+  .mode-btn span { font-size: 11px; color: var(--ink-2); font-weight: 600; }
+  .mode-btn.on { background: var(--primary-soft); border-color: var(--primary); }
+  .mode-btn.on svg, .mode-btn.on span { color: var(--primary-strong); }
+
+  .checkin {
+    margin-top: 12px; width: 100%;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 17px; border: none; border-radius: 18px;
+    background: var(--primary); color: #fff;
+    font-size: 18px; font-weight: 800; letter-spacing: 6px; text-indent: 6px;
+    cursor: pointer; transition: transform .12s ease, background .2s ease, box-shadow .2s ease;
+    box-shadow: 0 10px 24px rgba(255,107,107,.35);
+    font-family: var(--font);
+  }
+  .checkin:active { transform: scale(.97); background: var(--primary-strong); }
+  .checkin.ok { background: #4CAE7F; box-shadow: 0 10px 24px rgba(76,174,127,.32); letter-spacing: 2px; text-indent: 0; }
+  .checkin svg { width: 20px; height: 20px; }
+
+  /* ---------- 底部 Tab ---------- */
+  .tabbar {
+    display: flex; background: var(--surface); border-top: 1px solid var(--line);
+    padding-bottom: 2px;
+  }
+  .tab {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 9px 0 8px; background: none; border: none; cursor: pointer; font-family: var(--font);
+  }
+  .tab svg { width: 23px; height: 23px; color: var(--ink-3); transition: color .15s ease; }
+  .tab span { font-size: 11px; color: var(--ink-3); font-weight: 600; }
+  .tab.on svg, .tab.on span { color: var(--primary); }
+
+  /* ---------- 洞察页 ---------- */
+  .overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px 2px 4px; }
+  .stat-card {
+    background: var(--surface); border-radius: var(--radius-md); padding: 16px 8px 14px;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    box-shadow: var(--shadow-sm);
+  }
+  .stat-num { font-size: 27px; font-weight: 800; color: var(--primary); letter-spacing: -1px; }
+  .stat-label { font-size: 11px; color: var(--ink-3); }
+
+  .path-card {
+    background: var(--surface); border-radius: var(--radius-lg); padding: 16px;
+    box-shadow: var(--shadow-sm); margin-bottom: 12px;
+  }
+  .path-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .path-icon {
+    width: 38px; height: 38px; border-radius: 12px; flex: none;
+    background: var(--primary-softer); display: flex; align-items: center; justify-content: center;
+  }
+  .path-icon svg { width: 20px; height: 20px; color: var(--primary-strong); }
+  .path-route { flex: 1; min-width: 0; }
+  .path-route .r { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .path-route .arrow { color: var(--primary); font-weight: 800; padding: 0 4px; }
+  .path-route .samples { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+  .path-stats { display: flex; align-items: flex-end; justify-content: space-between; }
+  .path-stats .big { font-size: 30px; font-weight: 800; color: var(--ink); letter-spacing: -1px; line-height: 1; }
+  .path-stats .big small { font-size: 14px; font-weight: 700; color: var(--ink-2); letter-spacing: 0; margin-left: 3px; }
+  .path-stats .range { font-size: 12px; color: var(--ink-3); text-align: right; line-height: 1.6; }
+
+  .clear-btn {
+    display: block; margin: 26px auto 8px; padding: 12px 26px; background: none; border: none;
+    color: #E08A7A; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font);
+  }
+
+  .fade { animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="text/babel">
+const { useState, useRef } = React;
+const MIN = 60000;
+
+/* ---------------- 图标 ---------------- */
+function Icon({ name, size, style }) {
+  const s = size || 24;
+  const common = { width: s, height: s, viewBox: "0 0 24 24", fill: "none",
+    stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", style };
+  switch (name) {
+    case 'clock':
+      return (<svg {...common}><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>);
+    case 'chart':
+      return (<svg {...common}><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-6"/><path d="M20 20H3"/></svg>);
+    case 'walk':
+      return (<svg {...common}><circle cx="12.5" cy="4" r="2"/><path d="M9.5 21l.8-5.5-2.2-3m5.4 8.5.6-5.5 2.6-3.2M11.6 10l2.2-.6 2 2.2"/></svg>);
+    case 'bike':
+      return (<svg {...common}><circle cx="6" cy="17" r="3.2"/><circle cx="18" cy="17" r="3.2"/><path d="M6 17l3.5-5.5L15 15M9.5 11.5L11 8H7M12.5 8l1.5 3.5"/></svg>);
+    case 'car':
+      return (<svg {...common}><path d="M5 11l1.6-4.2A1.5 1.5 0 0 1 8 6h8a1.5 1.5 0 0 1 1.4.9L19 11"/><path d="M5.5 11h13a1 1 0 0 1 1 1V17h-15v-5a1 1 0 0 1 1-1z"/><circle cx="8" cy="17" r="1.6"/><circle cx="16" cy="17" r="1.6"/></svg>);
+    case 'bus':
+      return (<svg {...common}><rect x="4" y="4" width="16" height="13" rx="2.5"/><path d="M4 9.5h16"/><path d="M8 16.5h8"/><circle cx="8.5" cy="17" r="1.4"/><circle cx="15.5" cy="17" r="1.4"/></svg>);
+    case 'check':
+      return (<svg {...common} strokeWidth={2.4}><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>);
+    case 'pin':
+      return (<svg {...common}><path d="M12 21s-6.5-5.6-6.5-10A6.5 6.5 0 0 1 12 4.5 6.5 6.5 0 0 1 18.5 11C18.5 15.4 12 21 12 21z"/><circle cx="12" cy="11" r="2.4"/></svg>);
+    default: return null;
+  }
+}
+
+const MODES = [
+  { key: 'walk',    label: '步行', icon: 'walk' },
+  { key: 'bike',    label: '骑行', icon: 'bike' },
+  { key: 'drive',   label: '驾车', icon: 'car' },
+  { key: 'transit', label: '公交', icon: 'bus' },
+];
+const MODE_LABEL = { walk: '步行', bike: '骑行', drive: '驾车', transit: '公交' };
+const MODE_ICON = { walk: 'walk', bike: 'bike', drive: 'car', transit: 'bus' };
+
+/* ---------------- 工具 ---------------- */
+function pad(n) { return String(n).padStart(2, '0'); }
+function fmtClock(ts) { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function fmtDur(sec) {
+  if (!sec) return '--';
+  const m = Math.round(sec / 60);
+  if (m < 1) return '不到1分钟';
+  if (m < 60) return `${m}分钟`;
+  const h = Math.floor(m / 60), r = m % 60;
+  return r ? `${h}小时${r}分` : `${h}小时`;
+}
+function dateLabel() {
+  const d = new Date();
+  const wd = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+  return `${d.getMonth() + 1}月${d.getDate()}日 · ${wd}`;
+}
+
+/* ---------------- 种子数据 ---------------- */
+const NAME_POOL = ['家','公司','咖啡店','健身房','超市','公园','书店'];
+function buildSeeds() {
+  const now = Date.now();
+  return [
+    { id: 's1', t: now - 375 * MIN, name: '家',     mode: 'walk' },
+    { id: 's2', t: now - 338 * MIN, name: '公司',   mode: 'transit' },
+    { id: 's3', t: now - 92 * MIN,  name: '咖啡店', mode: 'walk' },
+    { id: 's4', t: now - 74 * MIN,  name: '公司',   mode: 'walk' },
+  ];
+}
+const ESTIMATE_MAP = { '公司': { name: '家', sec: 28 * 60 }, '家': { name: '公司', sec: 35 * 60 } };
+
+/* ---------------- 时间轴 ---------------- */
+function Timeline({ records }) {
+  if (!records.length) {
+    return (
+      <div className="empty">
+        <div className="ring"><Icon name="pin" /></div>
+        <h3>今天还没有打卡</h3>
+        <p>选择出行方式，点下方按钮开始记录</p>
+      </div>
+    );
+  }
+  const total = (records[records.length - 1].t - records[0].t) / 60000;
+  const last = records[records.length - 1];
+  const est = ESTIMATE_MAP[last.name];
+
+  return (
+    <div>
+      <div className="section-head">
+        <h2>今日行程</h2>
+        <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>已用时 {fmtDur(total * 60)}</span>
+      </div>
+      <div className="timeline">
+        {records.map((r, i) => {
+          const isLast = i === records.length - 1;
+          const dur = i > 0 ? (r.t - records[i - 1].t) / 1000 : null;
+          return (
+            <div key={r.id} className="tl-in">
+              {dur != null && (
+                <div className="tl-seg">
+                  <div className="linecol"><div className="line"></div></div>
+                  <span className="segtext">{fmtDur(dur)}</span>
+                </div>
+              )}
+              <div className={"tl-row" + (isLast ? " current" : "")}>
+                <div className="tl-col">
+                  <div className="tl-node-wrap">
+                    {isLast && <span className="pulse"></span>}
+                    <div className={"tl-node " + (isLast ? "current" : "past")}></div>
+                  </div>
+                </div>
+                <div className="tl-info">
+                  <span className="tl-time">{fmtClock(r.t)}</span>
+                  <span className="tl-name">{r.name}</span>
+                  <span className="mode-chip"><Icon name={MODE_ICON[r.mode] || r.mode} size={14} />{MODE_LABEL[r.mode]}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {est && (
+          <div className="tl-in">
+            <div className="tl-seg dashed">
+              <div className="linecol"><div className="line"></div></div>
+              <span className="segtext hot">预计 {fmtDur(est.sec)}</span>
+            </div>
+            <div className="tl-row future">
+              <div className="tl-col">
+                <div className="tl-node-wrap"><div className="tl-node future"></div></div>
+              </div>
+              <div className="tl-info">
+                <span className="tl-time">{fmtClock(last.t + est.sec * 1000)}</span>
+                <span className="tl-name">{est.name}</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- 洞察 ---------------- */
+function Insights({ records }) {
+  const totalCheckins = 128;
+  const totalDays = 36;
+  const paths = [
+    { icon: 'bus',  from: '家', to: '公司',   med: 37, samples: 28, min: 30, max: 45 },
+    { icon: 'walk', from: '公司', to: '咖啡店', med: 17, samples: 22, min: 14, max: 24 },
+    { icon: 'car',  from: '公司', to: '家',   med: 28, samples: 15, min: 22, max: 41 },
+  ];
+  return (
+    <div className="fade">
+      <div className="overview">
+        <div className="stat-card"><span className="stat-num">{totalCheckins}</span><span className="stat-label">累计打卡</span></div>
+        <div className="stat-card"><span className="stat-num">{totalDays}</span><span className="stat-label">打卡天数</span></div>
+        <div className="stat-card"><span className="stat-num">{paths.length}</span><span className="stat-label">已分析路段</span></div>
+      </div>
+      <div className="section-head"><h2>路段规律</h2></div>
+      {paths.map((p, i) => (
+        <div className="path-card" key={i}>
+          <div className="path-head">
+            <div className="path-icon"><Icon name={p.icon} /></div>
+            <div className="path-route">
+              <div className="r">{p.from}<span className="arrow">→</span>{p.to}</div>
+              <div className="samples">样本 {p.samples} 次</div>
+            </div>
+          </div>
+          <div className="path-stats">
+            <div className="big">{p.med}<small>分钟</small></div>
+            <div className="range">通常耗时<br/>最快 {p.min} · 最慢 {p.max} 分钟</div>
+          </div>
+        </div>
+      ))}
+      <button className="clear-btn">清空所有数据</button>
+    </div>
+  );
+}
+
+/* ---------------- App ---------------- */
+function App() {
+  const [tab, setTab] = useState('home');
+  const [records, setRecords] = useState(buildSeeds);
+  const [mode, setMode] = useState('walk');
+  const [ok, setOk] = useState(false);
+  const nameIdx = useRef(0);
+
+  const checkIn = () => {
+    const name = NAME_POOL[nameIdx.current % NAME_POOL.length];
+    nameIdx.current += 1;
+    setRecords(r => [...r, { id: 'r' + Date.now(), t: Date.now(), name, mode }]);
+    setOk(true);
+    setTimeout(() => setOk(false), 1200);
+  };
+
+  return (
+    <>
+      {/* 头部 */}
+      <div className="header">
+        <div>
+          <div className="header-title">今天</div>
+          <div className="header-date">{dateLabel()}</div>
+        </div>
+        <span className="badge">{records.length} 次打卡</span>
+      </div>
+      <div className="summary-line"><span className="dot"></span>记录你的一天，轻松看路段耗时</div>
+
+      {/* 内容 */}
+      <div className="content">
+        {tab === 'home'
+          ? <Timeline records={records} />
+          : <Insights records={records} />}
+      </div>
+
+      {/* 底部操作区（仅首页） */}
+      {tab === 'home' && (
+        <div className="composer">
+          <div className="composer-label">出行方式</div>
+          <div className="modes">
+            {MODES.map(m => (
+              <button key={m.key} className={"mode-btn" + (mode === m.key ? " on" : "")} onClick={() => setMode(m.key)}>
+                <Icon name={m.icon} size={20} /><span>{m.label}</span>
+              </button>
+            ))}
+          </div>
+          <button className={"checkin" + (ok ? " ok" : "")} onClick={checkIn}>
+            {ok ? (<React.Fragment><Icon name="check" size={20} />已打卡</React.Fragment>) : '打 卡'}
+          </button>
+        </div>
+      )}
+
+      {/* 底部 Tab */}
+      <div className="tabbar">
+        <button className={"tab" + (tab === 'home' ? " on" : "")} onClick={() => setTab('home')}>
+          <Icon name="clock" /><span>打卡</span>
+        </button>
+        <button className={"tab" + (tab === 'insights' ? " on" : "")} onClick={() => setTab('insights')}>
+          <Icon name="chart" /><span>洞察</span>
+        </button>
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app')).render(<App />);
+</script>
+</body>
+</html>
