@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Alert, Linking } from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
 import InsightsScreen from './src/screens/InsightsScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 import { checkForUpdate } from './src/utils/updater';
 import { colors } from './src/theme';
 
@@ -46,6 +47,16 @@ function TabNavigator() {
           tabBarLabel: '洞察',
           tabBarIcon: ({ focused }) => (
             <Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={24} color={focused ? colors.primary : colors.ink3} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          tabBarLabel: '我的',
+          tabBarIcon: ({ focused }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={focused ? colors.primary : colors.ink3} />
           ),
         }}
       />

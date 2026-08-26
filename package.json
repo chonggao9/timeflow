@@ -13,6 +13,7 @@
     "@react-navigation/native": "^6.1.17",
     "expo": "~51.0.0",
     "expo-location": "~17.0.1",
+    "expo-sharing": "~12.0.1",
     "expo-status-bar": "~1.12.1",
     "react": "18.2.0",
     "react-native": "^0.74.5",
