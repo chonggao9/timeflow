@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity,
+  View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity, Linking,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
@@ -32,7 +32,7 @@ async function getPositionFast() {
   try {
     const loc = await Promise.race([
       Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3500)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
     ]);
     return loc || null;
   } catch (e) {
@@ -134,32 +134,14 @@ export default function HomeScreen() {
     })();
   }, [records]);
 
-  // 一键打卡：加入当前行程（无则新建）。坐标即时落库，地名异步补，杜绝慢/卡。
+  // 一键打卡：加入当前行程。立即落库（秒完成），坐标 + 地名后台异步补。
   const handleCheckIn = async () => {
     setLoading(true);
     const tnow = Date.now();
     try {
       const tripId = await ensureTrip();
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      let locationName = UNNAMED;
-      let lat = null, lng = null;
-      let located = false;
-
-      if (status === 'granted') {
-        const loc = await getPositionFast();
-        if (loc) {
-          located = true;
-          lat = loc.coords.latitude;
-          lng = loc.coords.longitude;
-          // 同步只做一次快速高德（通常 <1s 就有地名）；拿不到也不阻塞
-          const addr = await amapReverseGeocode(lat, lng, 2500);
-          if (addr) locationName = addr;
-        }
-      }
-
-      // 立即落库，打卡即时完成
       const id = makeId();
-      await saveRecord({ id, timestamp: tnow, locationName, lat, lng, mode, tripId });
+      await saveRecord({ id, timestamp: tnow, locationName: UNNAMED, lat: null, lng: null, mode, tripId });
       await setLastMode(mode);
 
       setLoading(false);
@@ -167,25 +149,35 @@ export default function HomeScreen() {
       await loadToday();
       setTimeout(() => setSuccess(false), 1200);
 
-      // 有坐标但没拿到地名 → 后台再补一次（含系统反查兜底）
-      if (located && isPlaceholderName(locationName)) {
-        refreshPlaceName(id, lat, lng);
-      } else if (!located) {
-        Alert.alert(t('home.locAlertTitle'), t('home.locAlertBody'));
-      }
+      fillLocation(id); // 后台定位 + 反查，不阻塞打卡
     } catch (e) {
       setLoading(false);
       Alert.alert(t('home.failTitle'), t('home.failBody'));
     }
   };
 
-  // 后台补地名：成功则更新记录并刷新
-  const refreshPlaceName = async (id, lat, lng) => {
-    const addr = await reverseGeocodeWithTimeout(lat, lng);
-    if (addr) {
-      await updateRecord(id, { locationName: addr });
+  // 后台补坐标 + 地名
+  const fillLocation = async (id) => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const loc = await getPositionFast();
+      if (!loc) { showLocFailed(); return; }
+      const lat = loc.coords.latitude, lng = loc.coords.longitude;
+      const addr = await reverseGeocodeWithTimeout(lat, lng);
+      const patch = { lat, lng };
+      if (addr) patch.locationName = addr;
+      await updateRecord(id, patch);
       await loadToday();
-    }
+    } catch (e) { /* 忽略 */ }
+  };
+
+  // 定位失败：引导去系统设置开启定位
+  const showLocFailed = () => {
+    Alert.alert(t('home.locAlertTitle'), t('home.locAlertBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('home.openSettings'), onPress: () => Linking.openSettings() },
+    ]);
   };
 
   // 结束当前行程
