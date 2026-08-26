@@ -4,7 +4,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, Linking } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
+import * as NavigationBar from 'expo-navigation-bar';
 import HomeScreen from './src/screens/HomeScreen';
 import InsightsScreen from './src/screens/InsightsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -93,6 +94,16 @@ function AppInner() {
 }
 
 export default function App() {
+  // Android 系统导航栏设为与主题一致的米白，去掉底部黑边
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      try {
+        NavigationBar.setBackgroundColorAsync(colors.bg);
+        NavigationBar.setButtonStyleAsync('dark');
+      } catch (e) { /* 忽略 */ }
+    }
+  }, []);
+
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />

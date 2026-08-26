@@ -25,7 +25,7 @@ async function getPositionFast() {
   } catch (e) { /* 继续 */ }
 
   try {
-    const cached = await Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000 });
+    const cached = await Location.getLastKnownPositionAsync({ maxAge: 2 * 60 * 1000 });
     if (cached) return cached;
   } catch (e) { /* 继续 */ }
 
@@ -134,7 +134,7 @@ export default function HomeScreen() {
     })();
   }, [records]);
 
-  // 一键打卡：加入当前行程（无则新建），定位失败也不阻塞
+  // 一键打卡：加入当前行程（无则新建）。坐标即时落库，地名异步补，杜绝慢/卡。
   const handleCheckIn = async () => {
     setLoading(true);
     const tnow = Date.now();
@@ -143,27 +143,48 @@ export default function HomeScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       let locationName = UNNAMED;
       let lat = null, lng = null;
+      let located = false;
 
       if (status === 'granted') {
         const loc = await getPositionFast();
         if (loc) {
+          located = true;
           lat = loc.coords.latitude;
           lng = loc.coords.longitude;
-          const addr = await reverseGeocodeWithTimeout(lat, lng);
+          // 同步只做一次快速高德（通常 <1s 就有地名）；拿不到也不阻塞
+          const addr = await amapReverseGeocode(lat, lng, 2500);
           if (addr) locationName = addr;
         }
       }
 
-      await saveRecord({ id: makeId(), timestamp: tnow, locationName, lat, lng, mode, tripId });
+      // 立即落库，打卡即时完成
+      const id = makeId();
+      await saveRecord({ id, timestamp: tnow, locationName, lat, lng, mode, tripId });
       await setLastMode(mode);
 
       setLoading(false);
       setSuccess(true);
       await loadToday();
       setTimeout(() => setSuccess(false), 1200);
+
+      // 有坐标但没拿到地名 → 后台再补一次（含系统反查兜底）
+      if (located && isPlaceholderName(locationName)) {
+        refreshPlaceName(id, lat, lng);
+      } else if (!located) {
+        Alert.alert(t('home.locAlertTitle'), t('home.locAlertBody'));
+      }
     } catch (e) {
       setLoading(false);
       Alert.alert(t('home.failTitle'), t('home.failBody'));
+    }
+  };
+
+  // 后台补地名：成功则更新记录并刷新
+  const refreshPlaceName = async (id, lat, lng) => {
+    const addr = await reverseGeocodeWithTimeout(lat, lng);
+    if (addr) {
+      await updateRecord(id, { locationName: addr });
+      await loadToday();
     }
   };
 

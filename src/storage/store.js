@@ -9,6 +9,14 @@ export const LEGACY_TRIP = 'legacy';
 
 const makeTripId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
+// 串行化写操作：避免读-改-写竞态导致丢数据
+let writeChain = Promise.resolve();
+function serialized(fn) {
+  const run = writeChain.then(fn, fn);
+  writeChain = run.catch(() => {});
+  return run;
+}
+
 // 当前进行中的行程 ID（无则返回 null）
 export async function getCurrentTripId() {
   try { return await AsyncStorage.getItem(TRIP_KEY) || null; } catch (e) { return null; }
@@ -38,10 +46,12 @@ export async function setLastMode(mode) {
 }
 
 // 保存一条打卡记录
-export async function saveRecord(record) {
-  const records = await getRecords();
-  records.push(record);
-  await AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+export function saveRecord(record) {
+  return serialized(async () => {
+    const records = await getRecords();
+    records.push(record);
+    await AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+  });
 }
 
 // 获取所有打卡记录
@@ -58,19 +68,23 @@ export async function getTodayRecords() {
 }
 
 // 更新一条记录（如改地名）
-export async function updateRecord(id, patch) {
-  const records = await getRecords();
-  const idx = records.findIndex(r => r.id === id);
-  if (idx < 0) return;
-  records[idx] = { ...records[idx], ...patch };
-  await AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+export function updateRecord(id, patch) {
+  return serialized(async () => {
+    const records = await getRecords();
+    const idx = records.findIndex(r => r.id === id);
+    if (idx < 0) return;
+    records[idx] = { ...records[idx], ...patch };
+    await AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+  });
 }
 
 // 删除一条记录
-export async function deleteRecord(id) {
-  const records = await getRecords();
-  const updated = records.filter(r => r.id !== id);
-  await AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(updated));
+export function deleteRecord(id) {
+  return serialized(async () => {
+    const records = await getRecords();
+    const updated = records.filter(r => r.id !== id);
+    await AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(updated));
+  });
 }
 
 // 清空所有数据
