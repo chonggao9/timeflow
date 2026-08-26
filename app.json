@@ -2,7 +2,7 @@
   "expo": {
     "name": "TimeFlow",
     "slug": "timeflow",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -20,7 +20,12 @@
       "adaptiveIcon": {
         "backgroundColor": "#FF6B6B"
       },
-      "package": "com.timeflow.app"
+      "package": "com.timeflow.app",
+      "navigationBar": {
+        "backgroundColor": "#FBF5EF",
+        "barStyle": "dark-content"
+      },
+      "edgeToEdgeEnabled": true
     },
     "plugins": [
       [

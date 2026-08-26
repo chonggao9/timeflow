@@ -198,7 +198,7 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Timeline records={records} estimate={estimate} onRename={openRename} />
+        <Timeline records={records} onRename={openRename} />
       </ScrollView>
 
       {/* 底部操作区 */}

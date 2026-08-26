@@ -52,15 +52,7 @@ function SolidLine() {
   return <View style={styles.solidLine} />;
 }
 
-function DashedLine() {
-  return (
-    <View style={styles.dashContainer}>
-      {[...Array(7)].map((_, i) => <View key={i} style={styles.dash} />)}
-    </View>
-  );
-}
-
-// 按行程分组，保序
+// 按行程分组（升序），展示时统一倒序：最新行程/最新打卡在最上方
 function groupByTrip(records) {
   const map = new Map();
   for (const r of records) {
@@ -68,10 +60,15 @@ function groupByTrip(records) {
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(r);
   }
-  return [...map.entries()].map(([tripId, recs]) => ({ tripId, records: recs }));
+  // 每组内按时间排序（升序），组间按最早时间排序
+  const groups = [...map.entries()].map(([tripId, recs]) => {
+    const sorted = [...recs].sort((a, b) => a.timestamp - b.timestamp);
+    return { tripId, records: sorted, firstT: sorted[0].timestamp };
+  });
+  return groups.sort((a, b) => b.firstT - a.firstT); // 最新组在前
 }
 
-export default function Timeline({ records, estimate, onRename }) {
+export default function Timeline({ records, onRename }) {
   const { t, lang } = useI18n();
   const MODE_LABEL = { walk: t('mode.walk'), bike: t('mode.bike'), drive: t('mode.drive'), transit: t('mode.transit') };
 
@@ -87,34 +84,33 @@ export default function Timeline({ records, estimate, onRename }) {
     );
   }
 
+  // 今日总时长：最早点到最晚点
+  const minT = Math.min(...records.map(r => r.timestamp));
+  const maxT = Math.max(...records.map(r => r.timestamp));
+  const totalSec = (maxT - minT) / 1000;
+
   const groups = groupByTrip(records);
   const showLabels = groups.length > 1;
-  const totalSec = (records[records.length - 1].timestamp - records[0].timestamp) / 1000;
 
+  // 每个行程内部：最新点在前
   const renderTrip = (g, gi) => {
-    const isLastGroup = gi === groups.length - 1;
-    const label = g.tripId === LEGACY ? t('timeline.legacy') : `${t('timeline.trip')} ${gi + 1}`;
+    const rev = g.records.slice().reverse(); // 最新在组内前面
+    // 最新行程的组内第一个点 = 全局最新
     return (
       <View key={g.tripId}>
-        {showLabels && <Text style={styles.tripLabel}>{label}</Text>}
-        {g.records.map((r, i) => {
-          const isLast = isLastGroup && i === g.records.length - 1;
-          const dur = i > 0 ? (r.timestamp - g.records[i - 1].timestamp) / 1000 : null;
+        {showLabels && <Text style={styles.tripLabel}>{g.tripId === LEGACY ? t('timeline.legacy') : `${t('timeline.trip')} ${gi + 1}`}</Text>}
+        {rev.map((r, j) => {
+          const isCurrent = gi === 0 && j === 0;
+          const durBelow = j < rev.length - 1 ? (rev[j + 1].timestamp - r.timestamp) / 1000 : null;
           return (
             <View key={r.id}>
-              {dur != null && (
-                <View style={styles.segmentRow}>
-                  <View style={styles.lineCol}><SolidLine /></View>
-                  <Text style={styles.segmentText}>{formatDuration(dur, lang)}</Text>
-                </View>
-              )}
               <View style={styles.row}>
-                <View style={styles.lineCol}><Node type={isLast ? 'current' : 'past'} /></View>
+                <View style={styles.lineCol}><Node type={isCurrent ? 'current' : 'past'} /></View>
                 <View style={styles.info}>
-                  <Text style={[styles.time, isLast && styles.timeCurrent]}>{formatTime(r.timestamp)}</Text>
+                  <Text style={[styles.time, isCurrent && styles.timeCurrent]}>{formatTime(r.timestamp)}</Text>
                   <TouchableOpacity style={styles.nameWrap} onPress={() => onRename && onRename(r)} activeOpacity={0.6}>
                     <Text
-                      style={[styles.name, isLast && styles.nameCurrent, isPlaceholderName(r.locationName) && styles.namePlaceholder]}
+                      style={[styles.name, isCurrent && styles.nameCurrent, isPlaceholderName(r.locationName) && styles.namePlaceholder]}
                       numberOfLines={1}
                     >
                       {isPlaceholderName(r.locationName) ? t('common.unnamed') : r.locationName}
@@ -129,15 +125,19 @@ export default function Timeline({ records, estimate, onRename }) {
                   )}
                 </View>
               </View>
+              {durBelow != null && (
+                <View style={styles.segmentRow}>
+                  <View style={styles.lineCol}><SolidLine /></View>
+                  <Text style={styles.segmentText}>{formatDuration(durBelow, lang)}</Text>
+                </View>
+              )}
             </View>
           );
         })}
-        {!isLastGroup && <View style={styles.tripGap} />}
+        {gi < groups.length - 1 && <View style={styles.tripGap} />}
       </View>
     );
   };
-
-  const last = records[records.length - 1];
 
   return (
     <View>
@@ -145,34 +145,9 @@ export default function Timeline({ records, estimate, onRename }) {
         <Text style={styles.sectionTitle}>{t('timeline.title')}</Text>
         <Text style={styles.sectionRight}>{t('timeline.elapsed', { d: formatDuration(totalSec, lang) })}</Text>
       </View>
-
-      <View style={styles.container}>
-        {groups.map(renderTrip)}
-
-        {estimate && (
-          <View>
-            <View style={styles.segmentRow}>
-              <View style={styles.lineCol}><DashedLine /></View>
-              <Text style={[styles.segmentText, styles.segmentHot]}>{t('timeline.estimate', { d: formatDuration(estimate.estimatedSec, lang) })}</Text>
-            </View>
-            <View style={styles.row}>
-              <View style={styles.lineCol}><Node type="future" /></View>
-              <View style={styles.info}>
-                <Text style={styles.timeFuture}>{estimatedArrival(records, estimate.estimatedSec)}</Text>
-                <Text style={styles.nameFuture} numberOfLines={1}>{estimate.locationName}</Text>
-              </View>
-            </View>
-          </View>
-        )}
-      </View>
+      <View style={styles.container}>{groups.map(renderTrip)}</View>
     </View>
   );
-}
-
-function estimatedArrival(records, sec) {
-  if (!records.length || !sec) return '--';
-  const last = records[records.length - 1].timestamp;
-  return formatTime(last + sec * 1000);
 }
 
 const styles = StyleSheet.create({
@@ -209,10 +184,8 @@ const styles = StyleSheet.create({
   info: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: 12, minWidth: 0 },
   time: { fontSize: 13, color: colors.ink2, width: 46, fontVariant: ['tabular-nums'] },
   timeCurrent: { color: colors.primaryStrong, fontWeight: '700' },
-  timeFuture: { fontSize: 13, color: colors.ink3, width: 46 },
   name: { fontSize: 15, color: colors.ink, fontWeight: '600', flex: 1 },
   nameCurrent: { color: colors.primaryStrong, fontWeight: '700' },
-  nameFuture: { fontSize: 15, color: colors.ink3, fontWeight: '500', flex: 1 },
   nameWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0 },
   namePlaceholder: { color: colors.ink3, fontStyle: 'italic' },
   nameEditIcon: { marginLeft: 4 },
@@ -221,8 +194,5 @@ const styles = StyleSheet.create({
 
   segmentRow: { flexDirection: 'row', alignItems: 'center', height: 34 },
   solidLine: { width: 2, flex: 1, backgroundColor: colors.line2 },
-  dashContainer: { flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', flex: 1, paddingVertical: 3 },
-  dash: { width: 2, height: 3, backgroundColor: colors.ink3, marginVertical: 1 },
   segmentText: { fontSize: 12, color: colors.ink3, paddingLeft: 12 },
-  segmentHot: { color: colors.primaryStrong, fontWeight: '600' },
 });
