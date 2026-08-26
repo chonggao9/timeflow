@@ -12,6 +12,7 @@ import {
 import { computePathStats, placeKey, UNNAMED, formatTime, formatDuration, isPlaceholderName } from '../utils/stats';
 import { colors, radius, shadow } from '../theme';
 import { useI18n } from '../i18n/LanguageContext';
+import { AMAP_KEY } from '../config';
 import Timeline from '../components/Timeline';
 import CheckInButton from '../components/CheckInButton';
 import TransportPicker from '../components/TransportPicker';
@@ -39,18 +40,41 @@ async function getPositionFast() {
   }
 }
 
-// 反查地址，带超时；失败/超时返回 null
-async function reverseGeocodeWithTimeout(lat, lng, timeout = 4000) {
+// 高德逆地理编码（坐标 → 附近地名），优先用于国内；失败返回 null
+async function amapReverseGeocode(lat, lng, timeout = 4000) {
+  if (!AMAP_KEY || AMAP_KEY === 'YOUR_AMAP_KEY') return null;
   try {
-    const [addr] = await Promise.race([
-      Location.reverseGeocodeAsync({ latitude: lat, longitude: lng }),
+    const url = `https://restapi.amap.com/v3/geocode/regeo?key=${AMAP_KEY}&location=${lng},${lat}&extensions=base&radius=1000`;
+    const res = await Promise.race([
+      fetch(url),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout)),
     ]);
-    if (!addr) return null;
-    return [addr.street, addr.district, addr.city].filter(Boolean).join(' ') || addr.name || null;
+    const data = await res.json();
+    if (data.status === '1' && data.regeocode) {
+      const r = data.regeocode;
+      if (r.formatted_address) return r.formatted_address;
+      const c = r.addressComponent || {};
+      const part = [c.district, c.roadName, c.neighbourhood].filter(Boolean);
+      if (part.length) return part.join('');
+    }
+    return null;
   } catch (e) {
     return null;
   }
+}
+
+// 反查地名：高德优先，失败回退系统反查；都失败返回 null
+async function reverseGeocodeWithTimeout(lat, lng) {
+  const amap = await amapReverseGeocode(lat, lng);
+  if (amap) return amap;
+  try {
+    const [addr] = await Promise.race([
+      Location.reverseGeocodeAsync({ latitude: lat, longitude: lng }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+    ]);
+    if (addr) return [addr.street, addr.district, addr.city].filter(Boolean).join(' ') || addr.name || null;
+  } catch (e) { /* 忽略 */ }
+  return null;
 }
 
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
