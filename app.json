@@ -2,7 +2,7 @@
   "expo": {
     "name": "TimeFlow",
     "slug": "timeflow",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -28,7 +28,8 @@
         {
           "locationWhenInUsePermission": "打卡时记录您的位置"
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "extra": {
       "eas": {

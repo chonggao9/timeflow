@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords, clearAll } from '../storage/store';
 import { getProfile, saveProfile } from '../storage/profile';
 import { checkForUpdate } from '../utils/updater';
+import { useI18n } from '../i18n/LanguageContext';
 import { colors, radius, shadow } from '../theme';
 import PrivacyAgreement from './PrivacyAgreement';
 
@@ -26,10 +27,18 @@ function Row({ icon, label, value, onPress, danger }) {
   );
 }
 
+const LANG_OPTIONS = [
+  { key: 'system', labelKey: 'language.system' },
+  { key: 'zh', labelKey: 'language.zh' },
+  { key: 'en', labelKey: 'language.en' },
+];
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const { t, lang, isSystem, setLang } = useI18n();
   const [nickname, setNickname] = useState('');
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showLang, setShowLang] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const loadProfile = useCallback(async () => {
@@ -40,17 +49,17 @@ export default function ProfileScreen() {
 
   const saveNickname = async () => {
     await saveProfile({ nickname: nickname.trim() });
-    Alert.alert('已保存', '昵称已更新');
+    Alert.alert(t('profile.savedTitle'), t('profile.savedBody'));
   };
 
   const version = Constants?.expoConfig?.version || '1.0.0';
 
   const handleCheckUpdate = async () => {
     const u = await checkForUpdate();
-    if (!u) Alert.alert('已是最新版本', `当前版本 ${version}`);
-    else Alert.alert('发现新版本', `最新版本 ${u.latestVersion}`, [
-      { text: '稍后', style: 'cancel' },
-      { text: '去更新', onPress: () => Linking.openURL(u.downloadUrl) },
+    if (!u) Alert.alert(t('profile.upToDate'), t('profile.version', { v: version }));
+    else Alert.alert(t('update.title'), t('update.latest', { l: u.latestVersion }), [
+      { text: t('update.later'), style: 'cancel' },
+      { text: t('update.go'), onPress: () => Linking.openURL(u.downloadUrl) },
     ]);
   };
 
@@ -62,47 +71,50 @@ export default function ProfileScreen() {
       const file = `${FileSystem.cacheDirectory}timeflow-export.json`;
       await FileSystem.writeAsStringAsync(file, json);
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(file, { mimeType: 'application/json', dialogTitle: '导出 TimeFlow 数据' });
+        await Sharing.shareAsync(file, { mimeType: 'application/json', dialogTitle: t('profile.exportDialog') });
       } else {
-        Alert.alert('导出失败', '当前设备不支持分享');
+        Alert.alert(t('profile.exportFailTitle'), t('profile.exportFailShare'));
       }
     } catch (e) {
-      Alert.alert('导出失败', '无法导出数据');
+      Alert.alert(t('profile.exportFailTitle'), t('profile.exportFail'));
     } finally {
       setExporting(false);
     }
   };
 
   const handleClear = () => {
-    Alert.alert('清空数据', '确定要删除所有打卡记录吗？此操作不可恢复。', [
-      { text: '取消', style: 'cancel' },
-      { text: '确定删除', style: 'destructive', onPress: async () => {
+    Alert.alert(t('common.clearTitle'), t('profile.clearBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: async () => {
         await clearAll();
-        Alert.alert('已清空', '所有打卡记录已删除');
+        Alert.alert(t('profile.clearedTitle'), t('profile.clearedBody'));
       } },
     ]);
   };
 
+  const currentLangKey = isSystem ? 'system' : lang;
+  const languageValue = isSystem ? t('language.system') : (lang === 'zh' ? t('language.zh') : t('language.en'));
+
   return (
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.title}>我的</Text>
-        <Text style={styles.subtitle}>个人信息与偏好</Text>
+        <Text style={styles.title}>{t('profile.title')}</Text>
+        <Text style={styles.subtitle}>{t('profile.subtitle')}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* 个人信息 */}
-        <Text style={styles.section}>个人信息</Text>
+        <Text style={styles.section}>{t('profile.sectionProfile')}</Text>
         <View style={styles.card}>
           <View style={styles.nicknameRow}>
             <View style={styles.avatar}><Ionicons name="person" size={22} color="#fff" /></View>
             <View style={styles.nicknameInputWrap}>
-              <Text style={styles.nicknameLabel}>昵称</Text>
+              <Text style={styles.nicknameLabel}>{t('profile.nickname')}</Text>
               <TextInput
                 style={styles.nicknameInput}
                 value={nickname}
                 onChangeText={setNickname}
-                placeholder="给自己起个名字"
+                placeholder={t('profile.nicknamePlaceholder')}
                 placeholderTextColor={colors.ink3}
                 returnKeyType="done"
                 onSubmitEditing={saveNickname}
@@ -110,34 +122,58 @@ export default function ProfileScreen() {
             </View>
           </View>
           <TouchableOpacity style={styles.saveBtn} onPress={saveNickname}>
-            <Text style={styles.saveBtnText}>保存昵称</Text>
+            <Text style={styles.saveBtnText}>{t('profile.saveNickname')}</Text>
           </TouchableOpacity>
         </View>
 
         {/* 数据管理 */}
-        <Text style={styles.section}>数据管理</Text>
+        <Text style={styles.section}>{t('profile.sectionData')}</Text>
         <View style={styles.card}>
-          <Row icon="download-outline" label="导出数据" onPress={handleExport} />
+          <Row icon="download-outline" label={t('profile.export')} onPress={handleExport} />
           <View style={styles.divider} />
-          <Row icon="trash-outline" label="清空所有打卡记录" danger onPress={handleClear} />
+          <Row icon="trash-outline" label={t('profile.clear')} danger onPress={handleClear} />
         </View>
 
         {/* 关于 */}
-        <Text style={styles.section}>关于</Text>
+        <Text style={styles.section}>{t('profile.sectionAbout')}</Text>
         <View style={styles.card}>
-          <Row icon="shield-checkmark-outline" label="隐私协议" onPress={() => setShowPrivacy(true)} />
+          <Row icon="shield-checkmark-outline" label={t('profile.privacy')} onPress={() => setShowPrivacy(true)} />
           <View style={styles.divider} />
-          <Row icon="refresh-circle-outline" label="检查更新" value={`v${version}`} onPress={handleCheckUpdate} />
+          <Row icon="language-outline" label={t('profile.language')} value={languageValue} onPress={() => setShowLang(true)} />
           <View style={styles.divider} />
-          <Row icon="mail-outline" label="联系我们" value="chaseli9@gmail.com" />
+          <Row icon="refresh-circle-outline" label={t('profile.checkUpdate')} value={`v${version}`} onPress={handleCheckUpdate} />
+          <View style={styles.divider} />
+          <Row icon="mail-outline" label={t('profile.contact')} value="chaseli9@gmail.com" />
         </View>
 
-        <Text style={styles.footer}>TimeFlow · 版本 {version}</Text>
+        <Text style={styles.footer}>{t('profile.version', { v: version })}</Text>
       </ScrollView>
 
-      {/* 隐私协议全屏 */}
       <Modal visible={showPrivacy} animationType="slide" onRequestClose={() => setShowPrivacy(false)}>
         <PrivacyAgreement onClose={() => setShowPrivacy(false)} />
+      </Modal>
+
+      {/* 语言选择弹窗 */}
+      <Modal visible={showLang} transparent animationType="fade" onRequestClose={() => setShowLang(false)}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('profile.languageTitle')}</Text>
+            {LANG_OPTIONS.map(opt => {
+              const active = currentLangKey === opt.key;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[styles.langOption, active && styles.langOptionActive]}
+                  onPress={() => { setLang(opt.key); setShowLang(false); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.langOptionText, active && styles.langOptionTextActive]}>{t(opt.labelKey)}</Text>
+                  {active && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -175,4 +211,18 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.line, marginHorizontal: 6 },
 
   footer: { textAlign: 'center', fontSize: 12, color: colors.ink3, marginTop: 8 },
+
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(43,35,30,0.35)',
+    alignItems: 'center', justifyContent: 'center', padding: 28,
+  },
+  dialog: { width: '100%', backgroundColor: colors.surface, borderRadius: 20, padding: 16 },
+  dialogTitle: { fontSize: 17, fontWeight: '700', color: colors.ink, textAlign: 'center', marginBottom: 8 },
+  langOption: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12,
+  },
+  langOptionActive: { backgroundColor: colors.primarySofter },
+  langOptionText: { fontSize: 16, color: colors.ink },
+  langOptionTextActive: { color: colors.primaryStrong, fontWeight: '700' },
 });

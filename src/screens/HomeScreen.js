@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { saveRecord, getRecords, getTodayRecords, updateRecord } from '../storage/store';
 import { computePathStats, placeKey, UNNAMED } from '../utils/stats';
 import { colors } from '../theme';
+import { useI18n } from '../i18n/LanguageContext';
 import Timeline from '../components/Timeline';
 import CheckInButton from '../components/CheckInButton';
 import TransportPicker from '../components/TransportPicker';
@@ -54,6 +55,7 @@ const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const { t, lang, formatDate } = useI18n();
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -92,7 +94,7 @@ export default function HomeScreen() {
   // 一键打卡：坐标必拿、地址兜底为「未命名」、定位失败也不阻塞
   const handleCheckIn = async () => {
     setLoading(true);
-    const t = Date.now(); // 打卡事件时刻（而不是保存时刻）
+    const tnow = Date.now(); // 打卡事件时刻
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       let locationName = UNNAMED;
@@ -108,14 +110,7 @@ export default function HomeScreen() {
         }
       }
 
-      await saveRecord({
-        id: makeId(),
-        timestamp: t,
-        locationName,
-        lat,
-        lng,
-        mode,
-      });
+      await saveRecord({ id: makeId(), timestamp: tnow, locationName, lat, lng, mode });
 
       setLoading(false);
       setSuccess(true);
@@ -123,7 +118,7 @@ export default function HomeScreen() {
       setTimeout(() => setSuccess(false), 1200);
     } catch (e) {
       setLoading(false);
-      Alert.alert('打卡失败', '无法获取位置，请检查权限设置');
+      Alert.alert(t('home.failTitle'), t('home.failBody'));
     }
   };
 
@@ -136,57 +131,52 @@ export default function HomeScreen() {
   const confirmRename = async () => {
     if (!renameTarget) return;
     const name = draftName.trim();
-    if (!name) { Alert.alert('请填写名称'); return; }
+    if (!name) { Alert.alert(t('home.renameEmpty')); return; }
     await updateRecord(renameTarget.id, { locationName: name });
     closeRename();
     await loadToday();
   };
 
-  const now = new Date();
-  const dateStr = `${now.getMonth() + 1}月${now.getDate()}日 · ${['周日','周一','周二','周三','周四','周五','周六'][now.getDay()]}`;
+  const dateStr = formatDate(new Date());
 
   return (
     <View style={styles.screen}>
-      {/* 头部 */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.titleBlock}>
-          <Text style={styles.title}>今天</Text>
+          <Text style={styles.title}>{t('home.today')}</Text>
           <Text style={styles.date}>{dateStr}</Text>
         </View>
         <View style={styles.badge}>
-          <Text style={styles.badgeText}>{records.length} 次打卡</Text>
+          <Text style={styles.badgeText}>{t('home.checkins', { n: records.length })}</Text>
         </View>
       </View>
 
       <View style={styles.summary}>
         <View style={styles.dot} />
-        <Text style={styles.summaryText}>记录你的一天，轻松看路段耗时</Text>
+        <Text style={styles.summaryText}>{t('home.subtitle')}</Text>
       </View>
 
-      {/* 时间轴 */}
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Timeline records={records} estimate={estimate} onRename={openRename} />
+        <Timeline records={records} estimate={estimate} onRename={openRename} lang={lang} />
       </ScrollView>
 
-      {/* 底部操作区 */}
       <View style={styles.composer}>
-        <Text style={styles.composerLabel}>出行方式</Text>
+        <Text style={styles.composerLabel}>{t('home.modeLabel')}</Text>
         <TransportPicker selected={mode} onSelect={setMode} />
         <View style={styles.gap} />
         <CheckInButton onPress={handleCheckIn} loading={loading} success={success} />
       </View>
 
-      {/* 地名编辑弹窗 */}
       <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={closeRename}>
         <View style={styles.overlay}>
           <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>修改地名</Text>
-            <Text style={styles.dialogSub}>位置已记录，给这个地点起个名字</Text>
+            <Text style={styles.dialogTitle}>{t('home.renameTitle')}</Text>
+            <Text style={styles.dialogSub}>{t('home.renameSub')}</Text>
             <TextInput
               style={styles.input}
               value={draftName}
               onChangeText={setDraftName}
-              placeholder="如：家 / 公司 / 咖啡店"
+              placeholder={t('home.renamePlaceholder')}
               placeholderTextColor={colors.ink3}
               autoFocus
               returnKeyType="done"
@@ -194,10 +184,10 @@ export default function HomeScreen() {
             />
             <View style={styles.dialogRow}>
               <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeRename}>
-                <Text style={styles.dialogCancelText}>取消</Text>
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmRename}>
-                <Text style={styles.dialogOkText}>保存</Text>
+                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -239,9 +229,7 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: 'rgba(43,35,30,0.35)',
     alignItems: 'center', justifyContent: 'center', padding: 28,
   },
-  dialog: {
-    width: '100%', backgroundColor: colors.surface, borderRadius: 20, padding: 20,
-  },
+  dialog: { width: '100%', backgroundColor: colors.surface, borderRadius: 20, padding: 20 },
   dialogTitle: { fontSize: 18, fontWeight: '700', color: colors.ink },
   dialogSub: { fontSize: 13, color: colors.ink3, marginTop: 4 },
   input: {

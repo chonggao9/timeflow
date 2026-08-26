@@ -101,12 +101,13 @@ export function computePathStats(allRecords) {
 }
 
 // ---- 格式化 ----
-export function formatDuration(sec) {
+export function formatDuration(sec, lang = 'zh') {
   if (!sec) return '--';
   const m = Math.round(sec / 60);
-  if (m < 1) return '不到1分钟';
-  if (m < 60) return `${m}分钟`;
+  if (m < 1) return lang === 'en' ? '<1 min' : '不到1分钟';
+  if (m < 60) return lang === 'en' ? `${m} min` : `${m}分钟`;
   const h = Math.floor(m / 60), r = m % 60;
+  if (lang === 'en') return r ? `${h}h ${r}m` : `${h}h`;
   return r ? `${h}小时${r}分` : `${h}小时`;
 }
 

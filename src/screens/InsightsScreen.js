@@ -5,12 +5,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords, clearAll } from '../storage/store';
 import { computePathStats } from '../utils/stats';
 import { colors, radius, shadow } from '../theme';
+import { useI18n } from '../i18n/LanguageContext';
 import ModeIcon from '../components/ModeIcon';
 
 const minutes = (sec) => Math.round(sec / 60);
 
 export default function InsightsScreen() {
   const insets = useSafeAreaInsets();
+  const { t, lang } = useI18n();
   const [stats, setStats] = useState([]);
   const [totalDays, setTotalDays] = useState(0);
   const [totalCheckins, setTotalCheckins] = useState(0);
@@ -26,45 +28,44 @@ export default function InsightsScreen() {
   }, []));
 
   const handleClear = () => {
-    Alert.alert('清空数据', '确定要删除所有打卡记录吗？', [
-      { text: '取消', style: 'cancel' },
+    Alert.alert(t('common.clearTitle'), t('common.clearBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: '确定删除', style: 'destructive',
+        text: t('common.delete'), style: 'destructive',
         onPress: async () => { await clearAll(); setStats([]); setTotalDays(0); setTotalCheckins(0); }
       },
     ]);
   };
 
+  const sep = t('insights.separator');
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      {/* 头部 */}
       <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
-        <Text style={styles.title}>洞察</Text>
-        <Text style={styles.subtitle}>你的路段耗时规律</Text>
+        <Text style={styles.title}>{t('insights.title')}</Text>
+        <Text style={styles.subtitle}>{t('insights.subtitle')}</Text>
       </View>
 
-      {/* 总览 */}
       <View style={styles.overview}>
         <View style={styles.overviewCard}>
           <Text style={styles.overviewNum}>{totalCheckins}</Text>
-          <Text style={styles.overviewLabel}>累计打卡</Text>
+          <Text style={styles.overviewLabel}>{t('insights.tCheckins')}</Text>
         </View>
         <View style={styles.overviewCard}>
           <Text style={styles.overviewNum}>{totalDays}</Text>
-          <Text style={styles.overviewLabel}>打卡天数</Text>
+          <Text style={styles.overviewLabel}>{t('insights.tDays')}</Text>
         </View>
         <View style={styles.overviewCard}>
           <Text style={styles.overviewNum}>{stats.length}</Text>
-          <Text style={styles.overviewLabel}>已分析路段</Text>
+          <Text style={styles.overviewLabel}>{t('insights.tPaths')}</Text>
         </View>
       </View>
 
-      {/* 路段洞察 */}
-      <Text style={styles.sectionTitle}>路段规律</Text>
+      <Text style={styles.sectionTitle}>{t('insights.section')}</Text>
       {stats.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>数据积累中…</Text>
-          <Text style={styles.emptyHint}>同一路段打卡 2 次以上后自动分析</Text>
+          <Text style={styles.emptyText}>{t('insights.empty.title')}</Text>
+          <Text style={styles.emptyHint}>{t('insights.empty.hint')}</Text>
         </View>
       ) : (
         stats.map((s, i) => (
@@ -77,26 +78,25 @@ export default function InsightsScreen() {
                 <Text style={styles.pathRouteText} numberOfLines={1}>
                   {s.fromName} <Text style={styles.arrow}>→</Text> {s.toName}
                 </Text>
-                <Text style={styles.pathSamples}>样本 {s.sampleCount} 次</Text>
+                <Text style={styles.pathSamples}>{t('insights.samples', { n: s.sampleCount })}</Text>
               </View>
             </View>
             <View style={styles.pathStats}>
               <Text style={styles.pathBig}>
-                {minutes(s.medianSec)}<Text style={styles.pathBigUnit}> 分钟</Text>
+                {minutes(s.medianSec)}<Text style={styles.pathBigUnit}> {t('insights.min')}</Text>
               </Text>
               <View style={styles.pathRangeCol}>
-                <Text style={styles.pathRangeLabel}>通常耗时</Text>
-                <Text style={styles.pathRange}>最快 {minutes(s.minSec)} · 最慢 {minutes(s.maxSec)} 分钟</Text>
+                <Text style={styles.pathRangeLabel}>{t('insights.median')}</Text>
+                <Text style={styles.pathRange}>{t('insights.fast')} {minutes(s.minSec)} {t('insights.min')}{sep}{t('insights.slow')} {minutes(s.maxSec)} {t('insights.min')}</Text>
               </View>
             </View>
           </View>
         ))
       )}
 
-      {/* 清空按钮 */}
       {totalCheckins > 0 && (
         <TouchableOpacity style={styles.clearBtn} onPress={handleClear}>
-          <Text style={styles.clearText}>清空所有数据</Text>
+          <Text style={styles.clearText}>{t('profile.clear')}</Text>
         </TouchableOpacity>
       )}
     </ScrollView>

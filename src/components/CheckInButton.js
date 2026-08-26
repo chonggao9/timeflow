@@ -1,8 +1,10 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, View } from 'react-native';
 import { colors, shadow } from '../theme';
+import { useI18n } from '../i18n/LanguageContext';
 
 export default function CheckInButton({ onPress, loading, success }) {
+  const { t } = useI18n();
   return (
     <TouchableOpacity
       style={[styles.button, success && styles.buttonSuccess]}
@@ -15,7 +17,7 @@ export default function CheckInButton({ onPress, loading, success }) {
         : (
           <View style={styles.inner}>
             {success && <Text style={styles.check}>✓</Text>}
-            <Text style={[styles.label, success && styles.labelSuccess]}>{success ? '已打卡' : '打 卡'}</Text>
+            <Text style={[styles.label, success && styles.labelSuccess]}>{success ? t('checkin.done') : t('checkin.btn')}</Text>
           </View>
         )}
     </TouchableOpacity>
@@ -43,6 +45,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 6,
     marginLeft: 6,
+    textAlign: 'center',
   },
   labelSuccess: { letterSpacing: 2, marginLeft: 0 },
 });

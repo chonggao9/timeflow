@@ -1,11 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { formatTime, formatDuration, isPlaceholderName, UNNAMED } from '../utils/stats';
+import { formatTime, formatDuration, isPlaceholderName } from '../utils/stats';
 import { colors } from '../theme';
+import { useI18n } from '../i18n/LanguageContext';
 import ModeIcon from './ModeIcon';
-
-const MODE_LABEL = { walk: '步行', bike: '骑行', drive: '驾车', transit: '公交' };
 
 // 呼吸动效 hook（当前节点）
 function usePulse() {
@@ -61,9 +60,8 @@ function DashedLine() {
 }
 
 export default function Timeline({ records, estimate, onRename }) {
-  // records: 今日已打卡记录（按时间升序）
-  // estimate: { locationName, estimatedSec } 下一个预估点（可选）
-  // onRename(record): 点击地点名发起改名
+  const { t, lang } = useI18n();
+  const MODE_LABEL = { walk: t('mode.walk'), bike: t('mode.bike'), drive: t('mode.drive'), transit: t('mode.transit') };
 
   if (!records.length) {
     return (
@@ -71,20 +69,19 @@ export default function Timeline({ records, estimate, onRename }) {
         <View style={styles.emptyRing}>
           <Ionicons name="location" size={32} color={colors.primary} />
         </View>
-        <Text style={styles.emptyText}>今天还没有打卡</Text>
-        <Text style={styles.emptyHint}>选择出行方式，点下方按钮开始记录</Text>
+        <Text style={styles.emptyText}>{t('timeline.empty.title')}</Text>
+        <Text style={styles.emptyHint}>{t('timeline.empty.hint')}</Text>
       </View>
     );
   }
 
   const totalSec = (records[records.length - 1].timestamp - records[0].timestamp) / 1000;
-  const last = records[records.length - 1];
 
   return (
     <View>
       <View style={styles.sectionHead}>
-        <Text style={styles.sectionTitle}>今日行程</Text>
-        <Text style={styles.sectionRight}>已用时 {formatDuration(totalSec)}</Text>
+        <Text style={styles.sectionTitle}>{t('timeline.title')}</Text>
+        <Text style={styles.sectionRight}>{t('timeline.elapsed', { d: formatDuration(totalSec, lang) })}</Text>
       </View>
 
       <View style={styles.container}>
@@ -96,27 +93,19 @@ export default function Timeline({ records, estimate, onRename }) {
               {dur != null && (
                 <View style={styles.segmentRow}>
                   <View style={styles.lineCol}><SolidLine /></View>
-                  <Text style={styles.segmentText}>{formatDuration(dur)}</Text>
+                  <Text style={styles.segmentText}>{formatDuration(dur, lang)}</Text>
                 </View>
               )}
               <View style={styles.row}>
                 <View style={styles.lineCol}><Node type={isLast ? 'current' : 'past'} /></View>
                 <View style={styles.info}>
                   <Text style={[styles.time, isLast && styles.timeCurrent]}>{formatTime(r.timestamp)}</Text>
-                  <TouchableOpacity
-                    style={styles.nameWrap}
-                    onPress={() => onRename && onRename(r)}
-                    activeOpacity={0.6}
-                  >
+                  <TouchableOpacity style={styles.nameWrap} onPress={() => onRename && onRename(r)} activeOpacity={0.6}>
                     <Text
-                      style={[
-                        styles.name,
-                        isLast && styles.nameCurrent,
-                        isPlaceholderName(r.locationName) && styles.namePlaceholder,
-                      ]}
+                      style={[styles.name, isLast && styles.nameCurrent, isPlaceholderName(r.locationName) && styles.namePlaceholder]}
                       numberOfLines={1}
                     >
-                      {isPlaceholderName(r.locationName) ? UNNAMED : r.locationName}
+                      {isPlaceholderName(r.locationName) ? t('common.unnamed') : r.locationName}
                     </Text>
                     <Ionicons name="pencil" size={12} color={colors.ink3} style={styles.nameEditIcon} />
                   </TouchableOpacity>
@@ -136,7 +125,7 @@ export default function Timeline({ records, estimate, onRename }) {
           <View>
             <View style={styles.segmentRow}>
               <View style={styles.lineCol}><DashedLine /></View>
-              <Text style={[styles.segmentText, styles.segmentHot]}>预计 {formatDuration(estimate.estimatedSec)}</Text>
+              <Text style={[styles.segmentText, styles.segmentHot]}>{t('timeline.estimate', { d: formatDuration(estimate.estimatedSec, lang) })}</Text>
             </View>
             <View style={styles.row}>
               <View style={styles.lineCol}><Node type="future" /></View>

@@ -1,31 +1,28 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors } from '../theme';
+import { useI18n } from '../i18n/LanguageContext';
 import ModeIcon from './ModeIcon';
 
-const MODES = [
-  { key: 'walk',    label: '步行' },
-  { key: 'bike',    label: '骑行' },
-  { key: 'drive',   label: '驾车' },
-  { key: 'transit', label: '公交' },
-];
+const MODE_KEYS = ['walk', 'bike', 'drive', 'transit'];
 
 export default function TransportPicker({ selected, onSelect }) {
+  const { t } = useI18n();
   return (
     <View style={styles.container}>
-      {MODES.map(m => {
-        const on = selected === m.key;
+      {MODE_KEYS.map(key => {
+        const on = selected === key;
         return (
           <TouchableOpacity
-            key={m.key}
+            key={key}
             style={[styles.item, on && styles.itemSelected]}
-            onPress={() => onSelect(m.key)}
+            onPress={() => onSelect(key)}
             activeOpacity={0.7}
           >
             <View style={styles.iconWrap}>
-              <ModeIcon mode={m.key} size={20} color={on ? colors.primaryStrong : colors.ink2} />
+              <ModeIcon mode={key} size={20} color={on ? colors.primaryStrong : colors.ink2} />
             </View>
-            <Text style={[styles.label, on && styles.labelSelected]}>{m.label}</Text>
+            <Text style={[styles.label, on && styles.labelSelected]}>{t(`mode.${key}`)}</Text>
           </TouchableOpacity>
         );
       })}

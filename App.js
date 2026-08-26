@@ -8,6 +8,7 @@ import { Alert, Linking } from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
 import InsightsScreen from './src/screens/InsightsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import { LanguageProvider, useI18n } from './src/i18n/LanguageContext';
 import { checkForUpdate } from './src/utils/updater';
 import { colors } from './src/theme';
 
@@ -15,6 +16,7 @@ const Tab = createBottomTabNavigator();
 
 function TabNavigator() {
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -34,7 +36,7 @@ function TabNavigator() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarLabel: '打卡',
+          tabBarLabel: t('tab.checkin'),
           tabBarIcon: ({ focused }) => (
             <Ionicons name={focused ? 'time' : 'time-outline'} size={24} color={focused ? colors.primary : colors.ink3} />
           ),
@@ -44,7 +46,7 @@ function TabNavigator() {
         name="Insights"
         component={InsightsScreen}
         options={{
-          tabBarLabel: '洞察',
+          tabBarLabel: t('tab.insights'),
           tabBarIcon: ({ focused }) => (
             <Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={24} color={focused ? colors.primary : colors.ink3} />
           ),
@@ -54,7 +56,7 @@ function TabNavigator() {
         name="Profile"
         component={ProfileScreen}
         options={{
-          tabBarLabel: '我的',
+          tabBarLabel: t('tab.profile'),
           tabBarIcon: ({ focused }) => (
             <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={focused ? colors.primary : colors.ink3} />
           ),
@@ -64,28 +66,38 @@ function TabNavigator() {
   );
 }
 
-export default function App() {
+function AppInner() {
+  const { t } = useI18n();
+
   // 启动时检查新版本，有则弹窗引导下载
   useEffect(() => {
     checkForUpdate().then(u => {
       if (!u) return;
       Alert.alert(
-        '发现新版本',
-        `当前版本 ${u.currentVersion}\n最新版本 ${u.latestVersion}\n建议更新以获得最新体验。`,
+        t('update.title'),
+        `${t('update.current', { c: u.currentVersion })}\n${t('update.latest', { l: u.latestVersion })}\n${t('update.body')}`,
         [
-          { text: '稍后', style: 'cancel' },
-          { text: '去更新', onPress: () => Linking.openURL(u.downloadUrl) },
+          { text: t('update.later'), style: 'cancel' },
+          { text: t('update.go'), onPress: () => Linking.openURL(u.downloadUrl) },
         ],
       );
     });
-  }, []);
+  }, [t]);
 
+  return (
+    <NavigationContainer>
+      <TabNavigator />
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <NavigationContainer>
-        <TabNavigator />
-      </NavigationContainer>
+      <LanguageProvider>
+        <AppInner />
+      </LanguageProvider>
     </SafeAreaProvider>
   );
 }
