@@ -30,6 +30,7 @@ function TabNavigator() {
           paddingBottom: insets.bottom,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        sceneStyle: { backgroundColor: colors.bg },
       }}
     >
       <Tab.Screen

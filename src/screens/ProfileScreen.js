@@ -60,9 +60,9 @@ export default function ProfileScreen() {
   const handleCheckUpdate = async () => {
     const u = await checkForUpdate();
     if (!u) Alert.alert(t('profile.upToDate'), t('profile.version', { v: version }));
-    else Alert.alert(t('update.title'), t('update.latest', { l: u.latestVersion }), [
+    else Alert.alert(t('update.title'), `${t('update.latest', { l: u.latestVersion })}\n${t('update.downloadHint')}`, [
       { text: t('update.later'), style: 'cancel' },
-      { text: t('update.go'), onPress: () => Linking.openURL(u.downloadUrl) },
+      { text: t('update.go'), onPress: () => Linking.openURL(u.releaseUrl || u.downloadUrl) },
     ]);
   };
 

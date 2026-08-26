@@ -32,7 +32,7 @@ async function getPositionFast() {
   try {
     const loc = await Promise.race([
       Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3500)),
     ]);
     return loc || null;
   } catch (e) {
@@ -52,8 +52,17 @@ async function amapReverseGeocode(lat, lng, timeout = 4000) {
     const data = await res.json();
     if (data.status === '1' && data.regeocode) {
       const r = data.regeocode;
-      if (r.formatted_address) return r.formatted_address;
       const c = r.addressComponent || {};
+      // 1) 商业区/著名地点（如「王府井」）—— 最像附近地名
+      const biz = (c.businessAreas || []).find(b => b && b.name)?.name;
+      if (biz) return biz;
+      // 2) 区 + 街道
+      const street = c.streetNumber?.street;
+      if (c.district && street) return `${c.district}${street}`;
+      // 3) 区 + 乡镇/街道
+      if (c.district && (c.township || c.roadName)) return `${c.district}${c.township || c.roadName}`;
+      // 4) 完整地址兜底
+      if (r.formatted_address) return r.formatted_address;
       const part = [c.district, c.roadName, c.neighbourhood].filter(Boolean);
       if (part.length) return part.join('');
     }

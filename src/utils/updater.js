@@ -40,7 +40,7 @@ export async function checkForUpdate() {
     const downloadUrl = asset ? asset.browser_download_url : (release.html_url || '');
     const current = getAppVersion();
     if (latestVersion && isNewer(latestVersion, current)) {
-      return { currentVersion: current, latestVersion, downloadUrl };
+      return { currentVersion: current, latestVersion, downloadUrl, releaseUrl: release.html_url || downloadUrl };
     }
     return null;
   } catch (e) {
