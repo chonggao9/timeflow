@@ -51,6 +51,9 @@ export default function ProfileScreen() {
     await saveProfile({ nickname: nickname.trim() });
     Alert.alert(t('profile.savedTitle'), t('profile.savedBody'));
   };
+  const persistNickname = async () => {
+    await saveProfile({ nickname: nickname.trim() });
+  };
 
   const version = Constants?.expoConfig?.version || '1.0.0';
 
@@ -117,13 +120,12 @@ export default function ProfileScreen() {
                 placeholder={t('profile.nicknamePlaceholder')}
                 placeholderTextColor={colors.ink3}
                 returnKeyType="done"
-                onSubmitEditing={saveNickname}
+                onSubmitEditing={persistNickname}
+                onBlur={persistNickname}
               />
             </View>
           </View>
-          <TouchableOpacity style={styles.saveBtn} onPress={saveNickname}>
-            <Text style={styles.saveBtnText}>{t('profile.saveNickname')}</Text>
-          </TouchableOpacity>
+          <Text style={styles.nicknameHint}>{t('profile.nicknameHint')}</Text>
         </View>
 
         {/* 数据管理 */}
@@ -198,11 +200,7 @@ const styles = StyleSheet.create({
   nicknameInputWrap: { flex: 1 },
   nicknameLabel: { fontSize: 12, color: colors.ink3 },
   nicknameInput: { fontSize: 16, color: colors.ink, paddingVertical: 4 },
-  saveBtn: {
-    marginTop: 8, marginHorizontal: 6, height: 44, borderRadius: 12,
-    backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center',
-  },
-  saveBtnText: { fontSize: 14, color: colors.primaryStrong, fontWeight: '700' },
+  nicknameHint: { fontSize: 11, color: colors.ink3, marginTop: 4, marginLeft: 6 },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 6 },
   rowIcon: { width: 28, height: 28, borderRadius: 8, backgroundColor: colors.primarySofter, alignItems: 'center', justifyContent: 'center' },

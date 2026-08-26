@@ -19,6 +19,8 @@ export function filterOutliers(arr) {
 
 // ---- 地名占位 ----
 export const UNNAMED = '未命名';
+// 引用 store 里的 legacy 常量，避免循环依赖：这里直接用字符串标记
+const LEGACY_TRIP = 'legacy';
 export function isPlaceholderName(name) {
   return !name || name === UNNAMED || name === '未知位置';
 }
@@ -56,16 +58,16 @@ export function computePathStats(allRecords) {
     placeNames[key][nm] = (placeNames[key][nm] || 0) + 1;
   };
 
-  // 按天分组，天内按时间排序
-  const byDay = {};
+  // 按行程分组：同一条行程内相邻点才算路段，不同行程断开不串线
+  const byTrip = {};
   for (const r of allRecords) {
-    const day = new Date(r.timestamp).toDateString();
-    if (!byDay[day]) byDay[day] = [];
-    byDay[day].push(r);
+    const trip = r.tripId || LEGACY_TRIP;
+    if (!byTrip[trip]) byTrip[trip] = [];
+    byTrip[trip].push(r);
   }
 
-  for (const day of Object.values(byDay)) {
-    const sorted = [...day].sort((a, b) => a.timestamp - b.timestamp);
+  for (const tripRecords of Object.values(byTrip)) {
+    const sorted = [...tripRecords].sort((a, b) => a.timestamp - b.timestamp);
     for (let i = 0; i < sorted.length; i++) {
       countPlace(placeKey(sorted[i]), sorted[i].locationName);
     }

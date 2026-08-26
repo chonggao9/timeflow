@@ -23,6 +23,9 @@ export const translations = {
     'home.renameSub': '位置已记录，给这个地点起个名字',
     'home.renamePlaceholder': '如：家 / 公司 / 咖啡店',
     'home.renameEmpty': '请填写名称',
+    'home.currentPlace': '当前位置',
+    'home.nextEstimate': '预计去',
+    'home.startGuide': '点下方按钮，记录你的第一条行程',
 
     // 打卡按钮
     'checkin.btn': '打 卡',
@@ -40,6 +43,8 @@ export const translations = {
     'timeline.estimate': '预计 {d}',
     'timeline.empty.title': '今天还没有打卡',
     'timeline.empty.hint': '选择出行方式，点下方按钮开始记录',
+    'timeline.trip': '行程',
+    'timeline.legacy': '历史行程',
 
     // 洞察
     'insights.title': '洞察',
@@ -62,6 +67,9 @@ export const translations = {
     'common.clearBody': '确定要删除所有打卡记录吗？',
     'update.later': '稍后',
     'update.go': '去更新',
+    'trip.endedTitle': '行程结束',
+    'trip.ended': '当前行程已结束，下次打卡将开始新行程',
+    'trip.end': '结束行程',
 
     // 我的
     'profile.title': '我的',
@@ -70,6 +78,7 @@ export const translations = {
     'profile.nickname': '昵称',
     'profile.nicknamePlaceholder': '给自己起个名字',
     'profile.saveNickname': '保存昵称',
+    'profile.nicknameHint': '点击昵称即可修改，改完自动保存',
     'profile.savedTitle': '已保存',
     'profile.savedBody': '昵称已更新',
     'profile.sectionData': '数据管理',
@@ -123,6 +132,9 @@ export const translations = {
     'home.renameSub': 'Location recorded. Give it a name.',
     'home.renamePlaceholder': 'Home / Office / Café',
     'home.renameEmpty': 'Please enter a name',
+    'home.currentPlace': 'Current place',
+    'home.nextEstimate': 'Next up',
+    'home.startGuide': 'Tap below to start your first trip',
 
     'checkin.btn': 'Check In',
     'checkin.done': 'Checked In',
@@ -137,6 +149,8 @@ export const translations = {
     'timeline.estimate': 'Est. {d}',
     'timeline.empty.title': 'No check-ins yet today',
     'timeline.empty.hint': 'Pick a mode, tap the button below',
+    'timeline.trip': 'Trip',
+    'timeline.legacy': 'Historical',
 
     'insights.title': 'Insights',
     'insights.subtitle': 'Your route time patterns',
@@ -157,6 +171,9 @@ export const translations = {
     'common.clearBody': 'Delete all check-ins?',
     'update.later': 'Later',
     'update.go': 'Update',
+    'trip.endedTitle': 'Trip ended',
+    'trip.ended': 'This trip ended. Next check-in starts a new trip.',
+    'trip.end': 'End trip',
 
     'profile.title': 'Profile',
     'profile.subtitle': 'Personal info & preferences',
@@ -164,6 +181,7 @@ export const translations = {
     'profile.nickname': 'Nickname',
     'profile.nicknamePlaceholder': 'Enter a nickname',
     'profile.saveNickname': 'Save nickname',
+    'profile.nicknameHint': 'Tap to edit; saves automatically',
     'profile.savedTitle': 'Saved',
     'profile.savedBody': 'Nickname updated',
     'profile.sectionData': 'Data',

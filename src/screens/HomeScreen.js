@@ -5,9 +5,12 @@ import {
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { saveRecord, getRecords, getTodayRecords, updateRecord } from '../storage/store';
-import { computePathStats, placeKey, UNNAMED } from '../utils/stats';
-import { colors } from '../theme';
+import {
+  saveRecord, getRecords, getTodayRecords, updateRecord, ensureTrip, endTrip,
+  getCurrentTripId, getLastMode, setLastMode,
+} from '../storage/store';
+import { computePathStats, placeKey, UNNAMED, formatTime, formatDuration, isPlaceholderName } from '../utils/stats';
+import { colors, radius, shadow } from '../theme';
 import { useI18n } from '../i18n/LanguageContext';
 import Timeline from '../components/Timeline';
 import CheckInButton from '../components/CheckInButton';
@@ -50,7 +53,6 @@ async function reverseGeocodeWithTimeout(lat, lng, timeout = 4000) {
   }
 }
 
-// 唯一 id（时间戳 + 随机段，避免同一毫秒重复）
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 export default function HomeScreen() {
@@ -61,6 +63,7 @@ export default function HomeScreen() {
   const [success, setSuccess] = useState(false);
   const [mode, setMode] = useState('walk');
   const [estimate, setEstimate] = useState(null);
+  const [hasActiveTrip, setHasActiveTrip] = useState(false);
 
   const [renameTarget, setRenameTarget] = useState(null);
   const [draftName, setDraftName] = useState('');
@@ -69,6 +72,13 @@ export default function HomeScreen() {
     const today = await getTodayRecords();
     const sorted = today.sort((a, b) => a.timestamp - b.timestamp);
     setRecords(sorted);
+    const trip = await getCurrentTripId();
+    setHasActiveTrip(!!trip);
+  }, []);
+
+  // 初始化：记住上次出行方式
+  useEffect(() => {
+    (async () => setMode(await getLastMode()))();
   }, []);
 
   useFocusEffect(useCallback(() => { loadToday(); }, [loadToday]));
@@ -91,11 +101,12 @@ export default function HomeScreen() {
     })();
   }, [records]);
 
-  // 一键打卡：坐标必拿、地址兜底为「未命名」、定位失败也不阻塞
+  // 一键打卡：加入当前行程（无则新建），定位失败也不阻塞
   const handleCheckIn = async () => {
     setLoading(true);
-    const tnow = Date.now(); // 打卡事件时刻
+    const tnow = Date.now();
     try {
+      const tripId = await ensureTrip();
       const { status } = await Location.requestForegroundPermissionsAsync();
       let locationName = UNNAMED;
       let lat = null, lng = null;
@@ -110,7 +121,8 @@ export default function HomeScreen() {
         }
       }
 
-      await saveRecord({ id: makeId(), timestamp: tnow, locationName, lat, lng, mode });
+      await saveRecord({ id: makeId(), timestamp: tnow, locationName, lat, lng, mode, tripId });
+      await setLastMode(mode);
 
       setLoading(false);
       setSuccess(true);
@@ -120,6 +132,13 @@ export default function HomeScreen() {
       setLoading(false);
       Alert.alert(t('home.failTitle'), t('home.failBody'));
     }
+  };
+
+  // 结束当前行程
+  const handleEndTrip = async () => {
+    await endTrip();
+    await loadToday();
+    Alert.alert(t('trip.endedTitle'), t('trip.ended'));
   };
 
   // ---- 地名编辑 ----
@@ -138,6 +157,7 @@ export default function HomeScreen() {
   };
 
   const dateStr = formatDate(new Date());
+  const lastRecord = records[records.length - 1];
 
   return (
     <View style={styles.screen}>
@@ -151,22 +171,57 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <View style={styles.summary}>
-        <View style={styles.dot} />
-        <Text style={styles.summaryText}>{t('home.subtitle')}</Text>
+      {/* 主卡片：当前位置 → 预估下一站 */}
+      <View style={styles.cardWrap}>
+        <View style={styles.card}>
+          <View style={styles.cardRow}>
+            <View style={styles.cardCol}>
+              <Text style={styles.cardLabel}>{t('home.currentPlace')}</Text>
+              <Text style={styles.cardName} numberOfLines={1}>
+                {lastRecord
+                  ? (isPlaceholderName(lastRecord.locationName) ? t('common.unnamed') : lastRecord.locationName)
+                  : '--'}
+              </Text>
+            </View>
+            {lastRecord && (
+              <Text style={styles.cardTime}>{formatTime(lastRecord.timestamp)}</Text>
+            )}
+          </View>
+          {estimate ? (
+            <TouchableOpacity style={styles.cardEstimate} activeOpacity={0.7} onPress={openRename.bind(null, lastRecord)}>
+              <Text style={styles.cardEstimateText}>
+                {t('home.nextEstimate')} <Text style={styles.cardEstimateStrong}>{estimate.locationName}</Text> · {formatDuration(estimate.estimatedSec, lang)}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Timeline records={records} estimate={estimate} onRename={openRename} lang={lang} />
+        <Timeline records={records} estimate={estimate} onRename={openRename} />
       </ScrollView>
 
+      {/* 底部操作区 */}
       <View style={styles.composer}>
         <Text style={styles.composerLabel}>{t('home.modeLabel')}</Text>
         <TransportPicker selected={mode} onSelect={setMode} />
         <View style={styles.gap} />
-        <CheckInButton onPress={handleCheckIn} loading={loading} success={success} />
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.endBtn, !hasActiveTrip && styles.endBtnDisabled]}
+            onPress={handleEndTrip}
+            disabled={!hasActiveTrip}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.endBtnText, !hasActiveTrip && styles.endBtnTextDisabled]}>{t('trip.end')}</Text>
+          </TouchableOpacity>
+          <View style={styles.checkinWrap}>
+            <CheckInButton onPress={handleCheckIn} loading={loading} success={success} />
+          </View>
+        </View>
       </View>
 
+      {/* 地名编辑弹窗 */}
       <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={closeRename}>
         <View style={styles.overlay}>
           <View style={styles.dialog}>
@@ -201,7 +256,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingBottom: 10,
+    paddingHorizontal: 20, paddingBottom: 8,
   },
   titleBlock: { flex: 1 },
   title: { fontSize: 26, fontWeight: '800', color: colors.ink, letterSpacing: -0.5, lineHeight: 30 },
@@ -211,9 +266,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 7,
   },
   badgeText: { fontSize: 12, color: colors.primaryStrong, fontWeight: '700' },
-  summary: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 20, paddingBottom: 4 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary },
-  summaryText: { fontSize: 13, color: colors.ink3 },
+
+  cardWrap: { paddingHorizontal: 16, marginBottom: 4 },
+  card: {
+    backgroundColor: colors.surface, borderRadius: radius.lg, padding: 16,
+    ...shadow.sm,
+  },
+  cardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardCol: { flex: 1 },
+  cardLabel: { fontSize: 12, color: colors.ink3 },
+  cardName: { fontSize: 20, color: colors.ink, fontWeight: '800', marginTop: 2 },
+  cardTime: { fontSize: 13, color: colors.ink2, fontVariant: ['tabular-nums'] },
+  cardEstimate: {
+    marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.line,
+  },
+  cardEstimateText: { fontSize: 13, color: colors.ink2 },
+  cardEstimateStrong: { color: colors.primaryStrong, fontWeight: '700' },
 
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingBottom: 12 },
@@ -224,6 +292,15 @@ const styles = StyleSheet.create({
   },
   composerLabel: { fontSize: 12, color: colors.ink3, marginBottom: 9, marginLeft: 2 },
   gap: { height: 12 },
+  actions: { flexDirection: 'row', gap: 10 },
+  checkinWrap: { flex: 1 },
+  endBtn: {
+    width: 92, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#FAF6F1', borderWidth: 1.5, borderColor: colors.line,
+  },
+  endBtnDisabled: { opacity: 0.4 },
+  endBtnText: { fontSize: 14, color: colors.ink2, fontWeight: '700', letterSpacing: 1 },
+  endBtnTextDisabled: { color: colors.ink3 },
 
   overlay: {
     flex: 1, backgroundColor: 'rgba(43,35,30,0.35)',

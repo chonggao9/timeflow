@@ -6,7 +6,8 @@ import { colors } from '../theme';
 import { useI18n } from '../i18n/LanguageContext';
 import ModeIcon from './ModeIcon';
 
-// 呼吸动效 hook（当前节点）
+const LEGACY = 'legacy';
+
 function usePulse() {
   const anim = React.useRef(new Animated.Value(0.6)).current;
   React.useEffect(() => {
@@ -59,6 +60,17 @@ function DashedLine() {
   );
 }
 
+// 按行程分组，保序
+function groupByTrip(records) {
+  const map = new Map();
+  for (const r of records) {
+    const key = r.tripId || LEGACY;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(r);
+  }
+  return [...map.entries()].map(([tripId, recs]) => ({ tripId, records: recs }));
+}
+
 export default function Timeline({ records, estimate, onRename }) {
   const { t, lang } = useI18n();
   const MODE_LABEL = { walk: t('mode.walk'), bike: t('mode.bike'), drive: t('mode.drive'), transit: t('mode.transit') };
@@ -75,19 +87,19 @@ export default function Timeline({ records, estimate, onRename }) {
     );
   }
 
+  const groups = groupByTrip(records);
+  const showLabels = groups.length > 1;
   const totalSec = (records[records.length - 1].timestamp - records[0].timestamp) / 1000;
 
-  return (
-    <View>
-      <View style={styles.sectionHead}>
-        <Text style={styles.sectionTitle}>{t('timeline.title')}</Text>
-        <Text style={styles.sectionRight}>{t('timeline.elapsed', { d: formatDuration(totalSec, lang) })}</Text>
-      </View>
-
-      <View style={styles.container}>
-        {records.map((r, i) => {
-          const isLast = i === records.length - 1;
-          const dur = i > 0 ? (r.timestamp - records[i - 1].timestamp) / 1000 : null;
+  const renderTrip = (g, gi) => {
+    const isLastGroup = gi === groups.length - 1;
+    const label = g.tripId === LEGACY ? t('timeline.legacy') : `${t('timeline.trip')} ${gi + 1}`;
+    return (
+      <View key={g.tripId}>
+        {showLabels && <Text style={styles.tripLabel}>{label}</Text>}
+        {g.records.map((r, i) => {
+          const isLast = isLastGroup && i === g.records.length - 1;
+          const dur = i > 0 ? (r.timestamp - g.records[i - 1].timestamp) / 1000 : null;
           return (
             <View key={r.id}>
               {dur != null && (
@@ -120,6 +132,22 @@ export default function Timeline({ records, estimate, onRename }) {
             </View>
           );
         })}
+        {!isLastGroup && <View style={styles.tripGap} />}
+      </View>
+    );
+  };
+
+  const last = records[records.length - 1];
+
+  return (
+    <View>
+      <View style={styles.sectionHead}>
+        <Text style={styles.sectionTitle}>{t('timeline.title')}</Text>
+        <Text style={styles.sectionRight}>{t('timeline.elapsed', { d: formatDuration(totalSec, lang) })}</Text>
+      </View>
+
+      <View style={styles.container}>
+        {groups.map(renderTrip)}
 
         {estimate && (
           <View>
@@ -163,6 +191,11 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 13, color: colors.ink2, fontWeight: '700', letterSpacing: 0.4 },
   sectionRight: { fontSize: 12, color: colors.ink3 },
+  tripLabel: {
+    fontSize: 12, color: colors.primaryStrong, fontWeight: '700',
+    marginTop: 12, marginBottom: 2, letterSpacing: 0.4,
+  },
+  tripGap: { height: 20 },
 
   row: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
   lineCol: { width: 34, alignItems: 'center', justifyContent: 'center' },
