@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { formatTime, formatDuration } from '../utils/stats';
+import { formatTime, formatDuration, isPlaceholderName, UNNAMED } from '../utils/stats';
 import { colors } from '../theme';
 import ModeIcon from './ModeIcon';
 
@@ -60,9 +60,10 @@ function DashedLine() {
   );
 }
 
-export default function Timeline({ records, estimate }) {
+export default function Timeline({ records, estimate, onRename }) {
   // records: 今日已打卡记录（按时间升序）
   // estimate: { locationName, estimatedSec } 下一个预估点（可选）
+  // onRename(record): 点击地点名发起改名
 
   if (!records.length) {
     return (
@@ -102,7 +103,23 @@ export default function Timeline({ records, estimate }) {
                 <View style={styles.lineCol}><Node type={isLast ? 'current' : 'past'} /></View>
                 <View style={styles.info}>
                   <Text style={[styles.time, isLast && styles.timeCurrent]}>{formatTime(r.timestamp)}</Text>
-                  <Text style={[styles.name, isLast && styles.nameCurrent]} numberOfLines={1}>{r.locationName || '未知位置'}</Text>
+                  <TouchableOpacity
+                    style={styles.nameWrap}
+                    onPress={() => onRename && onRename(r)}
+                    activeOpacity={0.6}
+                  >
+                    <Text
+                      style={[
+                        styles.name,
+                        isLast && styles.nameCurrent,
+                        isPlaceholderName(r.locationName) && styles.namePlaceholder,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {isPlaceholderName(r.locationName) ? UNNAMED : r.locationName}
+                    </Text>
+                    <Ionicons name="pencil" size={12} color={colors.ink3} style={styles.nameEditIcon} />
+                  </TouchableOpacity>
                   {r.mode && MODE_LABEL[r.mode] && (
                     <View style={styles.modeChip}>
                       <ModeIcon mode={r.mode} size={13} color={colors.ink2} />
@@ -174,6 +191,9 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, color: colors.ink, fontWeight: '600', flex: 1 },
   nameCurrent: { color: colors.primaryStrong, fontWeight: '700' },
   nameFuture: { fontSize: 15, color: colors.ink3, fontWeight: '500', flex: 1 },
+  nameWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0 },
+  namePlaceholder: { color: colors.ink3, fontStyle: 'italic' },
+  nameEditIcon: { marginLeft: 4 },
   modeChip: { flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 6 },
   modeChipText: { fontSize: 11, color: colors.ink2 },
 

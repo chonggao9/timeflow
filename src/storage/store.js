@@ -22,6 +22,15 @@ export async function getTodayRecords() {
   return records.filter(r => new Date(r.timestamp).toDateString() === today);
 }
 
+// 更新一条记录（如改地名）
+export async function updateRecord(id, patch) {
+  const records = await getRecords();
+  const idx = records.findIndex(r => r.id === id);
+  if (idx < 0) return;
+  records[idx] = { ...records[idx], ...patch };
+  await AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+}
+
 // 删除一条记录
 export async function deleteRecord(id) {
   const records = await getRecords();

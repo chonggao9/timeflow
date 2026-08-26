@@ -1,40 +1,56 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import {
+  View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity,
+} from 'react-native';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { saveRecord, getRecords, getTodayRecords } from '../storage/store';
-import { computePathStats } from '../utils/stats';
+import { saveRecord, getRecords, getTodayRecords, updateRecord } from '../storage/store';
+import { computePathStats, placeKey, UNNAMED } from '../utils/stats';
 import { colors } from '../theme';
 import Timeline from '../components/Timeline';
 import CheckInButton from '../components/CheckInButton';
 import TransportPicker from '../components/TransportPicker';
 
-// 快速定位：先上次已知位置（瞬时），再实时低精度（6 秒超时）；都不行返回 null
+// 快速定位：服务开关 → 缓存(限5分钟) → 实时低精度(超时)。都失败返回 null
 async function getPositionFast() {
-  // 定位服务未开启，直接放弃，避免长时间等待
   try {
     const on = await Location.hasServicesEnabledAsync();
     if (!on) return null;
-  } catch (e) { /* 忽略，继续尝试 */ }
+  } catch (e) { /* 继续 */ }
 
-  // 1) 上次已知位置，瞬时返回
   try {
-    const cached = await Location.getLastKnownPositionAsync();
+    const cached = await Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000 });
     if (cached) return cached;
-  } catch (e) { /* 忽略 */ }
+  } catch (e) { /* 继续 */ }
 
-  // 2) 实时定位（低精度 + 超时，网络定位通常 1-3 秒返回）
   try {
     const loc = await Promise.race([
       Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('定位超时')), 6000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
     ]);
-    if (loc) return loc;
-  } catch (e) { /* 超时或失败 */ }
-
-  return null;
+    return loc || null;
+  } catch (e) {
+    return null;
+  }
 }
+
+// 反查地址，带超时；失败/超时返回 null
+async function reverseGeocodeWithTimeout(lat, lng, timeout = 4000) {
+  try {
+    const [addr] = await Promise.race([
+      Location.reverseGeocodeAsync({ latitude: lat, longitude: lng }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout)),
+    ]);
+    if (!addr) return null;
+    return [addr.street, addr.district, addr.city].filter(Boolean).join(' ') || addr.name || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 唯一 id（时间戳 + 随机段，避免同一毫秒重复）
+const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -44,6 +60,9 @@ export default function HomeScreen() {
   const [mode, setMode] = useState('walk');
   const [estimate, setEstimate] = useState(null);
 
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [draftName, setDraftName] = useState('');
+
   const loadToday = useCallback(async () => {
     const today = await getTodayRecords();
     const sorted = today.sort((a, b) => a.timestamp - b.timestamp);
@@ -52,7 +71,7 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => { loadToday(); }, [loadToday]));
 
-  // 计算预估（从最后一个点出发的最常见路段的耗时中位数）
+  // 计算预估：从最后一个点出发的最常见路段（按坐标格点匹配）
   useEffect(() => {
     if (records.length < 1) { setEstimate(null); return; }
     (async () => {
@@ -60,7 +79,8 @@ export default function HomeScreen() {
       const stats = computePathStats(all);
       if (!stats.length) { setEstimate(null); return; }
       const last = records[records.length - 1];
-      const match = stats.find(s => s.fromName === last.locationName);
+      const key = placeKey(last);
+      const match = stats.find(s => s.fromKey === key);
       if (match) {
         setEstimate({ locationName: match.toName, estimatedSec: match.medianSec });
       } else {
@@ -69,12 +89,13 @@ export default function HomeScreen() {
     })();
   }, [records]);
 
-  // 一键打卡：用当前选中的出行方式直接记录（定位失败也不阻塞打卡）
+  // 一键打卡：坐标必拿、地址兜底为「未命名」、定位失败也不阻塞
   const handleCheckIn = async () => {
     setLoading(true);
+    const t = Date.now(); // 打卡事件时刻（而不是保存时刻）
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      let locationName = '未知位置';
+      let locationName = UNNAMED;
       let lat = null, lng = null;
 
       if (status === 'granted') {
@@ -82,21 +103,14 @@ export default function HomeScreen() {
         if (loc) {
           lat = loc.coords.latitude;
           lng = loc.coords.longitude;
-          try {
-            const [addr] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-            if (addr) {
-              locationName = [addr.street, addr.district, addr.city]
-                .filter(Boolean).join(' ') || addr.name || '未知位置';
-            }
-          } catch (e) {
-            locationName = '未知位置';
-          }
+          const addr = await reverseGeocodeWithTimeout(lat, lng);
+          if (addr) locationName = addr;
         }
       }
 
       await saveRecord({
-        id: Date.now().toString(),
-        timestamp: Date.now(),
+        id: makeId(),
+        timestamp: t,
         locationName,
         lat,
         lng,
@@ -111,6 +125,21 @@ export default function HomeScreen() {
       setLoading(false);
       Alert.alert('打卡失败', '无法获取位置，请检查权限设置');
     }
+  };
+
+  // ---- 地名编辑 ----
+  const openRename = (record) => {
+    setRenameTarget(record);
+    setDraftName(record.locationName && record.locationName !== UNNAMED ? record.locationName : '');
+  };
+  const closeRename = () => { setRenameTarget(null); setDraftName(''); };
+  const confirmRename = async () => {
+    if (!renameTarget) return;
+    const name = draftName.trim();
+    if (!name) { Alert.alert('请填写名称'); return; }
+    await updateRecord(renameTarget.id, { locationName: name });
+    closeRename();
+    await loadToday();
   };
 
   const now = new Date();
@@ -136,7 +165,7 @@ export default function HomeScreen() {
 
       {/* 时间轴 */}
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Timeline records={records} estimate={estimate} />
+        <Timeline records={records} estimate={estimate} onRename={openRename} />
       </ScrollView>
 
       {/* 底部操作区 */}
@@ -146,6 +175,34 @@ export default function HomeScreen() {
         <View style={styles.gap} />
         <CheckInButton onPress={handleCheckIn} loading={loading} success={success} />
       </View>
+
+      {/* 地名编辑弹窗 */}
+      <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={closeRename}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>修改地名</Text>
+            <Text style={styles.dialogSub}>位置已记录，给这个地点起个名字</Text>
+            <TextInput
+              style={styles.input}
+              value={draftName}
+              onChangeText={setDraftName}
+              placeholder="如：家 / 公司 / 咖啡店"
+              placeholderTextColor={colors.ink3}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={confirmRename}
+            />
+            <View style={styles.dialogRow}>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeRename}>
+                <Text style={styles.dialogCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmRename}>
+                <Text style={styles.dialogOkText}>保存</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -177,4 +234,25 @@ const styles = StyleSheet.create({
   },
   composerLabel: { fontSize: 12, color: colors.ink3, marginBottom: 9, marginLeft: 2 },
   gap: { height: 12 },
+
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(43,35,30,0.35)',
+    alignItems: 'center', justifyContent: 'center', padding: 28,
+  },
+  dialog: {
+    width: '100%', backgroundColor: colors.surface, borderRadius: 20, padding: 20,
+  },
+  dialogTitle: { fontSize: 18, fontWeight: '700', color: colors.ink },
+  dialogSub: { fontSize: 13, color: colors.ink3, marginTop: 4 },
+  input: {
+    marginTop: 16, borderWidth: 1.5, borderColor: colors.line2, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: colors.ink,
+    backgroundColor: '#FAF6F1',
+  },
+  dialogRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  dialogBtn: { flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  dialogCancel: { backgroundColor: '#FAF6F1' },
+  dialogCancelText: { fontSize: 15, color: colors.ink2, fontWeight: '600' },
+  dialogOk: { backgroundColor: colors.primary },
+  dialogOkText: { fontSize: 15, color: '#fff', fontWeight: '700' },
 });
