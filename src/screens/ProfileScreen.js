@@ -9,6 +9,7 @@ import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords, clearAll } from '../storage/store';
 import { getProfile, saveProfile } from '../storage/profile';
+import { getAmapKey, setAmapKey } from '../config';
 import { checkForUpdate } from '../utils/updater';
 import { useI18n } from '../i18n/LanguageContext';
 import { colors, radius, shadow } from '../theme';
@@ -40,6 +41,10 @@ export default function ProfileScreen() {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLang, setShowLang] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showAmapKey, setShowAmapKey] = useState(false);
+  const [amapKeyDraft, setAmapKeyDraft] = useState('');
+  const [amapKeySet, setAmapKeySet] = useState(false);
+  const [amapKeyInvalid, setAmapKeyInvalid] = useState(false);
 
   const loadProfile = useCallback(async () => {
     const p = await getProfile();
@@ -47,12 +52,49 @@ export default function ProfileScreen() {
   }, []);
   React.useEffect(() => { loadProfile(); }, [loadProfile]);
 
+  const loadAmapKey = useCallback(async () => {
+    const k = await getAmapKey();
+    setAmapKeySet(!!k);
+  }, []);
+  React.useEffect(() => { loadAmapKey(); }, [loadAmapKey]);
+
   const saveNickname = async () => {
     await saveProfile({ nickname: nickname.trim() });
     Alert.alert(t('profile.savedTitle'), t('profile.savedBody'));
   };
   const persistNickname = async () => {
     await saveProfile({ nickname: nickname.trim() });
+  };
+
+  const openAmapKey = async () => {
+    setAmapKeyDraft(await getAmapKey());
+    setAmapKeyInvalid(false);
+    setShowAmapKey(true);
+  };
+  const closeAmapKey = () => { setShowAmapKey(false); setAmapKeyInvalid(false); };
+  const confirmAmapKey = async () => {
+    const k = amapKeyDraft.trim();
+    if (!k || /\s/.test(k)) { setAmapKeyInvalid(true); return; }
+    const saved = await setAmapKey(k);
+    if (!saved) {
+      Alert.alert(t('profile.amapKeySaveFailTitle'), t('profile.amapKeySaveFailBody'));
+      return;
+    }
+    setAmapKeySet(true);
+    setShowAmapKey(false);
+    setAmapKeyInvalid(false);
+    Alert.alert(t('profile.amapKeySavedTitle'), t('profile.amapKeySavedBody'));
+  };
+  const clearAmapKey = async () => {
+    const saved = await setAmapKey('');
+    if (!saved) {
+      Alert.alert(t('profile.amapKeySaveFailTitle'), t('profile.amapKeySaveFailBody'));
+      return;
+    }
+    setAmapKeySet(false);
+    setAmapKeyDraft('');
+    setShowAmapKey(false);
+    setAmapKeyInvalid(false);
   };
 
   const version = Constants?.expoConfig?.version || '1.0.0';
@@ -136,6 +178,17 @@ export default function ProfileScreen() {
           <Row icon="trash-outline" label={t('profile.clear')} danger onPress={handleClear} />
         </View>
 
+        {/* 位置服务 */}
+        <Text style={styles.section}>{t('profile.sectionLocation')}</Text>
+        <View style={styles.card}>
+          <Row
+            icon="map-outline"
+            label={t('profile.amapKey')}
+            value={amapKeySet ? t('profile.amapKeySet') : t('profile.amapKeyEmpty')}
+            onPress={openAmapKey}
+          />
+        </View>
+
         {/* 关于 */}
         <Text style={styles.section}>{t('profile.sectionAbout')}</Text>
         <View style={styles.card}>
@@ -156,6 +209,38 @@ export default function ProfileScreen() {
       </Modal>
 
       {/* 语言选择弹窗 */}
+      {/* 高德 Key 配置弹窗 */}
+      <Modal visible={showAmapKey} transparent animationType="fade" onRequestClose={closeAmapKey}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('profile.amapKeyTitle')}</Text>
+            <Text style={styles.dialogSub}>{t('profile.amapKeySub')}</Text>
+            <TextInput
+              style={styles.input}
+              value={amapKeyDraft}
+              onChangeText={setAmapKeyDraft}
+              placeholder={t('profile.amapKeyPlaceholder')}
+              placeholderTextColor={colors.ink3}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+            />
+            {amapKeyInvalid && <Text style={styles.errorText}>{t('profile.amapKeyInvalid')}</Text>}
+            <View style={styles.dialogRow}>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogGhost]} onPress={clearAmapKey}>
+                <Text style={styles.dialogGhostText}>{t('profile.amapKeyClear')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeAmapKey}>
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmAmapKey}>
+                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showLang} transparent animationType="fade" onRequestClose={() => setShowLang(false)}>
         <View style={styles.overlay}>
           <View style={styles.dialog}>
@@ -216,6 +301,24 @@ const styles = StyleSheet.create({
   },
   dialog: { width: '100%', backgroundColor: colors.surface, borderRadius: 20, padding: 16 },
   dialogTitle: { fontSize: 17, fontWeight: '700', color: colors.ink, textAlign: 'center', marginBottom: 8 },
+  dialogSub: { fontSize: 12, color: colors.ink3, marginTop: 2, marginBottom: 4, lineHeight: 17 },
+  input: {
+    marginTop: 8, borderWidth: 1.5, borderColor: colors.line2, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: colors.ink,
+    backgroundColor: '#FAF6F1',
+  },
+  errorText: { marginTop: 8, fontSize: 12, color: colors.danger },
+  dialogGhost: {
+    flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.line,
+  },
+  dialogGhostText: { fontSize: 15, color: colors.danger, fontWeight: '600' },
+  dialogRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  dialogBtn: { flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  dialogCancel: { backgroundColor: '#FAF6F1' },
+  dialogCancelText: { fontSize: 15, color: colors.ink2, fontWeight: '600' },
+  dialogOk: { backgroundColor: colors.primary },
+  dialogOkText: { fontSize: 15, color: '#fff', fontWeight: '700' },
   langOption: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12,

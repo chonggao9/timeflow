@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, View } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
 import { colors, shadow } from '../theme';
 import { useI18n } from '../i18n/LanguageContext';
 
@@ -12,14 +12,10 @@ export default function CheckInButton({ onPress, loading, success }) {
       activeOpacity={0.85}
       disabled={loading || success}
     >
-      {loading
-        ? <ActivityIndicator color="#fff" size="small" />
-        : (
-          <View style={styles.inner}>
-            {success && <Text style={styles.check}>✓</Text>}
-            <Text style={[styles.label, success && styles.labelSuccess]}>{success ? t('checkin.done') : t('checkin.btn')}</Text>
-          </View>
-        )}
+      <View style={styles.inner}>
+        {success && <Text style={styles.check}>✓</Text>}
+        <Text style={[styles.label, success && styles.labelSuccess]}>{success ? t('checkin.done') : t('checkin.btn')}</Text>
+      </View>
     </TouchableOpacity>
   );
 }

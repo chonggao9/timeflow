@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity, Linking,
+  View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity, Linking, ActivityIndicator, Vibration,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,10 +9,10 @@ import {
   saveRecord, getRecords, getTodayRecords, updateRecord, ensureTrip, endTrip,
   getCurrentTripId, getLastMode, setLastMode,
 } from '../storage/store';
-import { computePathStats, placeKey, UNNAMED, formatTime, formatDuration, isPlaceholderName } from '../utils/stats';
-import { colors, radius, shadow } from '../theme';
+import { computePathStats, placeKey, UNNAMED } from '../utils/stats';
+import { colors } from '../theme';
 import { useI18n } from '../i18n/LanguageContext';
-import { AMAP_KEY } from '../config';
+import { getAmapKey } from '../config';
 import Timeline from '../components/Timeline';
 import CheckInButton from '../components/CheckInButton';
 import TransportPicker from '../components/TransportPicker';
@@ -42,9 +42,10 @@ async function getPositionFast() {
 
 // 高德逆地理编码（坐标 → 附近地名），优先用于国内；失败返回 null
 async function amapReverseGeocode(lat, lng, timeout = 4000) {
-  if (!AMAP_KEY || AMAP_KEY === 'YOUR_AMAP_KEY') return null;
+  const key = await getAmapKey();
+  if (!key) return null;
   try {
-    const url = `https://restapi.amap.com/v3/geocode/regeo?key=${AMAP_KEY}&location=${lng},${lat}&extensions=base&radius=1000`;
+    const url = `https://restapi.amap.com/v3/geocode/regeo?key=${encodeURIComponent(key)}&location=${lng},${lat}&extensions=base&radius=1000`;
     const res = await Promise.race([
       fetch(url),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout)),
@@ -90,13 +91,16 @@ const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { t, lang, formatDate } = useI18n();
+  const { t, formatDate } = useI18n();
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [mode, setMode] = useState('walk');
   const [estimate, setEstimate] = useState(null);
   const [hasActiveTrip, setHasActiveTrip] = useState(false);
+  const [locStatus, setLocStatus] = useState(null); // null | 'pending' | 'denied' | 'failed'
+  const locTargetRef = useRef(null);
+  const fillSeqRef = useRef(0); // 补位序号：状态条只反映最新一次补位
 
   const [renameTarget, setRenameTarget] = useState(null);
   const [draftName, setDraftName] = useState('');
@@ -146,38 +150,54 @@ export default function HomeScreen() {
 
       setLoading(false);
       setSuccess(true);
+      Vibration.vibrate(15); // 轻触感：确认打卡（秒级，紧贴点击）
       await loadToday();
       setTimeout(() => setSuccess(false), 1200);
 
       fillLocation(id); // 后台定位 + 反查，不阻塞打卡
     } catch (e) {
       setLoading(false);
+      Vibration.vibrate([0, 40, 30, 40]); // 双震：保存失败
       Alert.alert(t('home.failTitle'), t('home.failBody'));
     }
   };
 
-  // 后台补坐标 + 地名
+  // 后台补坐标 + 地名：状态条呈现 补位中/被拒/失败，成功则静默消失。
+  // 序号守卫：连打两次时，旧补位照常落库/刷新，但只有最新一次能更新状态条。
   const fillLocation = async (id) => {
+    const seq = ++fillSeqRef.current;
+    locTargetRef.current = id;
+    setLocStatus('pending');
+    const isStale = () => seq !== fillSeqRef.current;
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
+      if (status !== 'granted') { if (!isStale()) setLocStatus('denied'); return; }
       const loc = await getPositionFast();
-      if (!loc) { showLocFailed(); return; }
+      if (!loc) { if (!isStale()) setLocStatus('failed'); return; }
       const lat = loc.coords.latitude, lng = loc.coords.longitude;
       const addr = await reverseGeocodeWithTimeout(lat, lng);
       const patch = { lat, lng };
       if (addr) patch.locationName = addr;
       await updateRecord(id, patch);
-      await loadToday();
-    } catch (e) { /* 忽略 */ }
+      await loadToday(); // 旧补位也刷新，把已解析的地名补上
+      if (!isStale()) setLocStatus(null);
+    } catch (e) {
+      if (!isStale()) setLocStatus('failed');
+    }
   };
 
-  // 定位失败：引导去系统设置开启定位
-  const showLocFailed = () => {
-    Alert.alert(t('home.locAlertTitle'), t('home.locAlertBody'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('home.openSettings'), onPress: () => Linking.openSettings() },
-    ]);
+  // 定位状态条点击：被拒 → 已授权则重试，否则去设置；失败 → 位置服务总开关没开则去设置，否则重试
+  const handleLocBarPress = async () => {
+    if (locStatus === 'denied') {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status === 'granted') { const id = locTargetRef.current; if (id) fillLocation(id); }
+      else Linking.openSettings();
+    } else if (locStatus === 'failed') {
+      let servicesOn = true;
+      try { servicesOn = await Location.hasServicesEnabledAsync(); } catch (e) { /* 忽略 */ }
+      if (!servicesOn) Linking.openSettings();
+      else { const id = locTargetRef.current; if (id) fillLocation(id); }
+    }
   };
 
   // 结束当前行程
@@ -203,7 +223,6 @@ export default function HomeScreen() {
   };
 
   const dateStr = formatDate(new Date());
-  const lastRecord = records[records.length - 1];
 
   return (
     <View style={styles.screen}>
@@ -217,39 +236,33 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* 主卡片：当前位置 → 预估下一站 */}
-      <View style={styles.cardWrap}>
-        <View style={styles.card}>
-          <View style={styles.cardRow}>
-            <View style={styles.cardCol}>
-              <Text style={styles.cardLabel}>{t('home.currentPlace')}</Text>
-              <Text style={styles.cardName} numberOfLines={1}>
-                {lastRecord
-                  ? (isPlaceholderName(lastRecord.locationName) ? t('common.unnamed') : lastRecord.locationName)
-                  : '--'}
-              </Text>
+      {/* 定位状态条：补位中 / 权限被拒 / 定位失败 */}
+      {locStatus && (
+        <TouchableOpacity
+          style={[styles.locBar, locStatus === 'pending' && styles.locBarPending]}
+          onPress={handleLocBarPress}
+          activeOpacity={locStatus === 'pending' ? 1 : 0.7}
+          disabled={locStatus === 'pending'}
+        >
+          {locStatus === 'pending' ? (
+            <View style={styles.locBarRow}>
+              <ActivityIndicator size="small" color={colors.ink3} />
+              <Text style={styles.locBarTextPending}>{t('home.locPending')}</Text>
             </View>
-            {lastRecord && (
-              <Text style={styles.cardTime}>{formatTime(lastRecord.timestamp)}</Text>
-            )}
-          </View>
-          {estimate ? (
-            <TouchableOpacity style={styles.cardEstimate} activeOpacity={0.7} onPress={openRename.bind(null, lastRecord)}>
-              <Text style={styles.cardEstimateText}>
-                {t('home.nextEstimate')} <Text style={styles.cardEstimateStrong}>{estimate.locationName}</Text> · {formatDuration(estimate.estimatedSec, lang)}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
+          ) : (
+            <Text style={styles.locBarText}>
+              {locStatus === 'denied' ? t('home.locDenied') : t('home.locFailed')}
+            </Text>
+          )}
+        </TouchableOpacity>
+      )}
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Timeline records={records} onRename={openRename} />
+        <Timeline records={records} estimate={estimate} onRename={openRename} />
       </ScrollView>
 
       {/* 底部操作区 */}
       <View style={styles.composer}>
-        <Text style={styles.composerLabel}>{t('home.modeLabel')}</Text>
         <TransportPicker selected={mode} onSelect={setMode} />
         <View style={styles.gap} />
         <View style={styles.actions}>
@@ -313,21 +326,16 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontSize: 12, color: colors.primaryStrong, fontWeight: '700' },
 
-  cardWrap: { paddingHorizontal: 16, marginBottom: 4 },
-  card: {
-    backgroundColor: colors.surface, borderRadius: radius.lg, padding: 16,
-    ...shadow.sm,
+  locBar: {
+    marginHorizontal: 16, marginBottom: 6,
+    paddingVertical: 9, paddingHorizontal: 14,
+    borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.primarySofter,
   },
-  cardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardCol: { flex: 1 },
-  cardLabel: { fontSize: 12, color: colors.ink3 },
-  cardName: { fontSize: 20, color: colors.ink, fontWeight: '800', marginTop: 2 },
-  cardTime: { fontSize: 13, color: colors.ink2, fontVariant: ['tabular-nums'] },
-  cardEstimate: {
-    marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.line,
-  },
-  cardEstimateText: { fontSize: 13, color: colors.ink2 },
-  cardEstimateStrong: { color: colors.primaryStrong, fontWeight: '700' },
+  locBarPending: { backgroundColor: '#FAF6F1' },
+  locBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  locBarTextPending: { fontSize: 12, color: colors.ink3 },
+  locBarText: { fontSize: 12, color: colors.danger, fontWeight: '600' },
 
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingBottom: 12 },
@@ -336,7 +344,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14,
     backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.line,
   },
-  composerLabel: { fontSize: 12, color: colors.ink3, marginBottom: 9, marginLeft: 2 },
   gap: { height: 12 },
   actions: { flexDirection: 'row', gap: 10 },
   checkinWrap: { flex: 1 },

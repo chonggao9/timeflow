@@ -52,6 +52,10 @@ function SolidLine() {
   return <View style={styles.solidLine} />;
 }
 
+function DashedLine() {
+  return <View style={styles.dashedLine} />;
+}
+
 // 按行程分组（升序），展示时统一倒序：最新行程/最新打卡在最上方
 function groupByTrip(records) {
   const map = new Map();
@@ -68,7 +72,7 @@ function groupByTrip(records) {
   return groups.sort((a, b) => b.firstT - a.firstT); // 最新组在前
 }
 
-export default function Timeline({ records, onRename }) {
+export default function Timeline({ records, estimate, onRename }) {
   const { t, lang } = useI18n();
   const MODE_LABEL = { walk: t('mode.walk'), bike: t('mode.bike'), drive: t('mode.drive'), transit: t('mode.transit') };
 
@@ -101,7 +105,7 @@ export default function Timeline({ records, onRename }) {
         {showLabels && <Text style={styles.tripLabel}>{g.tripId === LEGACY ? t('timeline.legacy') : `${t('timeline.trip')} ${gi + 1}`}</Text>}
         {rev.map((r, j) => {
           const isCurrent = gi === 0 && j === 0;
-          const durBelow = j < rev.length - 1 ? (rev[j + 1].timestamp - r.timestamp) / 1000 : null;
+          const durBelow = j < rev.length - 1 ? (r.timestamp - rev[j + 1].timestamp) / 1000 : null;
           return (
             <View key={r.id}>
               <View style={styles.row}>
@@ -125,6 +129,23 @@ export default function Timeline({ records, onRename }) {
                   )}
                 </View>
               </View>
+              {isCurrent && estimate && (
+                <React.Fragment>
+                  <View style={styles.segmentRow}>
+                    <View style={styles.lineCol}><DashedLine /></View>
+                    <Text style={[styles.segmentText, styles.segmentHot]}>
+                      {t('timeline.estimate', { d: formatDuration(estimate.estimatedSec, lang) })}
+                    </Text>
+                  </View>
+                  <View style={styles.row}>
+                    <View style={styles.lineCol}><Node type="future" /></View>
+                    <View style={styles.info}>
+                      <Text style={[styles.time, styles.timeFuture]}>{formatTime(r.timestamp + estimate.estimatedSec * 1000)}</Text>
+                      <Text style={[styles.name, styles.nameFuture]} numberOfLines={1}>{estimate.locationName}</Text>
+                    </View>
+                  </View>
+                </React.Fragment>
+              )}
               {durBelow != null && (
                 <View style={styles.segmentRow}>
                   <View style={styles.lineCol}><SolidLine /></View>
@@ -183,9 +204,9 @@ const styles = StyleSheet.create({
 
   info: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: 12, minWidth: 0 },
   time: { fontSize: 13, color: colors.ink2, width: 46, fontVariant: ['tabular-nums'] },
-  timeCurrent: { color: colors.primaryStrong, fontWeight: '700' },
-  name: { fontSize: 15, color: colors.ink, fontWeight: '600', flex: 1 },
-  nameCurrent: { color: colors.primaryStrong, fontWeight: '700' },
+  timeCurrent: { color: colors.primaryStrong, fontWeight: '800', fontSize: 15 },
+  name: { fontSize: 14, color: colors.ink2, fontWeight: '500', flex: 1 },
+  nameCurrent: { color: colors.primaryStrong, fontWeight: '800', fontSize: 20 },
   nameWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0 },
   namePlaceholder: { color: colors.ink3, fontStyle: 'italic' },
   nameEditIcon: { marginLeft: 4 },
@@ -194,5 +215,9 @@ const styles = StyleSheet.create({
 
   segmentRow: { flexDirection: 'row', alignItems: 'center', height: 34 },
   solidLine: { width: 2, flex: 1, backgroundColor: colors.line2 },
+  dashedLine: { width: 2, flex: 1, borderLeftWidth: 2, borderStyle: 'dashed', borderLeftColor: colors.ink3 },
   segmentText: { fontSize: 12, color: colors.ink3, paddingLeft: 12 },
+  segmentHot: { color: colors.ink2, fontWeight: '500' },
+  timeFuture: { color: colors.ink3 },
+  nameFuture: { color: colors.ink3, fontWeight: '500' },
 });
