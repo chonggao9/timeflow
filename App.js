@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,14 +10,15 @@ import HomeScreen from './src/screens/HomeScreen';
 import InsightsScreen from './src/screens/InsightsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import { LanguageProvider, useI18n } from './src/i18n/LanguageContext';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { checkForUpdate } from './src/utils/updater';
-import { colors } from './src/theme';
 
 const Tab = createBottomTabNavigator();
 
 function TabNavigator() {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
+  const { colors } = useTheme();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -70,6 +71,7 @@ function TabNavigator() {
 
 function AppInner() {
   const { t } = useI18n();
+  const { isDark } = useTheme();
 
   // 启动时检查新版本，有则弹窗引导下载
   useEffect(() => {
@@ -87,29 +89,43 @@ function AppInner() {
   }, [t]);
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
       <TabNavigator />
     </NavigationContainer>
   );
 }
 
-export default function App() {
-  // Android 系统导航栏设为与主题一致的米白，去掉底部黑边
+// 主题根组件：状态栏 + Android 系统导航栏随主题切换；水合前不渲染避免闪色
+function Root() {
+  const { colors, isDark, hydrated } = useTheme();
+
   useEffect(() => {
     if (Platform.OS === 'android') {
       try {
         NavigationBar.setBackgroundColorAsync(colors.bg);
-        NavigationBar.setButtonStyleAsync('dark');
+        NavigationBar.setButtonStyleAsync(isDark ? 'light' : 'dark');
       } catch (e) { /* 忽略 */ }
     }
-  }, []);
+  }, [colors.bg, isDark]);
+
+  if (!hydrated) return null;
 
   return (
+    <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <AppInner />
+    </>
+  );
+}
+
+export default function App() {
+  return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
-      <LanguageProvider>
-        <AppInner />
-      </LanguageProvider>
+      <ThemeProvider>
+        <LanguageProvider>
+          <Root />
+        </LanguageProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

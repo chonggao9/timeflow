@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
-import { colors, shadow } from '../theme';
+import { shadow } from '../theme';
+import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 
 export default function CheckInButton({ onPress, loading, success }) {
   const { t } = useI18n();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <TouchableOpacity
       style={[styles.button, success && styles.buttonSuccess]}
@@ -20,7 +23,7 @@ export default function CheckInButton({ onPress, loading, success }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   button: {
     backgroundColor: colors.primary,
     borderRadius: 18,

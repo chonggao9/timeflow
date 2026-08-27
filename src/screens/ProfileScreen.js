@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Modal, TextInput, Linking,
 } from 'react-native';
@@ -13,10 +13,13 @@ import { getAmapKey, setAmapKey } from '../config';
 import { checkForUpdate } from '../utils/updater';
 import { diagnoseLocation } from '../utils/location';
 import { useI18n } from '../i18n/LanguageContext';
-import { colors, radius, shadow } from '../theme';
+import { radius, shadow } from '../theme';
+import { useTheme } from '../theme/ThemeContext';
 import PrivacyAgreement from './PrivacyAgreement';
 
 function Row({ icon, label, value, onPress, danger }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6}>
       <View style={styles.rowIcon}>
@@ -35,9 +38,17 @@ const LANG_OPTIONS = [
   { key: 'en', labelKey: 'language.en' },
 ];
 
+const THEME_OPTIONS = [
+  { key: 'system', labelKey: 'theme.system' },
+  { key: 'light', labelKey: 'theme.light' },
+  { key: 'dark', labelKey: 'theme.dark' },
+];
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { t, lang, isSystem, setLang } = useI18n();
+  const { colors, theme, isSystem: themeIsSystem, setTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [nickname, setNickname] = useState('');
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLang, setShowLang] = useState(false);
@@ -47,6 +58,7 @@ export default function ProfileScreen() {
   const [amapKeySet, setAmapKeySet] = useState(false);
   const [amapKeyInvalid, setAmapKeyInvalid] = useState(false);
   const [diagRunning, setDiagRunning] = useState(false);
+  const [showTheme, setShowTheme] = useState(false);
 
   const loadProfile = useCallback(async () => {
     const p = await getProfile();
@@ -155,6 +167,8 @@ export default function ProfileScreen() {
 
   const currentLangKey = isSystem ? 'system' : lang;
   const languageValue = isSystem ? t('language.system') : (lang === 'zh' ? t('language.zh') : t('language.en'));
+  const currentThemeKey = themeIsSystem ? 'system' : theme;
+  const themeValue = themeIsSystem ? t('theme.system') : theme === 'dark' ? t('theme.dark') : t('theme.light');
 
   return (
     <View style={styles.screen}>
@@ -218,6 +232,8 @@ export default function ProfileScreen() {
           <Row icon="shield-checkmark-outline" label={t('profile.privacy')} onPress={() => setShowPrivacy(true)} />
           <View style={styles.divider} />
           <Row icon="language-outline" label={t('profile.language')} value={languageValue} onPress={() => setShowLang(true)} />
+          <View style={styles.divider} />
+          <Row icon="contrast-outline" label={t('profile.theme')} value={themeValue} onPress={() => setShowTheme(true)} />
           <View style={styles.divider} />
           <Row icon="refresh-circle-outline" label={t('profile.checkUpdate')} value={`v${version}`} onPress={handleCheckUpdate} />
           <View style={styles.divider} />
@@ -285,11 +301,34 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 主题选择弹窗 */}
+      <Modal visible={showTheme} transparent animationType="fade" onRequestClose={() => setShowTheme(false)}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('profile.themeTitle')}</Text>
+            {THEME_OPTIONS.map(opt => {
+              const active = currentThemeKey === opt.key;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[styles.langOption, active && styles.langOptionActive]}
+                  onPress={() => { setTheme(opt.key); setShowTheme(false); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.langOptionText, active && styles.langOptionTextActive]}>{t(opt.labelKey)}</Text>
+                  {active && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: 20, paddingBottom: 6 },
   title: { fontSize: 26, fontWeight: '800', color: colors.ink, letterSpacing: -0.5 },
@@ -319,7 +358,7 @@ const styles = StyleSheet.create({
   footer: { textAlign: 'center', fontSize: 12, color: colors.ink3, marginTop: 8 },
 
   overlay: {
-    flex: 1, backgroundColor: 'rgba(43,35,30,0.35)',
+    flex: 1, backgroundColor: colors.scrim,
     alignItems: 'center', justifyContent: 'center', padding: 28,
   },
   dialog: { width: '100%', backgroundColor: colors.surface, borderRadius: 20, padding: 16 },
@@ -328,17 +367,17 @@ const styles = StyleSheet.create({
   input: {
     marginTop: 8, borderWidth: 1.5, borderColor: colors.line2, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: colors.ink,
-    backgroundColor: '#FAF6F1',
+    backgroundColor: colors.chip,
   },
   errorText: { marginTop: 8, fontSize: 12, color: colors.danger },
   dialogGhost: {
     flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.line,
+    backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.line,
   },
   dialogGhostText: { fontSize: 15, color: colors.danger, fontWeight: '600' },
   dialogRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
   dialogBtn: { flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  dialogCancel: { backgroundColor: '#FAF6F1' },
+  dialogCancel: { backgroundColor: colors.chip },
   dialogCancelText: { fontSize: 15, color: colors.ink2, fontWeight: '600' },
   dialogOk: { backgroundColor: colors.primary },
   dialogOkText: { fontSize: 15, color: '#fff', fontWeight: '700' },

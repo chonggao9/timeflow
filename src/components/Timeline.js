@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatTime, formatDuration, isPlaceholderName } from '../utils/stats';
-import { colors } from '../theme';
+import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import ModeIcon from './ModeIcon';
 
@@ -23,6 +23,8 @@ function usePulse() {
 }
 
 function Node({ type }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const pulse = usePulse();
   if (type === 'current') {
     return (
@@ -49,10 +51,14 @@ function Node({ type }) {
 }
 
 function SolidLine() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return <View style={styles.solidLine} />;
 }
 
 function DashedLine() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return <View style={styles.dashedLine} />;
 }
 
@@ -74,6 +80,8 @@ function groupByTrip(records) {
 
 export default function Timeline({ records, estimate, onRename }) {
   const { t, lang } = useI18n();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const MODE_LABEL = { walk: t('mode.walk'), bike: t('mode.bike'), drive: t('mode.drive'), transit: t('mode.transit') };
 
   if (!records.length) {
@@ -171,7 +179,7 @@ export default function Timeline({ records, estimate, onRename }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   container: { paddingHorizontal: 4, paddingTop: 4 },
   empty: { alignItems: 'center', paddingVertical: 56 },
   emptyRing: {

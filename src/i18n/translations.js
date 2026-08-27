@@ -133,6 +133,13 @@ export const translations = {
     'language.system': '跟随系统',
     'language.zh': '中文',
     'language.en': 'English',
+
+    // 主题
+    'profile.theme': '主题',
+    'profile.themeTitle': '选择主题',
+    'theme.system': '跟随系统',
+    'theme.light': '浅色',
+    'theme.dark': '深色',
   },
 
   en: {
@@ -257,5 +264,12 @@ export const translations = {
     'language.system': 'System',
     'language.zh': '中文',
     'language.en': 'English',
+
+    // Theme
+    'profile.theme': 'Theme',
+    'profile.themeTitle': 'Choose theme',
+    'theme.system': 'System',
+    'theme.light': 'Light',
+    'theme.dark': 'Dark',
   },
 };

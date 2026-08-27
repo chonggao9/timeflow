@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity, Linking, ActivityIndicator, Vibration,
 } from 'react-native';
@@ -11,7 +11,7 @@ import {
   getCurrentTripId, getLastMode, setLastMode,
 } from '../storage/store';
 import { computePathStats, placeKey, UNNAMED } from '../utils/stats';
-import { colors } from '../theme';
+import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import { getPositionFast, reverseGeocodeWithTimeout } from '../utils/location';
 import Timeline from '../components/Timeline';
@@ -23,6 +23,8 @@ const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { t, formatDate } = useI18n();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -267,7 +269,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -288,7 +290,7 @@ const styles = StyleSheet.create({
     borderRadius: 12, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.primarySofter,
   },
-  locBarPending: { backgroundColor: '#FAF6F1' },
+  locBarPending: { backgroundColor: colors.chip },
   locBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   locBarTextPending: { fontSize: 12, color: colors.ink3 },
   locBarText: { fontSize: 12, color: colors.danger, fontWeight: '600' },
@@ -305,14 +307,14 @@ const styles = StyleSheet.create({
   checkinWrap: { flex: 1 },
   endBtn: {
     width: 92, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#FAF6F1', borderWidth: 1.5, borderColor: colors.line,
+    backgroundColor: colors.chip, borderWidth: 1.5, borderColor: colors.line,
   },
   endBtnDisabled: { opacity: 0.4 },
   endBtnText: { fontSize: 14, color: colors.ink2, fontWeight: '700', letterSpacing: 1 },
   endBtnTextDisabled: { color: colors.ink3 },
 
   overlay: {
-    flex: 1, backgroundColor: 'rgba(43,35,30,0.35)',
+    flex: 1, backgroundColor: colors.scrim,
     alignItems: 'center', justifyContent: 'center', padding: 28,
   },
   dialog: { width: '100%', backgroundColor: colors.surface, borderRadius: 20, padding: 20 },
@@ -321,11 +323,11 @@ const styles = StyleSheet.create({
   input: {
     marginTop: 16, borderWidth: 1.5, borderColor: colors.line2, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: colors.ink,
-    backgroundColor: '#FAF6F1',
+    backgroundColor: colors.chip,
   },
   dialogRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
   dialogBtn: { flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  dialogCancel: { backgroundColor: '#FAF6F1' },
+  dialogCancel: { backgroundColor: colors.chip },
   dialogCancelText: { fontSize: 15, color: colors.ink2, fontWeight: '600' },
   dialogOk: { backgroundColor: colors.primary },
   dialogOkText: { fontSize: 15, color: '#fff', fontWeight: '700' },

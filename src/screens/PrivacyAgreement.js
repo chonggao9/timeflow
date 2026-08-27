@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../theme';
+import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 
 export default function PrivacyAgreement({ onClose }) {
   const insets = useSafeAreaInsets();
   const { lang } = useI18n();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const CONTENT = lang === 'zh' ? CONTENT_ZH : CONTENT_EN;
 
   return (
@@ -71,7 +73,7 @@ const CONTENT_EN = {
   footer: 'Thank you for using TimeFlow.',
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   nav: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

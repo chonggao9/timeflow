@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords, clearAll } from '../storage/store';
 import { computePathStats } from '../utils/stats';
-import { colors, radius, shadow } from '../theme';
+import { radius, shadow } from '../theme';
+import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import ModeIcon from '../components/ModeIcon';
 
@@ -13,6 +14,8 @@ const minutes = (sec) => Math.round(sec / 60);
 export default function InsightsScreen() {
   const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [stats, setStats] = useState([]);
   const [totalDays, setTotalDays] = useState(0);
   const [totalCheckins, setTotalCheckins] = useState(0);
@@ -103,7 +106,7 @@ export default function InsightsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 40 },
 
@@ -123,7 +126,7 @@ const styles = StyleSheet.create({
 
   empty: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { fontSize: 16, color: colors.ink3 },
-  emptyHint: { fontSize: 13, color: colors.line2, marginTop: 6 },
+  emptyHint: { fontSize: 13, color: colors.ink3, marginTop: 6 },
 
   pathCard: {
     backgroundColor: colors.surface, borderRadius: radius.lg, padding: 16,

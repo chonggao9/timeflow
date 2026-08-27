@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors } from '../theme';
+import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import ModeIcon from './ModeIcon';
 
@@ -8,6 +8,8 @@ const MODE_KEYS = ['walk', 'bike', 'drive', 'transit'];
 
 export default function TransportPicker({ selected, onSelect }) {
   const { t } = useI18n();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.container}>
       {MODE_KEYS.map(key => {
@@ -30,7 +32,7 @@ export default function TransportPicker({ selected, onSelect }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   container: { flexDirection: 'row', gap: 8 },
   item: {
     flex: 1,
@@ -38,7 +40,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 4,
     borderRadius: 14,
-    backgroundColor: '#FAF6F1',
+    backgroundColor: colors.chip,
     borderWidth: 1.5,
     borderColor: colors.line,
   },
