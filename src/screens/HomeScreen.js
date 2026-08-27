@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity, Linking, ActivityIndicator, Vibration,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  saveRecord, getRecords, getTodayRecords, updateRecord, ensureTrip, endTrip,
+  saveRecord, getRecords, getTodayRecords, updateRecord, deleteRecord, ensureTrip, endTrip,
   getCurrentTripId, getLastMode, setLastMode,
 } from '../storage/store';
 import { computePathStats, placeKey, UNNAMED } from '../utils/stats';
@@ -157,6 +158,20 @@ export default function HomeScreen() {
     await loadToday();
   };
 
+  // 误打卡：确认后删除这条记录
+  const confirmDelete = () => {
+    if (!renameTarget) return;
+    Alert.alert(t('home.deleteTitle'), t('home.deleteBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: async () => {
+        await deleteRecord(renameTarget.id);
+        setLocStatus(null); // 这条的后台补位不再有意义
+        closeRename();
+        await loadToday();
+      } },
+    ]);
+  };
+
   const dateStr = formatDate(new Date());
 
   return (
@@ -241,6 +256,10 @@ export default function HomeScreen() {
                 <Text style={styles.dialogOkText}>{t('common.save')}</Text>
               </TouchableOpacity>
             </View>
+            <TouchableOpacity style={styles.dialogDelete} onPress={confirmDelete} activeOpacity={0.6}>
+              <Ionicons name="trash-outline" size={15} color={colors.danger} />
+              <Text style={styles.dialogDeleteText}>{t('home.deleteBtn')}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -310,4 +329,9 @@ const styles = StyleSheet.create({
   dialogCancelText: { fontSize: 15, color: colors.ink2, fontWeight: '600' },
   dialogOk: { backgroundColor: colors.primary },
   dialogOkText: { fontSize: 15, color: '#fff', fontWeight: '700' },
+  dialogDelete: {
+    marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.line,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+  },
+  dialogDeleteText: { fontSize: 14, color: colors.danger, fontWeight: '600' },
 });

@@ -27,6 +27,9 @@ export const translations = {
     'home.renameSub': '位置已记录，给这个地点起个名字',
     'home.renamePlaceholder': '如：家 / 公司 / 咖啡店',
     'home.renameEmpty': '请填写名称',
+    'home.deleteTitle': '删除打卡',
+    'home.deleteBody': '确定删除这条打卡记录？删除后不可恢复。',
+    'home.deleteBtn': '删除此打卡',
     'home.startGuide': '点下方按钮，记录你的第一条行程',
 
     // 打卡按钮
@@ -156,6 +159,9 @@ export const translations = {
     'home.renameSub': 'Location recorded. Give it a name.',
     'home.renamePlaceholder': 'Home / Office / Café',
     'home.renameEmpty': 'Please enter a name',
+    'home.deleteTitle': 'Delete check-in',
+    'home.deleteBody': 'Delete this check-in? This cannot be undone.',
+    'home.deleteBtn': 'Delete this check-in',
     'home.startGuide': 'Tap below to start your first trip',
 
     'checkin.btn': 'Check In',
