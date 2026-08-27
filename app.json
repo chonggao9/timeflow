@@ -24,7 +24,11 @@
       "navigationBar": {
         "backgroundColor": "#FBF5EF",
         "barStyle": "dark-content"
-      }
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "plugins": [
       [
@@ -48,9 +52,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "ded83229-7c7b-4810-b5c9-548bdd306ce1"
+        "projectId": "783e66e6-d879-4baa-b536-ad9eafc15d4d"
       }
     },
-    "owner": "chaseli"
+    "owner": "chaselis-team"
   }
 }

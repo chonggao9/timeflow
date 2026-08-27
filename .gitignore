@@ -23,3 +23,6 @@ Thumbs.db
 *.p12
 *.key
 *.mobileprovision
+
+# 构建产物
+*.apk
