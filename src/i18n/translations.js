@@ -21,7 +21,8 @@ export const translations = {
     'home.openSettings': '打开定位设置',
     'home.locPending': '正在获取位置…',
     'home.locDenied': '定位权限未开启 · 点击前往设置',
-    'home.locFailed': '未获取到位置 · 点击重试',
+    'home.locServices': '位置服务未开启 · 点击前往开启',
+    'home.locFailed': '定位超时 · 请到开阔处或点重试',
     'home.renameTitle': '修改地名',
     'home.renameSub': '位置已记录，给这个地点起个名字',
     'home.renamePlaceholder': '如：家 / 公司 / 咖啡店',
@@ -115,6 +116,8 @@ export const translations = {
     'profile.amapKeySavedBody': '高德 Key 已保存',
     'profile.amapKeySaveFailTitle': '保存失败',
     'profile.amapKeySaveFailBody': '无法写入本地存储，请重试',
+    'profile.locationDiag': '定位排查',
+    'profile.locationDiagTitle': '定位排查结果',
     'profile.version': 'TimeFlow · 版本 {v}',
 
     // 更新弹窗
@@ -147,7 +150,8 @@ export const translations = {
     'home.openSettings': 'Open location settings',
     'home.locPending': 'Getting your location…',
     'home.locDenied': 'Location permission off · Tap to open settings',
-    'home.locFailed': "Couldn't get your location · Tap to retry",
+    'home.locServices': 'Location services off · Tap to enable',
+    'home.locFailed': 'Location timed out · Move to open area or tap to retry',
     'home.renameTitle': 'Edit place',
     'home.renameSub': 'Location recorded. Give it a name.',
     'home.renamePlaceholder': 'Home / Office / Café',
@@ -235,6 +239,8 @@ export const translations = {
     'profile.amapKeySavedBody': 'Amap key saved',
     'profile.amapKeySaveFailTitle': 'Save failed',
     'profile.amapKeySaveFailBody': 'Could not write to local storage. Please retry.',
+    'profile.locationDiag': 'Location check',
+    'profile.locationDiagTitle': 'Location diagnosis',
     'profile.version': 'TimeFlow · v{v}',
 
     'update.title': 'Update available',

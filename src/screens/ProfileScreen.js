@@ -11,6 +11,7 @@ import { getRecords, clearAll } from '../storage/store';
 import { getProfile, saveProfile } from '../storage/profile';
 import { getAmapKey, setAmapKey } from '../config';
 import { checkForUpdate } from '../utils/updater';
+import { diagnoseLocation } from '../utils/location';
 import { useI18n } from '../i18n/LanguageContext';
 import { colors, radius, shadow } from '../theme';
 import PrivacyAgreement from './PrivacyAgreement';
@@ -45,6 +46,7 @@ export default function ProfileScreen() {
   const [amapKeyDraft, setAmapKeyDraft] = useState('');
   const [amapKeySet, setAmapKeySet] = useState(false);
   const [amapKeyInvalid, setAmapKeyInvalid] = useState(false);
+  const [diagRunning, setDiagRunning] = useState(false);
 
   const loadProfile = useCallback(async () => {
     const p = await getProfile();
@@ -95,6 +97,20 @@ export default function ProfileScreen() {
     setAmapKeyDraft('');
     setShowAmapKey(false);
     setAmapKeyInvalid(false);
+  };
+
+  // 定位排查：逐项自检每一环（系统服务/权限/缓存/实时/反查），把失败点找出来
+  const handleLocationDiag = async () => {
+    if (diagRunning) return;
+    setDiagRunning(true);
+    try {
+      const report = await diagnoseLocation();
+      Alert.alert(t('profile.locationDiagTitle'), report);
+    } catch (e) {
+      Alert.alert(t('profile.locationDiagTitle'), String((e && e.message) || '?'));
+    } finally {
+      setDiagRunning(false);
+    }
   };
 
   const version = Constants?.expoConfig?.version || '1.0.0';
@@ -186,6 +202,13 @@ export default function ProfileScreen() {
             label={t('profile.amapKey')}
             value={amapKeySet ? t('profile.amapKeySet') : t('profile.amapKeyEmpty')}
             onPress={openAmapKey}
+          />
+          <View style={styles.divider} />
+          <Row
+            icon="locate-outline"
+            label={t('profile.locationDiag')}
+            value={diagRunning ? '…' : undefined}
+            onPress={handleLocationDiag}
           />
         </View>
 

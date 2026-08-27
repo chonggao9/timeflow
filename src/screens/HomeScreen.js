@@ -12,80 +12,10 @@ import {
 import { computePathStats, placeKey, UNNAMED } from '../utils/stats';
 import { colors } from '../theme';
 import { useI18n } from '../i18n/LanguageContext';
-import { getAmapKey } from '../config';
+import { getPositionFast, reverseGeocodeWithTimeout } from '../utils/location';
 import Timeline from '../components/Timeline';
 import CheckInButton from '../components/CheckInButton';
 import TransportPicker from '../components/TransportPicker';
-
-// 快速定位：服务开关 → 缓存(限5分钟) → 实时低精度(超时)。都失败返回 null
-async function getPositionFast() {
-  try {
-    const on = await Location.hasServicesEnabledAsync();
-    if (!on) return null;
-  } catch (e) { /* 继续 */ }
-
-  try {
-    const cached = await Location.getLastKnownPositionAsync({ maxAge: 2 * 60 * 1000 });
-    if (cached) return cached;
-  } catch (e) { /* 继续 */ }
-
-  try {
-    const loc = await Promise.race([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
-    ]);
-    return loc || null;
-  } catch (e) {
-    return null;
-  }
-}
-
-// 高德逆地理编码（坐标 → 附近地名），优先用于国内；失败返回 null
-async function amapReverseGeocode(lat, lng, timeout = 4000) {
-  const key = await getAmapKey();
-  if (!key) return null;
-  try {
-    const url = `https://restapi.amap.com/v3/geocode/regeo?key=${encodeURIComponent(key)}&location=${lng},${lat}&extensions=base&radius=1000`;
-    const res = await Promise.race([
-      fetch(url),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout)),
-    ]);
-    const data = await res.json();
-    if (data.status === '1' && data.regeocode) {
-      const r = data.regeocode;
-      const c = r.addressComponent || {};
-      // 1) 商业区/著名地点（如「王府井」）—— 最像附近地名
-      const biz = (c.businessAreas || []).find(b => b && b.name)?.name;
-      if (biz) return biz;
-      // 2) 区 + 街道
-      const street = c.streetNumber?.street;
-      if (c.district && street) return `${c.district}${street}`;
-      // 3) 区 + 乡镇/街道
-      if (c.district && (c.township || c.roadName)) return `${c.district}${c.township || c.roadName}`;
-      // 4) 完整地址兜底
-      if (r.formatted_address) return r.formatted_address;
-      const part = [c.district, c.roadName, c.neighbourhood].filter(Boolean);
-      if (part.length) return part.join('');
-    }
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
-
-// 反查地名：高德优先，失败回退系统反查；都失败返回 null
-async function reverseGeocodeWithTimeout(lat, lng) {
-  const amap = await amapReverseGeocode(lat, lng);
-  if (amap) return amap;
-  try {
-    const [addr] = await Promise.race([
-      Location.reverseGeocodeAsync({ latitude: lat, longitude: lng }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
-    ]);
-    if (addr) return [addr.street, addr.district, addr.city].filter(Boolean).join(' ') || addr.name || null;
-  } catch (e) { /* 忽略 */ }
-  return null;
-}
 
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -98,7 +28,7 @@ export default function HomeScreen() {
   const [mode, setMode] = useState('walk');
   const [estimate, setEstimate] = useState(null);
   const [hasActiveTrip, setHasActiveTrip] = useState(false);
-  const [locStatus, setLocStatus] = useState(null); // null | 'pending' | 'denied' | 'failed'
+  const [locStatus, setLocStatus] = useState(null); // null | 'pending' | 'denied' | 'services' | 'failed'
   const locTargetRef = useRef(null);
   const fillSeqRef = useRef(0); // 补位序号：状态条只反映最新一次补位
 
@@ -162,7 +92,7 @@ export default function HomeScreen() {
     }
   };
 
-  // 后台补坐标 + 地名：状态条呈现 补位中/被拒/失败，成功则静默消失。
+  // 后台补坐标 + 地名：状态条呈现 补位中/被拒/服务关闭/超时，成功则静默消失。
   // 序号守卫：连打两次时，旧补位照常落库/刷新，但只有最新一次能更新状态条。
   const fillLocation = async (id) => {
     const seq = ++fillSeqRef.current;
@@ -172,8 +102,11 @@ export default function HomeScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') { if (!isStale()) setLocStatus('denied'); return; }
-      const loc = await getPositionFast();
-      if (!loc) { if (!isStale()) setLocStatus('failed'); return; }
+      const { loc, reason } = await getPositionFast();
+      if (!loc) {
+        if (!isStale()) setLocStatus(reason === 'services-off' ? 'services' : 'failed');
+        return;
+      }
       const lat = loc.coords.latitude, lng = loc.coords.longitude;
       const addr = await reverseGeocodeWithTimeout(lat, lng);
       const patch = { lat, lng };
@@ -186,12 +119,14 @@ export default function HomeScreen() {
     }
   };
 
-  // 定位状态条点击：被拒 → 已授权则重试，否则去设置；失败 → 位置服务总开关没开则去设置，否则重试
+  // 定位状态条点击：被拒→已授权则重试否则去设置；服务关闭→去设置；超时→服务没开则去设置否则重试
   const handleLocBarPress = async () => {
     if (locStatus === 'denied') {
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status === 'granted') { const id = locTargetRef.current; if (id) fillLocation(id); }
       else Linking.openSettings();
+    } else if (locStatus === 'services') {
+      Linking.openSettings();
     } else if (locStatus === 'failed') {
       let servicesOn = true;
       try { servicesOn = await Location.hasServicesEnabledAsync(); } catch (e) { /* 忽略 */ }
@@ -251,7 +186,9 @@ export default function HomeScreen() {
             </View>
           ) : (
             <Text style={styles.locBarText}>
-              {locStatus === 'denied' ? t('home.locDenied') : t('home.locFailed')}
+              {locStatus === 'denied' ? t('home.locDenied')
+                : locStatus === 'services' ? t('home.locServices')
+                : t('home.locFailed')}
             </Text>
           )}
         </TouchableOpacity>
