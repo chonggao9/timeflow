@@ -20,8 +20,8 @@ function isNewer(a, b) {
   const len = Math.max(A.length, B.length);
   for (let i = 0; i < len; i++) {
     const x = A[i] || 0, y = B[i] || 0;
-    if (x < y) return true;
-    if (x > y) return false;
+    if (x > y) return true;
+    if (x < y) return false;
   }
   return false;
 }

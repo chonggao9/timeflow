@@ -23,7 +23,7 @@
     --primary-softer: #FFF4F0;
     --ink: #2B231E;           /* 暖黑 */
     --ink-2: #7A6F66;         /* 次级文字 */
-    --ink-3: #B6A99E;         /* 弱文字 */
+    --ink-3: #8A7D74;         /* 弱文字 */
     --line: #F1E7DD;          /* 发丝分隔线 */
     --line-2: #E9DCD0;
     --shadow-sm: 0 1px 2px rgba(43,35,30,.04), 0 2px 8px rgba(43,35,30,.05);
@@ -73,24 +73,18 @@
     font-size: 12px; font-weight: 700; padding: 7px 12px; border-radius: 999px;
   }
 
-  .summary-line {
-    display: flex; align-items: center; gap: 7px;
-    padding: 0 20px 6px; font-size: 13px; color: var(--ink-3);
-  }
-  .summary-line .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
-
   /* ---------- 内容区 ---------- */
-  .content { flex: 1; overflow-y: auto; padding: 6px 16px 12px; -webkit-overflow-scrolling: touch; }
+  .content { flex: 1; overflow-y: auto; padding: 10px 20px 14px; -webkit-overflow-scrolling: touch; }
   .content::-webkit-scrollbar { display: none; }
 
   .section-head {
     display: flex; align-items: baseline; justify-content: space-between;
-    margin: 14px 4px 10px;
+    margin: 14px 0 10px;
   }
   .section-head h2 { font-size: 13px; font-weight: 700; color: var(--ink-2); letter-spacing: .4px; margin: 0; }
 
   /* ---------- 时间轴 ---------- */
-  .timeline { padding: 2px 4px; }
+  .timeline { padding: 2px 0; }
   .tl-row { display: flex; align-items: center; min-height: 44px; }
   .tl-col { width: 34px; flex: none; display: flex; justify-content: center; }
   .tl-node { width: 12px; height: 12px; border-radius: 50%; }
@@ -98,11 +92,14 @@
   .tl-node.current { background: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
   .tl-node.future { background: #fff; border: 2px dashed var(--ink-3); }
   .tl-node-wrap { position: relative; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
-  .pulse { position: absolute; inset: -4px; border-radius: 50%; background: var(--primary); opacity: .28; animation: pulse 2s ease-out infinite; }
+  .pulse { position: absolute; top: -4px; left: -4px; width: 24px; height: 24px; border-radius: 50%; background: var(--primary); opacity: .28; animation: pulse 2s ease-out infinite; }
   @keyframes pulse {
     0% { transform: scale(.6); opacity: .32; }
     70% { transform: scale(1.6); opacity: 0; }
     100% { transform: scale(1.6); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
   }
 
   .tl-seg { display: flex; height: 34px; }
@@ -110,7 +107,7 @@
   .tl-seg .linecol .line { width: 2px; align-self: stretch; background: var(--line-2); }
   .tl-seg.dashed .linecol .line { background: repeating-linear-gradient(to bottom, var(--ink-3) 0 4px, transparent 4px 9px); }
   .tl-seg .segtext { flex: none; padding-left: 12px; font-size: 12px; color: var(--ink-3); align-self: center; }
-  .tl-seg .segtext.hot { color: var(--primary-strong); font-weight: 600; }
+  .tl-seg .segtext.hot { color: var(--ink-2); font-weight: 500; }
 
   .tl-info { flex: 1; display: flex; align-items: center; padding-left: 12px; min-width: 0; }
   .tl-time { width: 46px; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; flex: none; }
@@ -118,10 +115,10 @@
   .tl-row.current .tl-time, .tl-row.current .tl-name { color: var(--primary-strong); font-weight: 700; }
   .tl-row.future .tl-name { color: var(--ink-3); font-weight: 500; }
   .tl-row.future .tl-time { color: var(--ink-3); }
-  .mode-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--ink-2); margin-left: 6px; flex: none; }
+  .mode-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--ink-2); margin-left: 6px; flex: none; }
   .mode-chip svg { width: 14px; height: 14px; }
 
-  .tl-in { animation: in .45s cubic-bezier(.2,.9,.3,1.2); }
+  .tl-in { animation: in .45s cubic-bezier(.2,.9,.3,1); }
   @keyframes in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 
   .empty { text-align: center; padding: 60px 20px 40px; }
@@ -130,16 +127,14 @@
     background: var(--primary-soft); display: flex; align-items: center; justify-content: center;
   }
   .empty .ring svg { width: 34px; height: 34px; color: var(--primary); }
-  .empty h3 { font-size: 16px; margin: 0 0 6px; font-weight: 700; }
-  .empty p { font-size: 13px; color: var(--ink-3); margin: 0; }
+  .empty h3 { font-size: 16px; margin: 0; font-weight: 700; }
 
   /* ---------- 底部操作区 ---------- */
   .composer {
-    padding: 12px 16px 14px;
+    padding: 14px 20px 16px;
     background: var(--surface);
     border-top: 1px solid var(--line);
   }
-  .composer-label { font-size: 12px; color: var(--ink-3); margin: 0 2px 9px; }
   .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
   .mode-btn {
     display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -148,7 +143,7 @@
     cursor: pointer; transition: all .15s ease;
   }
   .mode-btn svg { width: 20px; height: 20px; color: var(--ink-2); }
-  .mode-btn span { font-size: 11px; color: var(--ink-2); font-weight: 600; }
+  .mode-btn span { font-size: 12px; color: var(--ink-2); font-weight: 600; }
   .mode-btn.on { background: var(--primary-soft); border-color: var(--primary); }
   .mode-btn.on svg, .mode-btn.on span { color: var(--primary-strong); }
 
@@ -156,15 +151,16 @@
     margin-top: 12px; width: 100%;
     display: flex; align-items: center; justify-content: center; gap: 8px;
     padding: 17px; border: none; border-radius: 18px;
-    background: var(--primary); color: #fff;
-    font-size: 18px; font-weight: 800; letter-spacing: 6px; text-indent: 6px;
+    background: var(--primary-strong); color: #fff;
+    font-size: 20px; font-weight: 800; letter-spacing: 4px; text-indent: 4px;
     cursor: pointer; transition: transform .12s ease, background .2s ease, box-shadow .2s ease;
-    box-shadow: 0 10px 24px rgba(255,107,107,.35);
+    box-shadow: 0 12px 24px rgba(43,35,30,.16);
     font-family: var(--font);
   }
-  .checkin:active { transform: scale(.97); background: var(--primary-strong); }
-  .checkin.ok { background: #4CAE7F; box-shadow: 0 10px 24px rgba(76,174,127,.32); letter-spacing: 2px; text-indent: 0; }
+  .checkin:active { transform: scale(.97); }
+  .checkin.ok { letter-spacing: 2px; text-indent: 0; animation: ok-pop .3s ease; }
   .checkin svg { width: 20px; height: 20px; }
+  @keyframes ok-pop { 0% { transform: scale(1); } 50% { transform: scale(1.04); } 100% { transform: scale(1); } }
 
   /* ---------- 底部 Tab ---------- */
   .tabbar {
@@ -176,18 +172,20 @@
     padding: 9px 0 8px; background: none; border: none; cursor: pointer; font-family: var(--font);
   }
   .tab svg { width: 23px; height: 23px; color: var(--ink-3); transition: color .15s ease; }
-  .tab span { font-size: 11px; color: var(--ink-3); font-weight: 600; }
+  .tab span { font-size: 12px; color: var(--ink-3); font-weight: 600; }
   .tab.on svg, .tab.on span { color: var(--primary); }
+  .mode-btn:active, .tab:active, .clear-btn:active { transform: scale(.97); }
 
   /* ---------- 洞察页 ---------- */
-  .overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px 2px 4px; }
+  .overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px 0 4px; }
   .stat-card {
     background: var(--surface); border-radius: var(--radius-md); padding: 16px 8px 14px;
     display: flex; flex-direction: column; align-items: center; gap: 2px;
     box-shadow: var(--shadow-sm);
   }
-  .stat-num { font-size: 27px; font-weight: 800; color: var(--primary); letter-spacing: -1px; }
-  .stat-label { font-size: 11px; color: var(--ink-3); }
+  .stat-num { font-size: 26px; font-weight: 800; color: var(--ink); letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+  .stat-num.hot { color: var(--primary); }
+  .stat-label { font-size: 12px; color: var(--ink-3); }
 
   .path-card {
     background: var(--surface); border-radius: var(--radius-lg); padding: 16px;
@@ -204,13 +202,14 @@
   .path-route .arrow { color: var(--primary); font-weight: 800; padding: 0 4px; }
   .path-route .samples { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
   .path-stats { display: flex; align-items: flex-end; justify-content: space-between; }
-  .path-stats .big { font-size: 30px; font-weight: 800; color: var(--ink); letter-spacing: -1px; line-height: 1; }
+  .path-stats .big { font-size: 30px; font-weight: 800; color: var(--ink); letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums; }
   .path-stats .big small { font-size: 14px; font-weight: 700; color: var(--ink-2); letter-spacing: 0; margin-left: 3px; }
-  .path-stats .range { font-size: 12px; color: var(--ink-3); text-align: right; line-height: 1.6; }
+  .path-stats .big-label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-3); margin-bottom: 2px; letter-spacing: 0; }
+  .path-stats .range { font-size: 12px; color: var(--ink-2); text-align: right; line-height: 1.5; }
 
   .clear-btn {
-    display: block; margin: 26px auto 8px; padding: 12px 26px; background: none; border: none;
-    color: #E08A7A; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font);
+    display: block; margin: 26px auto 8px; padding: 14px 28px; background: none; border: none;
+    color: #C2553B; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font);
   }
 
   .fade { animation: fade .25s ease; }
@@ -295,39 +294,66 @@ function Timeline({ records }) {
     return (
       <div className="empty">
         <div className="ring"><Icon name="pin" /></div>
-        <h3>今天还没有打卡</h3>
-        <p>选择出行方式，点下方按钮开始记录</p>
+        <h3>还没有打卡</h3>
       </div>
     );
   }
-  const total = (records[records.length - 1].t - records[0].t) / 60000;
-  const last = records[records.length - 1];
-  const est = ESTIMATE_MAP[last.name];
+  // 最新在上：当前点置顶，未来预估紧跟其后，历史由新到旧向下排列
+  const rev = records.slice().reverse();
+  const newest = rev[0];
+  const est = ESTIMATE_MAP[newest.name];
 
   return (
     <div>
       <div className="section-head">
-        <h2>今日行程</h2>
-        <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>已用时 {fmtDur(total * 60)}</span>
+        <h2>行程</h2>
       </div>
       <div className="timeline">
-        {records.map((r, i) => {
-          const isLast = i === records.length - 1;
-          const dur = i > 0 ? (r.t - records[i - 1].t) / 1000 : null;
+        {/* 当前点 + 未来预估 */}
+        <div className="tl-in">
+          <div className="tl-row current">
+            <div className="tl-col">
+              <div className="tl-node-wrap">
+                <span className="pulse"></span>
+                <div className="tl-node current"></div>
+              </div>
+            </div>
+            <div className="tl-info">
+              <span className="tl-time">{fmtClock(newest.t)}</span>
+              <span className="tl-name">{newest.name}</span>
+              <span className="mode-chip"><Icon name={MODE_ICON[newest.mode] || newest.mode} size={14} />{MODE_LABEL[newest.mode]}</span>
+            </div>
+          </div>
+          {est && (
+            <React.Fragment>
+              <div className="tl-seg dashed">
+                <div className="linecol"><div className="line"></div></div>
+                <span className="segtext hot">预计 {fmtDur(est.sec)}</span>
+              </div>
+              <div className="tl-row future">
+                <div className="tl-col">
+                  <div className="tl-node-wrap"><div className="tl-node future"></div></div>
+                </div>
+                <div className="tl-info">
+                  <span className="tl-time">{fmtClock(newest.t + est.sec * 1000)}</span>
+                  <span className="tl-name">{est.name}</span>
+                </div>
+              </div>
+            </React.Fragment>
+          )}
+        </div>
+        {/* 历史点：每行上方标注与上一段的时间间隔 */}
+        {rev.slice(1).map((r, i) => {
+          const dur = (rev[i].t - r.t) / 1000;
           return (
             <div key={r.id} className="tl-in">
-              {dur != null && (
-                <div className="tl-seg">
-                  <div className="linecol"><div className="line"></div></div>
-                  <span className="segtext">{fmtDur(dur)}</span>
-                </div>
-              )}
-              <div className={"tl-row" + (isLast ? " current" : "")}>
+              <div className="tl-seg">
+                <div className="linecol"><div className="line"></div></div>
+                <span className="segtext">{fmtDur(dur)}</span>
+              </div>
+              <div className="tl-row">
                 <div className="tl-col">
-                  <div className="tl-node-wrap">
-                    {isLast && <span className="pulse"></span>}
-                    <div className={"tl-node " + (isLast ? "current" : "past")}></div>
-                  </div>
+                  <div className="tl-node-wrap"><div className="tl-node past"></div></div>
                 </div>
                 <div className="tl-info">
                   <span className="tl-time">{fmtClock(r.t)}</span>
@@ -338,44 +364,36 @@ function Timeline({ records }) {
             </div>
           );
         })}
-
-        {est && (
-          <div className="tl-in">
-            <div className="tl-seg dashed">
-              <div className="linecol"><div className="line"></div></div>
-              <span className="segtext hot">预计 {fmtDur(est.sec)}</span>
-            </div>
-            <div className="tl-row future">
-              <div className="tl-col">
-                <div className="tl-node-wrap"><div className="tl-node future"></div></div>
-              </div>
-              <div className="tl-info">
-                <span className="tl-time">{fmtClock(last.t + est.sec * 1000)}</span>
-                <span className="tl-name">{est.name}</span>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
 /* ---------------- 洞察 ---------------- */
-function Insights({ records }) {
-  const totalCheckins = 128;
-  const totalDays = 36;
+function Insights({ records, onClear }) {
+  const totalCheckins = records.length;
+  const totalDays = records.length ? 1 : 0;
   const paths = [
     { icon: 'bus',  from: '家', to: '公司',   med: 37, samples: 28, min: 30, max: 45 },
     { icon: 'walk', from: '公司', to: '咖啡店', med: 17, samples: 22, min: 14, max: 24 },
     { icon: 'car',  from: '公司', to: '家',   med: 28, samples: 15, min: 22, max: 41 },
   ];
+
+  if (!records.length) {
+    return (
+      <div className="empty">
+        <div className="ring"><Icon name="chart" /></div>
+        <h3>暂无数据</h3>
+      </div>
+    );
+  }
+
   return (
     <div className="fade">
       <div className="overview">
-        <div className="stat-card"><span className="stat-num">{totalCheckins}</span><span className="stat-label">累计打卡</span></div>
-        <div className="stat-card"><span className="stat-num">{totalDays}</span><span className="stat-label">打卡天数</span></div>
-        <div className="stat-card"><span className="stat-num">{paths.length}</span><span className="stat-label">已分析路段</span></div>
+        <div className="stat-card"><span className="stat-num hot">{totalCheckins}</span><span className="stat-label">总打卡</span></div>
+        <div className="stat-card"><span className="stat-num">{totalDays}</span><span className="stat-label">活跃天数</span></div>
+        <div className="stat-card"><span className="stat-num">{paths.length}</span><span className="stat-label">路段数</span></div>
       </div>
       <div className="section-head"><h2>路段规律</h2></div>
       {paths.map((p, i) => (
@@ -388,12 +406,12 @@ function Insights({ records }) {
             </div>
           </div>
           <div className="path-stats">
-            <div className="big">{p.med}<small>分钟</small></div>
-            <div className="range">通常耗时<br/>最快 {p.min} · 最慢 {p.max} 分钟</div>
+            <div className="big"><span className="big-label">通常</span>{p.med}<small>分钟</small></div>
+            <div className="range">{p.min} – {p.max} 分钟</div>
           </div>
         </div>
       ))}
-      <button className="clear-btn">清空所有数据</button>
+      <button className="clear-btn" onClick={() => window.confirm('确定清空所有数据？此操作不可撤销。') && onClear()}>清空所有数据</button>
     </div>
   );
 }
@@ -407,6 +425,7 @@ function App() {
   const nameIdx = useRef(0);
 
   const checkIn = () => {
+    if (ok) return; // 防连点
     const name = NAME_POOL[nameIdx.current % NAME_POOL.length];
     nameIdx.current += 1;
     setRecords(r => [...r, { id: 'r' + Date.now(), t: Date.now(), name, mode }]);
@@ -422,21 +441,18 @@ function App() {
           <div className="header-title">今天</div>
           <div className="header-date">{dateLabel()}</div>
         </div>
-        <span className="badge">{records.length} 次打卡</span>
+        <span className="badge">{records.length} 次</span>
       </div>
-      <div className="summary-line"><span className="dot"></span>记录你的一天，轻松看路段耗时</div>
-
       {/* 内容 */}
       <div className="content">
         {tab === 'home'
           ? <Timeline records={records} />
-          : <Insights records={records} />}
+          : <Insights records={records} onClear={() => setRecords([])} />}
       </div>
 
       {/* 底部操作区（仅首页） */}
       {tab === 'home' && (
         <div className="composer">
-          <div className="composer-label">出行方式</div>
           <div className="modes">
             {MODES.map(m => (
               <button key={m.key} className={"mode-btn" + (mode === m.key ? " on" : "")} onClick={() => setMode(m.key)}>
@@ -444,8 +460,8 @@ function App() {
               </button>
             ))}
           </div>
-          <button className={"checkin" + (ok ? " ok" : "")} onClick={checkIn}>
-            {ok ? (<React.Fragment><Icon name="check" size={20} />已打卡</React.Fragment>) : '打 卡'}
+          <button className={"checkin" + (ok ? " ok" : "")} onClick={checkIn} disabled={ok}>
+            {ok ? (<React.Fragment><Icon name="check" size={20} />已打卡</React.Fragment>) : '打卡'}
           </button>
         </div>
       )}
@@ -453,7 +469,7 @@ function App() {
       {/* 底部 Tab */}
       <div className="tabbar">
         <button className={"tab" + (tab === 'home' ? " on" : "")} onClick={() => setTab('home')}>
-          <Icon name="clock" /><span>打卡</span>
+          <Icon name="clock" /><span>记录</span>
         </button>
         <button className={"tab" + (tab === 'insights' ? " on" : "")} onClick={() => setTab('insights')}>
           <Icon name="chart" /><span>洞察</span>

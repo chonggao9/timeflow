@@ -38,11 +38,11 @@ export default function PrivacyAgreement({ onClose }) {
 const CONTENT_ZH = {
   title: '隐私协议',
   h1: 'TimeFlow 隐私政策',
-  date: '更新日期：2026 年 8 月 26 日',
+  date: '更新日期：2026 年 8 月 27 日',
   intro: 'TimeFlow（时光流）尊重并保护你的个人隐私。本政策说明我们如何处理你的信息，请在使用前仔细阅读。',
   sections: [
     ['一、我们收集的信息', '1. 位置：仅在你主动打卡时，读取当前位置坐标，用于记录打卡地点。\n2. 时间与出行方式：打卡时刻、你选择的出行方式（步行/骑行/驾车/公交）。\n3. 你主动填写的内容：地点名（如「家」「公司」）、昵称等。'],
-    ['二、信息存储', '所有信息均仅存储在你手机的本地存储中（系统安全存储区域）。本应用没有服务器，不上传、不共享、不向任何第三方传输你的数据。'],
+    ['二、信息存储', '所有信息均仅存储在你手机的本地存储中（系统安全存储区域），本应用没有服务器。唯一例外：当你在「我的 → 位置服务」配置了高德 Key 后，打卡才会把你的坐标发送给高德地图，用于反查附近地名；未配置则不发送，你的数据不会被上传、分享或传输给其它任何第三方。'],
     ['三、信息使用', '你的信息仅用于向你展示：今日行程、路段耗时统计、打卡记录。不作任何其他用途。'],
     ['四、权限', '定位权限：仅在你打卡时请求，用于获取坐标。即使拒绝授权，其他功能仍可正常使用，届时打卡地点显示为「未命名」。'],
     ['五、你的权利', '你可以在「我的 → 数据管理」中随时导出或清空全部数据。清空后数据不可恢复，请谨慎操作。'],
@@ -56,11 +56,11 @@ const CONTENT_ZH = {
 const CONTENT_EN = {
   title: 'Privacy Policy',
   h1: 'TimeFlow Privacy Policy',
-  date: 'Last updated: Aug 26, 2026',
+  date: 'Last updated: Aug 27, 2026',
   intro: 'TimeFlow respects and protects your privacy. This policy explains how we handle your information. Please read it carefully before use.',
   sections: [
     ['1. Information we collect', '1. Location: only when you check in, we read your current coordinates to record the place.\n2. Time and transport: the check-in time and your chosen mode (walk/bike/drive/transit).\n3. Information you enter: place names (e.g. "Home", "Office"), nickname, etc.'],
-    ['2. Data storage', 'All data is stored only in your phone’s local storage (system secure area). This app has no server and never uploads, shares, or transmits your data to any third party.'],
+    ['2. Data storage', 'All data is stored only in your phone’s local storage (system secure area); this app has no server. The only exception: if you set an Amap key under Profile → Location service, check-ins send your coordinates to Amap to look up a nearby place name. Without it, nothing is sent and your data is never uploaded, shared, or transmitted to any third party.'],
     ['3. Data usage', 'Your data is used solely to show you: today’s trips, route duration statistics, and check-in records. No other purpose.'],
     ['4. Permissions', 'Location permission is requested only when you check in, to get coordinates. Even if denied, other features still work; the place will then show as "Unnamed".'],
     ['5. Your rights', 'You can export or clear all data anytime under Profile → Data. Cleared data cannot be recovered, so please be careful.'],
