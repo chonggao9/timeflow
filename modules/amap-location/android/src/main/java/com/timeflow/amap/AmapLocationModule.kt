@@ -28,6 +28,11 @@ class AmapLocationModule : Module() {
 
   private fun getCurrentPosition(promise: Promise) {
     val settled = AtomicBoolean(false)
+    val ctx = appContext.reactContext
+    if (ctx == null) {
+      promise.reject("NO_CONTEXT", "App context unavailable", null)
+      return
+    }
     var locClient: AMapLocationClient? = null
     val finish = {
       try { locClient?.stopLocation() } catch (_: Exception) {}
@@ -35,7 +40,7 @@ class AmapLocationModule : Module() {
       locClient = null
     }
     try {
-      locClient = AMapLocationClient(context)
+      locClient = AMapLocationClient(ctx)
       val option = AMapLocationClientOption().apply {
         isOnceLocation = true
         isOnceLocationLatest = false
