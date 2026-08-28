@@ -45,7 +45,7 @@ class AmapLocationModule : Module() {
         isOnceLocation = true
         isOnceLocationLatest = false
         locationMode = AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
-        isNeedAddress = false
+        isNeedAddress = true
       }
       locClient?.setLocationOption(option)
       locClient?.setLocationListener(object : AMapLocationListener {
@@ -59,7 +59,13 @@ class AmapLocationModule : Module() {
                 "longitude" to loc.longitude,
                 "accuracy" to loc.accuracy.toDouble(),
                 "timestamp" to loc.time,
-                "provider" to "amap"
+                "provider" to "amap",
+                "address" to (loc.address ?: ""),
+                "poiName" to (loc.poiName ?: ""),
+                "aoiName" to (loc.aoiName ?: ""),
+                "city" to (loc.city ?: ""),
+                "district" to (loc.district ?: ""),
+                "street" to (loc.street ?: "")
               )
             )
           } else {

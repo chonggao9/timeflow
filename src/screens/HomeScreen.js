@@ -102,22 +102,43 @@ export default function HomeScreen() {
     locTargetRef.current = id;
     setLocStatus('pending');
     const isStale = () => seq !== fillSeqRef.current;
+    const log = (...a) => { if (__DEV__) console.log(`[fillLocation:${seq}]`, ...a); };
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      // 先只读查权限（绕开 requestForegroundPermissionsAsync 在部分 Android 上挂起的问题），未授权才真正请求
+      log('step1 权限只读查询');
+      let { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        log('step1b 未授权，发起请求');
+        ({ status } = await Location.requestForegroundPermissionsAsync());
+      }
+      log('step1c 权限结果 =', status);
       if (status !== 'granted') { if (!isStale()) setLocStatus('denied'); return; }
-      const { loc, reason } = await getPositionFast();
+
+      log('step2 并行定位中');
+      const { loc, reason, provider } = await getPositionFast();
+      log('step2b 定位结果:', { reason, provider, coords: loc && loc.coords });
       if (!loc) {
         if (!isStale()) setLocStatus(reason === 'services-off' ? 'services' : 'failed');
         return;
       }
       const lat = loc.coords.latitude, lng = loc.coords.longitude;
-      const addr = await reverseGeocodeWithTimeout(lat, lng);
+
+      let addr = loc.address; // 高德 SDK 可能已带回地名
+      if (!addr) {
+        log('step3 反查地名（SDK 无地址）');
+        addr = await reverseGeocodeWithTimeout(lat, lng);
+      }
+      log('step3b 地名 =', addr);
+
       const patch = { lat, lng };
       if (addr) patch.locationName = addr;
       await updateRecord(id, patch);
+      log('step4 写库完成');
       await loadToday(); // 旧补位也刷新，把已解析的地名补上
+      log('step5 完成，清状态条');
       if (!isStale()) setLocStatus(null);
     } catch (e) {
+      log('ERROR', e && e.message);
       if (!isStale()) setLocStatus('failed');
     }
   };
