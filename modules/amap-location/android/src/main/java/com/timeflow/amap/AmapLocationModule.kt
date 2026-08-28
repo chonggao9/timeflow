@@ -12,8 +12,6 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import java.util.concurrent.atomic.AtomicBoolean
 
 class AmapLocationModule : Module() {
-  private var client: AMapLocationClient? = null
-
   override fun definition() = ModuleDefinition {
     Name("AmapLocation")
 
@@ -21,7 +19,8 @@ class AmapLocationModule : Module() {
       AMapLocationClient.setApiKey(key)
     }
 
-    // 一次性定位：首次拿到坐标即 resolve 并停止；30s 超时兜底
+    // 一次性定位：首次拿到坐标即 resolve 并停止/销毁；30s 超时兜底。
+    // 每个调用用独立局部 client，避免并发调用互相干扰；结束调 onDestroy 释放资源。
     AsyncFunction("getCurrentPosition") { promise: Promise ->
       getCurrentPosition(promise)
     }
@@ -29,20 +28,25 @@ class AmapLocationModule : Module() {
 
   private fun getCurrentPosition(promise: Promise) {
     val settled = AtomicBoolean(false)
+    var locClient: AMapLocationClient? = null
+    val finish = {
+      try { locClient?.stopLocation() } catch (_: Exception) {}
+      try { locClient?.onDestroy() } catch (_: Exception) {}
+      locClient = null
+    }
     try {
+      locClient = AMapLocationClient(context)
       val option = AMapLocationClientOption().apply {
         isOnceLocation = true
         isOnceLocationLatest = false
         locationMode = AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
         isNeedAddress = false
       }
-      val locClient = AMapLocationClient(context)
-      client = locClient
-      locClient.setLocationOption(option)
-      locClient.setLocationListener(object : AMapLocationListener {
+      locClient?.setLocationOption(option)
+      locClient?.setLocationListener(object : AMapLocationListener {
         override fun onLocationChanged(loc: AMapLocation?) {
           if (settled.getAndSet(true)) return
-          stop()
+          finish()
           if (loc != null && loc.errorCode == 0) {
             promise.resolve(
               mapOf(
@@ -62,24 +66,18 @@ class AmapLocationModule : Module() {
           }
         }
       })
-      locClient.startLocation()
+      locClient?.startLocation()
 
       Handler(Looper.getMainLooper()).postDelayed({
         if (settled.getAndSet(true)) return@postDelayed
-        stop()
+        finish()
         promise.reject("TIMEOUT", "AMap location timeout", null)
       }, 30000)
     } catch (e: Exception) {
       if (!settled.getAndSet(true)) {
+        finish()
         promise.reject("INIT_ERROR", e.message ?: "init error", e)
       }
     }
-  }
-
-  private fun stop() {
-    try {
-      client?.stopLocation()
-    } catch (_: Exception) {}
-    client = null
   }
 }

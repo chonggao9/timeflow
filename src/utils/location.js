@@ -11,7 +11,10 @@ async function getProviderPref() {
   try { return (await AsyncStorage.getItem(PROVIDER_KEY)) || null; } catch (e) { return null; }
 }
 async function setProviderPref(p) {
-  try { await AsyncStorage.setItem(PROVIDER_KEY, p); } catch (e) {}
+  try {
+    if (p) await AsyncStorage.setItem(PROVIDER_KEY, p);
+    else await AsyncStorage.removeItem(PROVIDER_KEY);
+  } catch (e) {}
 }
 
 // 系统定位（expo-location）：服务开关 → 缓存(maxAge) → 实时低精度(timeoutMs)
@@ -38,24 +41,34 @@ async function systemGetPosition({ maxAge, timeoutMs }) {
 }
 
 // 双后端定位：返回 { loc, reason }。
-// 首次先试系统（短超时探测），失败回退高德；成功后缓存偏好，避免无 GMS 机型每次先等系统超时。
+// 偏好优先，但失败必回退另一后端并更新偏好（避免卡死）；双失败清偏好，下次重探。
 export async function getPositionFast({ maxAge = 30 * 60 * 1000, timeoutMs = 25000 } = {}) {
   const pref = await getProviderPref();
 
-  if (pref === 'amap') {
-    const loc = await amapGetPosition();
+  const sys = () => systemGetPosition({ maxAge, timeoutMs });
+  const amap = async () => {
+    const loc = await amapGetPosition(timeoutMs);
     return loc ? { loc, reason: 'ok' } : { loc: null, reason: 'timeout' };
-  }
-  if (pref === 'system') {
-    return systemGetPosition({ maxAge, timeoutMs });
+  };
+
+  // 首选顺序：偏好优先；无偏好时系统优先（不缩短系统超时，避免回归）
+  const first = pref === 'amap' ? amap : sys;
+  const second = pref === 'amap' ? sys : amap;
+
+  const r1 = await first();
+  if (r1.loc) return r1;
+
+  const r2 = await second();
+  if (r2.loc) {
+    await setProviderPref(pref === 'amap' ? 'system' : 'amap');
+    return r2;
   }
 
-  // 首次探测
-  const sys = await systemGetPosition({ maxAge, timeoutMs: Math.min(timeoutMs, 5000) });
-  if (sys.loc) { await setProviderPref('system'); return sys; }
-  const amap = await amapGetPosition();
-  if (amap) { await setProviderPref('amap'); return { loc: amap, reason: 'ok' }; }
-  return sys; // 系统失败原因（services-off/timeout）
+  // 双失败：清偏好（下次重探），返回可操作的原因（如系统服务关闭）
+  if (pref) await setProviderPref(null);
+  return r1.reason === 'services-off' || r2.reason === 'services-off'
+    ? { loc: null, reason: 'services-off' }
+    : r1;
 }
 
 // 高德逆地理编码（坐标 → 附近地名），优先用于国内；失败返回 null

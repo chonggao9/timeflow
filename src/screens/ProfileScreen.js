@@ -9,7 +9,7 @@ import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords, clearAll } from '../storage/store';
 import { getProfile, saveProfile } from '../storage/profile';
-import { getAmapKey, setAmapKey, getAmapLocKey, setAmapLocKey, getAmapLocKeyConfigured } from '../config';
+import { getAmapKey, setAmapKey, getAmapLocKeyRaw, setAmapLocKey } from '../config';
 import { checkForUpdate } from '../utils/updater';
 import { diagnoseLocation } from '../utils/location';
 import { useI18n } from '../i18n/LanguageContext';
@@ -61,7 +61,7 @@ export default function ProfileScreen() {
   const [showTheme, setShowTheme] = useState(false);
   const [showLocKey, setShowLocKey] = useState(false);
   const [locKeyDraft, setLocKeyDraft] = useState('');
-  const [locKeySet, setLocKeySet] = useState(false);
+  const [locKeyState, setLocKeyState] = useState('default'); // 'default' | 'set' | 'disabled'
   const [locKeyInvalid, setLocKeyInvalid] = useState(false);
 
   const loadProfile = useCallback(async () => {
@@ -77,7 +77,8 @@ export default function ProfileScreen() {
   React.useEffect(() => { loadAmapKey(); }, [loadAmapKey]);
 
   const loadLocKey = useCallback(async () => {
-    setLocKeySet(await getAmapLocKeyConfigured());
+    const raw = await getAmapLocKeyRaw();
+    setLocKeyState(raw === null ? 'default' : raw === '' ? 'disabled' : 'set');
   }, []);
   React.useEffect(() => { loadLocKey(); }, [loadLocKey]);
 
@@ -121,7 +122,7 @@ export default function ProfileScreen() {
   };
 
   const openLocKey = async () => {
-    setLocKeyDraft(await getAmapLocKey());
+    setLocKeyDraft(await getAmapLocKeyRaw() || '');
     setLocKeyInvalid(false);
     setShowLocKey(true);
   };
@@ -134,7 +135,7 @@ export default function ProfileScreen() {
       Alert.alert(t('profile.amapKeySaveFailTitle'), t('profile.amapKeySaveFailBody'));
       return;
     }
-    setLocKeySet(true);
+    setLocKeyState('set');
     setShowLocKey(false);
     setLocKeyInvalid(false);
     Alert.alert(t('profile.amapKeySavedTitle'), t('profile.amapKeySavedBody'));
@@ -145,7 +146,7 @@ export default function ProfileScreen() {
       Alert.alert(t('profile.amapKeySaveFailTitle'), t('profile.amapKeySaveFailBody'));
       return;
     }
-    setLocKeySet(true); // 显式禁用也算"已自定义"
+    setLocKeyState('disabled');
     setLocKeyDraft('');
     setShowLocKey(false);
     setLocKeyInvalid(false);
@@ -261,7 +262,7 @@ export default function ProfileScreen() {
           <Row
             icon="navigate-outline"
             label={t('profile.amapLocKey')}
-            value={locKeySet ? t('profile.amapKeySet') : t('profile.amapLocKeyDefault')}
+            value={locKeyState === 'default' ? t('profile.amapLocKeyDefault') : locKeyState === 'disabled' ? t('profile.amapLocKeyDisabled') : t('profile.amapKeySet')}
             onPress={openLocKey}
           />
           <View style={styles.divider} />

@@ -45,7 +45,7 @@ export async function setAmapLocKey(key) {
   }
 }
 
-// 用户是否自定义/禁用过定位 key（区别于"未设置 → 用内置默认"）
-export async function getAmapLocKeyConfigured() {
-  try { return (await AsyncStorage.getItem(AMAP_LOC_KEY_STORAGE)) !== null; } catch (e) { return false; }
+// 原始值：null=未设置(用默认)，''=已禁用，其他=自定义 key
+export async function getAmapLocKeyRaw() {
+  try { return await AsyncStorage.getItem(AMAP_LOC_KEY_STORAGE); } catch (e) { return null; }
 }
