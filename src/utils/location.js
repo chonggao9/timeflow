@@ -1,12 +1,21 @@
-// 定位相关工具：快速取坐标、地名反查、定位排查。
-// 首页打卡与「我的 → 定位排查」共用，保证行为一致。
+// 双兼容定位：GMS 设备走系统定位（expo-location），无 GMS 大陆机型回退高德定位 SDK。
+// 另有地名反查、定位排查。首页打卡与「我的 → 定位排查」共用。
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { getAmapKey } from '../config';
+import { amapGetPosition } from './amapLocation';
 
-// 快速定位：服务开关 → 缓存(限 maxAge) → 实时低精度(限 timeoutMs)。
-// 返回 { loc, reason }：loc 为坐标对象或 null，reason 说明失败原因。
-// 打卡是「立即落库 + 后台补位」，不阻塞，所以超时可放宽到 25s、缓存可放宽到 30 分钟。
-export async function getPositionFast({ maxAge = 30 * 60 * 1000, timeoutMs = 25000 } = {}) {
+const PROVIDER_KEY = 'timeflow_loc_provider'; // 'system' | 'amap'
+
+async function getProviderPref() {
+  try { return (await AsyncStorage.getItem(PROVIDER_KEY)) || null; } catch (e) { return null; }
+}
+async function setProviderPref(p) {
+  try { await AsyncStorage.setItem(PROVIDER_KEY, p); } catch (e) {}
+}
+
+// 系统定位（expo-location）：服务开关 → 缓存(maxAge) → 实时低精度(timeoutMs)
+async function systemGetPosition({ maxAge, timeoutMs }) {
   try {
     const on = await Location.hasServicesEnabledAsync();
     if (!on) return { loc: null, reason: 'services-off' };
@@ -26,6 +35,27 @@ export async function getPositionFast({ maxAge = 30 * 60 * 1000, timeoutMs = 250
   } catch (e) {
     return { loc: null, reason: e && e.message === 'timeout' ? 'timeout' : 'error' };
   }
+}
+
+// 双后端定位：返回 { loc, reason }。
+// 首次先试系统（短超时探测），失败回退高德；成功后缓存偏好，避免无 GMS 机型每次先等系统超时。
+export async function getPositionFast({ maxAge = 30 * 60 * 1000, timeoutMs = 25000 } = {}) {
+  const pref = await getProviderPref();
+
+  if (pref === 'amap') {
+    const loc = await amapGetPosition();
+    return loc ? { loc, reason: 'ok' } : { loc: null, reason: 'timeout' };
+  }
+  if (pref === 'system') {
+    return systemGetPosition({ maxAge, timeoutMs });
+  }
+
+  // 首次探测
+  const sys = await systemGetPosition({ maxAge, timeoutMs: Math.min(timeoutMs, 5000) });
+  if (sys.loc) { await setProviderPref('system'); return sys; }
+  const amap = await amapGetPosition();
+  if (amap) { await setProviderPref('amap'); return { loc: amap, reason: 'ok' }; }
+  return sys; // 系统失败原因（services-off/timeout）
 }
 
 // 高德逆地理编码（坐标 → 附近地名），优先用于国内；失败返回 null
@@ -75,13 +105,17 @@ export async function reverseGeocodeWithTimeout(lat, lng) {
   return null;
 }
 
-// 「定位排查」逐项自检，返回多行报告（给「我的 → 定位排查」用）
+// 「定位排查」逐项自检：显示后端偏好 + 当前生效路径的实时定位
 export async function diagnoseLocation() {
   const lines = [];
   const hhmm = (ts) => {
     const d = new Date(ts);
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
+  const pref = await getProviderPref();
+  const amapKey = await getAmapKey();
+
+  lines.push(`• 定位后端：${pref === 'amap' ? '高德' : pref === 'system' ? '系统' : '待探测'}${amapKey ? '' : '（高德地名key未配置）'}`);
 
   try {
     lines.push(`• 系统位置服务：${await Location.hasServicesEnabledAsync() ? '✅ 开启' : '❌ 关闭'}`);
@@ -99,26 +133,22 @@ export async function diagnoseLocation() {
       : '• 最近位置(30分钟内)：❌ 无缓存');
   } catch (e) { lines.push('• 最近位置：⚠️ 检测失败'); }
 
+  // 实时定位：走当前生效后端（与打卡同路径）
   let lat = null, lng = null;
-  try {
-    const loc = await Promise.race([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 25000)),
-    ]);
-    if (loc) {
-      lat = loc.coords.latitude;
-      lng = loc.coords.longitude;
-      lines.push(`• 实时定位(25秒)：✅ ${lat.toFixed(5)}, ${lng.toFixed(5)} · 精度 ${Math.round(loc.coords.accuracy || 0)}m`);
-    } else {
-      lines.push('• 实时定位(25秒)：❌ 未拿到');
-    }
-  } catch (e) { lines.push('• 实时定位(25秒)：❌ 超时或失败'); }
+  const { loc, reason } = await getPositionFast();
+  if (loc) {
+    lat = loc.coords.latitude;
+    lng = loc.coords.longitude;
+    lines.push(`• 实时定位(${reason === 'ok' && loc.timestamp ? '生效后端' : reason})：✅ ${lat.toFixed(5)}, ${lng.toFixed(5)} · 精度 ${Math.round(loc.coords.accuracy || 0)}m`);
+  } else {
+    lines.push(`• 实时定位：❌ ${reason === 'services-off' ? '系统位置服务关闭' : reason === 'timeout' ? '超时/无信号' : '失败'}`);
+  }
 
   if (lat != null && lng != null) {
     const addr = await reverseGeocodeWithTimeout(lat, lng);
     lines.push(addr
       ? `• 地名反查：✅ ${addr}`
-      : '• 地名反查：❌ 未识别（高德Key未配置或反查失败，可手动改地名）');
+      : '• 地名反查：❌ 未识别（高德WebKey未配置或反查失败，可手动改地名）');
   }
 
   return lines.join('\n');

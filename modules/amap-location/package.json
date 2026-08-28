@@ -1,0 +1,10 @@
+{
+  "name": "amap-location",
+  "version": "0.1.0",
+  "description": "高德定位 SDK 的 Expo 原生封装（大陆无 GMS 机型兜底）",
+  "main": "index.ts",
+  "types": "index.ts",
+  "dependencies": {
+    "expo-modules-core": "*"
+  }
+}

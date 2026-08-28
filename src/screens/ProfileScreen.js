@@ -9,7 +9,7 @@ import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords, clearAll } from '../storage/store';
 import { getProfile, saveProfile } from '../storage/profile';
-import { getAmapKey, setAmapKey } from '../config';
+import { getAmapKey, setAmapKey, getAmapLocKey, setAmapLocKey, getAmapLocKeyConfigured } from '../config';
 import { checkForUpdate } from '../utils/updater';
 import { diagnoseLocation } from '../utils/location';
 import { useI18n } from '../i18n/LanguageContext';
@@ -59,6 +59,10 @@ export default function ProfileScreen() {
   const [amapKeyInvalid, setAmapKeyInvalid] = useState(false);
   const [diagRunning, setDiagRunning] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
+  const [showLocKey, setShowLocKey] = useState(false);
+  const [locKeyDraft, setLocKeyDraft] = useState('');
+  const [locKeySet, setLocKeySet] = useState(false);
+  const [locKeyInvalid, setLocKeyInvalid] = useState(false);
 
   const loadProfile = useCallback(async () => {
     const p = await getProfile();
@@ -71,6 +75,11 @@ export default function ProfileScreen() {
     setAmapKeySet(!!k);
   }, []);
   React.useEffect(() => { loadAmapKey(); }, [loadAmapKey]);
+
+  const loadLocKey = useCallback(async () => {
+    setLocKeySet(await getAmapLocKeyConfigured());
+  }, []);
+  React.useEffect(() => { loadLocKey(); }, [loadLocKey]);
 
   const saveNickname = async () => {
     await saveProfile({ nickname: nickname.trim() });
@@ -109,6 +118,37 @@ export default function ProfileScreen() {
     setAmapKeyDraft('');
     setShowAmapKey(false);
     setAmapKeyInvalid(false);
+  };
+
+  const openLocKey = async () => {
+    setLocKeyDraft(await getAmapLocKey());
+    setLocKeyInvalid(false);
+    setShowLocKey(true);
+  };
+  const closeLocKey = () => { setShowLocKey(false); setLocKeyInvalid(false); };
+  const confirmLocKey = async () => {
+    const k = locKeyDraft.trim();
+    if (!k || /\s/.test(k)) { setLocKeyInvalid(true); return; }
+    const saved = await setAmapLocKey(k);
+    if (!saved) {
+      Alert.alert(t('profile.amapKeySaveFailTitle'), t('profile.amapKeySaveFailBody'));
+      return;
+    }
+    setLocKeySet(true);
+    setShowLocKey(false);
+    setLocKeyInvalid(false);
+    Alert.alert(t('profile.amapKeySavedTitle'), t('profile.amapKeySavedBody'));
+  };
+  const clearLocKey = async () => {
+    const saved = await setAmapLocKey('');
+    if (!saved) {
+      Alert.alert(t('profile.amapKeySaveFailTitle'), t('profile.amapKeySaveFailBody'));
+      return;
+    }
+    setLocKeySet(true); // 显式禁用也算"已自定义"
+    setLocKeyDraft('');
+    setShowLocKey(false);
+    setLocKeyInvalid(false);
   };
 
   // 定位排查：逐项自检每一环（系统服务/权限/缓存/实时/反查），把失败点找出来
@@ -219,6 +259,13 @@ export default function ProfileScreen() {
           />
           <View style={styles.divider} />
           <Row
+            icon="navigate-outline"
+            label={t('profile.amapLocKey')}
+            value={locKeySet ? t('profile.amapKeySet') : t('profile.amapLocKeyDefault')}
+            onPress={openLocKey}
+          />
+          <View style={styles.divider} />
+          <Row
             icon="locate-outline"
             label={t('profile.locationDiag')}
             value={diagRunning ? '…' : undefined}
@@ -273,6 +320,38 @@ export default function ProfileScreen() {
                 <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmAmapKey}>
+                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 高德定位 Key 配置弹窗 */}
+      <Modal visible={showLocKey} transparent animationType="fade" onRequestClose={closeLocKey}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('profile.amapLocKeyTitle')}</Text>
+            <Text style={styles.dialogSub}>{t('profile.amapLocKeySub')}</Text>
+            <TextInput
+              style={styles.input}
+              value={locKeyDraft}
+              onChangeText={setLocKeyDraft}
+              placeholder={t('profile.amapLocKeyPlaceholder')}
+              placeholderTextColor={colors.ink3}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+            />
+            {locKeyInvalid && <Text style={styles.errorText}>{t('profile.amapKeyInvalid')}</Text>}
+            <View style={styles.dialogRow}>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogGhost]} onPress={clearLocKey}>
+                <Text style={styles.dialogGhostText}>{t('profile.amapKeyClear')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeLocKey}>
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmLocKey}>
                 <Text style={styles.dialogOkText}>{t('common.save')}</Text>
               </TouchableOpacity>
             </View>
