@@ -36,6 +36,8 @@ function getDb() {
       try { await migrateLegacy(db); } catch (e) { /* 迁移失败不阻塞，旧数据留待下次重试 */ }
       return db;
     })();
+    // 打开/建表失败时重置，下次调用可重试，避免一次失败永久锁死存储
+    dbPromise.catch(() => { dbPromise = null; });
   }
   return dbPromise;
 }
@@ -151,9 +153,9 @@ export function deleteRecord(id) {
   })();
 }
 
-// 清空所有打卡数据
+// 清空所有打卡数据（含未完成的迁移源，避免下次启动重新导入）
 export async function clearAll() {
   const db = await getDb();
   await db.runAsync('DELETE FROM records');
-  await AsyncStorage.removeItem(TRIP_KEY);
+  await AsyncStorage.multiRemove([TRIP_KEY, RECORDS_KEY]);
 }

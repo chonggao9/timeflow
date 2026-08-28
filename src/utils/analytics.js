@@ -14,8 +14,11 @@ export function getPlaceOptions(records) {
   }
   return [...map.values()]
     .map(e => {
-      const best = Object.entries(e.names).sort((a, b) => b[1] - a[1])[0][0];
-      return { key: e.key, name: best === UNNAMED ? UNNAMED : best, count: e.count };
+      // 标签优先取真实地名（跳占位），与 computePathStats 的 pickLabel 一致
+      const real = Object.entries(e.names)
+        .filter(([nm]) => !isPlaceholderName(nm))
+        .sort((a, b) => b[1] - a[1])[0];
+      return { key: e.key, name: real ? real[0] : UNNAMED, count: e.count };
     })
     .sort((a, b) => b.count - a.count);
 }
@@ -58,7 +61,7 @@ export function queryJourney(records, fromKey, toKey) {
           const s = sorted[i], e = sorted[i + 1];
           const fk = placeKey(s), tk = placeKey(e);
           keys.push(tk);
-          segs.push({ fromKey: fk, toKey: tk, sec: e.timestamp - s.timestamp });
+          segs.push({ fromKey: fk, toKey: tk, sec: (e.timestamp - s.timestamp) / 1000 });
         }
         spans.push({ duration, startTs: A.timestamp, hour: new Date(A.timestamp).getHours(), mode: A.mode, keys, segs });
       }
@@ -122,19 +125,21 @@ export function queryJourney(records, fromKey, toKey) {
     }
   }
 
+  // 内部 durations 是毫秒；对外 *Sec 统一为秒（与 computePathStats 约定一致）
+  const toSec = (ms) => Math.round(ms / 1000);
   return {
     fromName: nameMap.get(fromKey) || UNNAMED,
     toName: nameMap.get(toKey) || UNNAMED,
     sampleCount: spans.length,
-    medianSec: Math.round(median(durations)),
-    p25Sec: Math.round(pct(0.25)),
-    p75Sec: Math.round(pct(0.75)),
-    minSec: Math.round(durations[0]),
-    maxSec: Math.round(durations[durations.length - 1]),
+    medianSec: toSec(median(durations)),
+    p25Sec: toSec(pct(0.25)),
+    p75Sec: toSec(pct(0.75)),
+    minSec: toSec(durations[0]),
+    maxSec: toSec(durations[durations.length - 1]),
     mode,
     durations: durations.map(d => Math.round(d / 60000)), // 分钟（供分布图）
     hourDist,
-    weeklyTrend, // 8 值，最新在末位（null=无样本）
+    weeklyTrend, // 8 值（分钟），最新在末位（null=无样本）
     breakdown,
   };
 }

@@ -181,7 +181,7 @@ export default function InsightsScreen() {
           {paths.length === 0 ? (
             <Text style={styles.noData}>{t('insights.noData')}。{t('insights.noDataHint')}</Text>
           ) : (
-            paths.slice(0, 8).map((p, i) => (
+            paths.filter(p => p.fromKey !== p.toKey).slice(0, 8).map((p, i) => (
               <TouchableOpacity key={i} style={styles.pathCard} onPress={() => { setFromKey(p.fromKey); setToKey(p.toKey); }} activeOpacity={0.7}>
                 <View style={styles.pathHead}>
                   <ModeIcon mode={p.mode} size={16} color={colors.primaryStrong} />
