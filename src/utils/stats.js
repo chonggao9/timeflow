@@ -95,6 +95,8 @@ export function computePathStats(allRecords) {
       toKey: p.toKey,
       mode: p.mode,
       medianSec: Math.round(median(clean)),
+      p25Sec: Math.round(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.25))]),
+      p75Sec: Math.round(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.75))]),
       minSec: Math.round(sorted[0]),
       maxSec: Math.round(sorted[sorted.length - 1]),
       sampleCount: clean.length,
