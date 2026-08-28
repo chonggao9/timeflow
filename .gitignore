@@ -9,6 +9,10 @@ expo-env.d.ts
 android/
 ios/
 
+# 本地 Expo 模块的原生代码（自定义模块 amap-location 需提交，例外 android/ 规则）
+!modules/amap-location/android/
+!modules/amap-location/android/**
+
 # 日志
 *.log
 npm-debug.*
