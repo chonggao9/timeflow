@@ -100,13 +100,14 @@ function Root() {
   const { colors, isDark, hydrated } = useTheme();
 
   useEffect(() => {
+    if (!hydrated) return; // 水合前不写系统导航栏，避免闪色
     if (Platform.OS === 'android') {
       try {
         NavigationBar.setBackgroundColorAsync(colors.bg);
         NavigationBar.setButtonStyleAsync(isDark ? 'light' : 'dark');
       } catch (e) { /* 忽略 */ }
     }
-  }, [colors.bg, isDark]);
+  }, [colors.bg, isDark, hydrated]);
 
   if (!hydrated) return null;
 

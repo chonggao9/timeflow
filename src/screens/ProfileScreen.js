@@ -313,7 +313,7 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   key={opt.key}
                   style={[styles.langOption, active && styles.langOptionActive]}
-                  onPress={() => { setTheme(opt.key); setShowTheme(false); }}
+                  onPress={async () => { await setTheme(opt.key); setShowTheme(false); }}
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.langOptionText, active && styles.langOptionTextActive]}>{t(opt.labelKey)}</Text>

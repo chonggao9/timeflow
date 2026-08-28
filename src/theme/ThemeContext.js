@@ -13,14 +13,18 @@ export function ThemeProvider({ children }) {
   const [mode, setMode] = useState('system');    // 用户偏好：system / light / dark
   const [hydrated, setHydrated] = useState(false);
 
-  // 水合：读回上次选择；缺失 = 跟随系统
+  // 水合：读回上次选择；缺失 = 跟随系统。兜底定时器避免存储卡住导致白屏。
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       let saved = null;
       try { saved = await AsyncStorage.getItem(STORAGE_KEY); } catch (e) {}
+      if (cancelled) return;
       setMode(saved === 'light' || saved === 'dark' ? saved : 'system');
       setHydrated(true);
     })();
+    const t = setTimeout(() => { if (!cancelled) setHydrated(true); }, 800);
+    return () => { cancelled = true; clearTimeout(t); };
   }, []);
 
   // value: 'system' | 'light' | 'dark'
@@ -52,5 +56,7 @@ export function ThemeProvider({ children }) {
 }
 
 export function useTheme() {
-  return useContext(ThemeContext);
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error('useTheme must be used within <ThemeProvider>');
+  return ctx;
 }
