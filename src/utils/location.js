@@ -67,7 +67,7 @@ export async function getPositionFast({ maxAge = 5 * 60 * 1000, timeoutMs = 2500
   const winner = await firstSuccess([amapP, sysP]);
   return winner && winner.loc
     ? winner
-    : { loc: null, reason: winner?.reason || 'failed', provider: winner?.provider || null };
+    : { loc: null, reason: winner?.reason || 'failed', detail: winner?.detail || '', provider: winner?.provider || null };
 }
 
 // 高德逆地理编码（坐标 → 附近地名），作为 SDK 未返回地址时的兜底；失败返回 null
