@@ -29,6 +29,19 @@ const versionArg = val('--version');
 const doCommit = args.includes('--commit');
 const doPush = args.includes('--push');
 
+// 从本机 .env.local（git-ignored）加载令牌：避免把密钥明文贴进聊天/会话记录。
+// 必须在读取 EXPO_TOKEN/GH_TOKEN 之前执行；已存在的环境变量优先，文件值仅作兜底。
+const envLocal = path.join(ROOT, '.env.local');
+if (fs.existsSync(envLocal)) {
+  for (const line of fs.readFileSync(envLocal, 'utf8').split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (!m) continue;
+    const [, key, raw] = m;
+    const val = raw.replace(/^(['"])(.*)\1$/, '$2'); // 去首尾引号
+    if (process.env[key] === undefined) process.env[key] = val;
+  }
+}
+
 const EXPO_TOKEN = process.env.EXPO_TOKEN;
 const GH_TOKEN = process.env.GH_TOKEN;
 
