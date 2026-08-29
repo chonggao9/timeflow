@@ -160,3 +160,57 @@ export function buildDurationHistogram(minutes) {
   const highlight = Math.min(buckets.length - 1, Math.floor((med - lo) / 5));
   return { labels: buckets, counts, highlight };
 }
+
+// ---- 历史行程 ----
+// 按 tripId 分组 → 行程摘要列表（按开始时间倒序）。
+// 每项：records(升序)、startTs、endTs、durationMs、route(去重相邻地名序列)、mode(主方式)、count。
+export function groupTrips(records) {
+  const byTrip = new Map();
+  for (const r of records) {
+    // 无 tripId 的旧数据按自然日归组，避免坍缩成一个跨月的巨型行程
+    const d = new Date(r.timestamp);
+    d.setHours(0, 0, 0, 0);
+    const t = r.tripId || `legacy:${d.getTime()}`;
+    if (!byTrip.has(t)) byTrip.set(t, []);
+    byTrip.get(t).push(r);
+  }
+  const trips = [];
+  for (const [tripKey, recs] of byTrip.entries()) {
+    const sorted = [...recs].sort((a, b) => a.timestamp - b.timestamp);
+    const first = sorted[0], last = sorted[sorted.length - 1];
+    // 主方式：出现最多的 mode
+    const modeCount = {};
+    for (const r of sorted) modeCount[r.mode || 'walk'] = (modeCount[r.mode || 'walk'] || 0) + 1;
+    const mode = Object.entries(modeCount).sort((a, b) => b[1] - a[1])[0][0];
+    // 路线：去重相邻同名点（如「家→家→公司」压成「家→公司」）
+    const route = [];
+    for (const r of sorted) {
+      const nm = isPlaceholderName(r.locationName) ? UNNAMED : r.locationName;
+      if (route[route.length - 1] !== nm) route.push(nm);
+    }
+    trips.push({
+      tripId: tripKey,
+      records: sorted,
+      startTs: first.timestamp,
+      endTs: last.timestamp,
+      durationMs: last.timestamp - first.timestamp,
+      route,
+      mode,
+      count: sorted.length,
+    });
+  }
+  return trips.sort((a, b) => b.startTs - a.startTs);
+}
+
+// 按开始日期（本地自然日）分组，日期倒序：[{ ts, list }]
+export function groupTripsByDate(trips) {
+  const map = new Map();
+  for (const t of trips) {
+    const d = new Date(t.startTs);
+    d.setHours(0, 0, 0, 0);
+    const key = d.getTime();
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(t);
+  }
+  return [...map.entries()].map(([ts, list]) => ({ ts, list })).sort((a, b) => b.ts - a.ts);
+}

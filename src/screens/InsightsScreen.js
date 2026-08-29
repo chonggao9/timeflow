@@ -11,6 +11,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import ModeIcon from '../components/ModeIcon';
 import BarChart from '../components/charts/BarChart';
+import HistoryView from '../components/HistoryView';
 
 export default function InsightsScreen() {
   const insets = useSafeAreaInsets();
@@ -25,6 +26,7 @@ export default function InsightsScreen() {
   const [toKey, setToKey] = useState(null);
   const [pickerFor, setPickerFor] = useState(null); // 'from' | 'to' | null
   const [result, setResult] = useState(null);
+  const [view, setView] = useState('stats'); // 'stats' | 'history'
 
   useFocusEffect(useCallback(() => {
     (async () => {
@@ -79,7 +81,19 @@ export default function InsightsScreen() {
         <Text style={styles.subtitle}>{t('insights.subtitle')}</Text>
       </View>
 
-      {noData ? (
+      {/* 统计 / 历史 分段切换 */}
+      <View style={styles.seg}>
+        <TouchableOpacity style={[styles.segBtn, view === 'stats' && styles.segBtnActive]} onPress={() => setView('stats')} activeOpacity={0.8}>
+          <Text style={[styles.segText, view === 'stats' && styles.segTextActive]}>{t('insights.stats')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.segBtn, view === 'history' && styles.segBtnActive]} onPress={() => setView('history')} activeOpacity={0.8}>
+          <Text style={[styles.segText, view === 'history' && styles.segTextActive]}>{t('insights.history')}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {view === 'history' ? (
+        <HistoryView records={records} />
+      ) : noData ? (
         <View style={styles.empty}>
           <Ionicons name="analytics-outline" size={40} color={colors.ink3} />
           <Text style={styles.emptyText}>{t('insights.empty.title')}</Text>
@@ -234,6 +248,14 @@ const makeStyles = (colors) => StyleSheet.create({
   header: { paddingHorizontal: 4, marginBottom: 16 },
   title: { fontSize: 26, fontWeight: '800', color: colors.ink, letterSpacing: -0.5 },
   subtitle: { fontSize: 13, color: colors.ink2, marginTop: 4 },
+  seg: {
+    flexDirection: 'row', backgroundColor: colors.chip, borderRadius: radius.sm,
+    padding: 3, marginBottom: 16,
+  },
+  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: radius.sm - 3 },
+  segBtnActive: { backgroundColor: colors.primarySoft },
+  segText: { fontSize: 14, color: colors.ink2, fontWeight: '600' },
+  segTextActive: { color: colors.primaryStrong, fontWeight: '800' },
 
   empty: { alignItems: 'center', paddingVertical: 60, gap: 10 },
   emptyText: { fontSize: 16, color: colors.ink, fontWeight: '700' },
