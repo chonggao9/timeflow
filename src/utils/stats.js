@@ -26,13 +26,15 @@ export function isPlaceholderName(name) {
 }
 
 // ---- 地点聚类 ----
-// 优先按坐标格点归并（约 0.005° ≈ 550m 一格），无坐标则退回地名。
-// 这样即使国内反查地址失败（地名全是占位），统计也能按实际位置分开，不坍缩成一团。
+// 有真名优先按名字归并（改地名立即生效、一个点多个名字各自成条）；占位名（未命名）且
+// 有坐标仍按坐标格点（约 0.005° ≈ 550m 一格）分开，避免一堆"未命名"坍缩成一团。
 export function placeKey(r) {
+  const name = r?.locationName;
+  if (name && !isPlaceholderName(name)) return `n:${name}`;
   if (r && typeof r.lat === 'number' && typeof r.lng === 'number') {
     return `g:${Math.round(r.lat * 200)}:${Math.round(r.lng * 200)}`;
   }
-  return `n:${r?.locationName || UNNAMED}`;
+  return `n:${name || UNNAMED}`;
 }
 
 // 从一堆记录里挑最有代表性的地名标签（非占位、出现最多）；全占位则用占位
