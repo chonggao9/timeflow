@@ -63,6 +63,7 @@ export default function ProfileScreen() {
   const [locKeyDraft, setLocKeyDraft] = useState('');
   const [locKeyState, setLocKeyState] = useState('default'); // 'default' | 'set' | 'disabled'
   const [locKeyInvalid, setLocKeyInvalid] = useState(false);
+  const [showLocationDebug, setShowLocationDebug] = useState(false);
 
   const loadProfile = useCallback(async () => {
     const p = await getProfile();
@@ -238,7 +239,6 @@ export default function ProfileScreen() {
               />
             </View>
           </View>
-          <Text style={styles.nicknameHint}>{t('profile.nicknameHint')}</Text>
         </View>
 
         {/* 数据管理 */}
@@ -253,24 +253,9 @@ export default function ProfileScreen() {
         <Text style={styles.section}>{t('profile.sectionLocation')}</Text>
         <View style={styles.card}>
           <Row
-            icon="map-outline"
-            label={t('profile.amapKey')}
-            value={amapKeySet ? t('profile.amapKeySet') : t('profile.amapKeyEmpty')}
-            onPress={openAmapKey}
-          />
-          <View style={styles.divider} />
-          <Row
-            icon="navigate-outline"
-            label={t('profile.amapLocKey')}
-            value={locKeyState === 'default' ? t('profile.amapLocKeyDefault') : locKeyState === 'disabled' ? t('profile.amapLocKeyDisabled') : t('profile.amapKeySet')}
-            onPress={openLocKey}
-          />
-          <View style={styles.divider} />
-          <Row
             icon="locate-outline"
-            label={t('profile.locationDiag')}
-            value={diagRunning ? '…' : undefined}
-            onPress={handleLocationDiag}
+            label={t('profile.locationDebug')}
+            onPress={() => setShowLocationDebug(true)}
           />
         </View>
 
@@ -285,7 +270,7 @@ export default function ProfileScreen() {
           <View style={styles.divider} />
           <Row icon="refresh-circle-outline" label={t('profile.checkUpdate')} value={`v${version}`} onPress={handleCheckUpdate} />
           <View style={styles.divider} />
-          <Row icon="mail-outline" label={t('profile.contact')} value="chaseli9@gmail.com" />
+          <Row icon="mail-outline" label={t('profile.contact')} value="chonggao9@gmail.com" />
         </View>
 
         <Text style={styles.footer}>{t('profile.version', { v: version })}</Text>
@@ -360,6 +345,40 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
+      {/* 位置调试弹窗：第二层级，收敛三个定位相关入口 */}
+      <Modal visible={showLocationDebug} transparent animationType="fade" onRequestClose={() => setShowLocationDebug(false)}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('profile.locationDebug')}</Text>
+            <Row
+              icon="map-outline"
+              label={t('profile.amapKey')}
+              value={amapKeySet ? t('profile.amapKeySet') : t('profile.amapKeyEmpty')}
+              onPress={() => { setShowLocationDebug(false); openAmapKey(); }}
+            />
+            <View style={styles.divider} />
+            <Row
+              icon="navigate-outline"
+              label={t('profile.amapLocKey')}
+              value={locKeyState === 'default' ? t('profile.amapLocKeyDefault') : locKeyState === 'disabled' ? t('profile.amapLocKeyDisabled') : t('profile.amapKeySet')}
+              onPress={() => { setShowLocationDebug(false); openLocKey(); }}
+            />
+            <View style={styles.divider} />
+            <Row
+              icon="locate-outline"
+              label={t('profile.locationDiag')}
+              value={diagRunning ? '…' : undefined}
+              onPress={() => { setShowLocationDebug(false); handleLocationDiag(); }}
+            />
+            <View style={styles.dialogRow}>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={() => setShowLocationDebug(false)}>
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showLang} transparent animationType="fade" onRequestClose={() => setShowLang(false)}>
         <View style={styles.overlay}>
           <View style={styles.dialog}>
@@ -427,7 +446,6 @@ const makeStyles = (colors) => StyleSheet.create({
   nicknameInputWrap: { flex: 1 },
   nicknameLabel: { fontSize: 12, color: colors.ink3 },
   nicknameInput: { fontSize: 16, color: colors.ink, paddingVertical: 4 },
-  nicknameHint: { fontSize: 11, color: colors.ink3, marginTop: 4, marginLeft: 6 },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 6 },
   rowIcon: { width: 28, height: 28, borderRadius: 8, backgroundColor: colors.primarySofter, alignItems: 'center', justifyContent: 'center' },

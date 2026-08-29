@@ -109,7 +109,6 @@ export const translations = {
     'profile.nickname': '昵称',
     'profile.nicknamePlaceholder': '给自己起个名字',
     'profile.saveNickname': '保存昵称',
-    'profile.nicknameHint': '点击昵称即可修改，改完自动保存',
     'profile.savedTitle': '已保存',
     'profile.savedBody': '昵称已更新',
     'profile.sectionData': '数据管理',
@@ -152,6 +151,7 @@ export const translations = {
     'profile.amapLocKeyPlaceholder': '粘贴你的高德定位 Key',
     'profile.locationDiag': '定位排查',
     'profile.locationDiagTitle': '定位排查结果',
+    'profile.locationDebug': '位置调试',
     'profile.version': 'TimeFlow · 版本 {v}',
 
     // 更新弹窗
@@ -273,7 +273,6 @@ export const translations = {
     'profile.nickname': 'Nickname',
     'profile.nicknamePlaceholder': 'Enter a nickname',
     'profile.saveNickname': 'Save nickname',
-    'profile.nicknameHint': 'Tap to edit; saves automatically',
     'profile.savedTitle': 'Saved',
     'profile.savedBody': 'Nickname updated',
     'profile.sectionData': 'Data',
@@ -316,6 +315,7 @@ export const translations = {
     'profile.amapLocKeyPlaceholder': 'Paste your Amap location key',
     'profile.locationDiag': 'Location check',
     'profile.locationDiagTitle': 'Location diagnosis',
+    'profile.locationDebug': 'Location debug',
     'profile.version': 'TimeFlow · v{v}',
 
     'update.title': 'Update available',
