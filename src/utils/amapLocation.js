@@ -10,8 +10,7 @@ export async function amapGetPosition(timeoutMs = 30000) {
   try {
     const key = await getAmapLocKey();
     if (!key) { if (__DEV__) console.log('[amap] 定位key未配置/已禁用'); return { error: 'key-disabled' }; }
-    await AmapLocation.setApiKey(key);
-    const res = await withTimeout(AmapLocation.getCurrentPosition(), timeoutMs);
+    const res = await withTimeout(AmapLocation.getCurrentPosition(key), timeoutMs);
     if (res && typeof res.latitude === 'number') {
       // 组装地名（与 amapReverseGeocode 同优先级：POI/AOI → 区+街道 → 完整地址）
       const name = res.poiName || res.aoiName

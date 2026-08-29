@@ -15,18 +15,14 @@ class AmapLocationModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("AmapLocation")
 
-    Function("setApiKey") { key: String ->
-      AMapLocationClient.setApiKey(key)
-    }
-
-    // 一次性定位：首次拿到坐标即 resolve 并停止/销毁；30s 超时兜底。
+    // 一次性定位：隐私合规 → setApiKey → 构造 client → 定位；30s 超时兜底。
     // 每个调用用独立局部 client，避免并发调用互相干扰；结束调 onDestroy 释放资源。
-    AsyncFunction("getCurrentPosition") { promise: Promise ->
-      getCurrentPosition(promise)
+    AsyncFunction("getCurrentPosition") { key: String, promise: Promise ->
+      getCurrentPosition(key, promise)
     }
   }
 
-  private fun getCurrentPosition(promise: Promise) {
+  private fun getCurrentPosition(key: String, promise: Promise) {
     val settled = AtomicBoolean(false)
     val ctx = appContext.reactContext
     if (ctx == null) {
@@ -40,9 +36,11 @@ class AmapLocationModule : Module() {
       locClient = null
     }
     try {
-      // 高德 SDK 5.6.0+ 强制要求：构造 AMapLocationClient 前先声明隐私合规（否则构造抛异常）
-      AMapLocationClient.updatePrivacyShow(ctx, true, false)
+      // 高德要求：调用任何 SDK 接口（含 setApiKey）之前，先调用隐私合规 2 个接口，参数须为 true
+      AMapLocationClient.updatePrivacyShow(ctx, true, true)
       AMapLocationClient.updatePrivacyAgree(ctx, true)
+      // 设置 apiKey（必须在隐私合规之后、构造 client 之前）
+      AMapLocationClient.setApiKey(key)
       locClient = AMapLocationClient(ctx)
       val option = AMapLocationClientOption().apply {
         isOnceLocation = true
