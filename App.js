@@ -26,10 +26,11 @@ function TabNavigator() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.ink3,
         tabBarStyle: {
-          backgroundColor: colors.surface,
+          backgroundColor: colors.bg,
           borderTopColor: colors.line,
           height: 56 + insets.bottom,
           paddingBottom: insets.bottom,
+          elevation: 0,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         sceneStyle: { backgroundColor: colors.bg },

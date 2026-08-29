@@ -321,7 +321,7 @@ const makeStyles = (colors) => StyleSheet.create({
 
   composer: {
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14,
-    backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.line,
+    backgroundColor: colors.bg,
   },
   gap: { height: 12 },
   actions: { flexDirection: 'row', gap: 10 },
