@@ -40,6 +40,9 @@ class AmapLocationModule : Module() {
       locClient = null
     }
     try {
+      // 高德 SDK 5.6.0+ 强制要求：构造 AMapLocationClient 前先声明隐私合规（否则构造抛异常）
+      AMapLocationClient.updatePrivacyShow(ctx, true, false)
+      AMapLocationClient.updatePrivacyAgree(ctx, true)
       locClient = AMapLocationClient(ctx)
       val option = AMapLocationClientOption().apply {
         isOnceLocation = true

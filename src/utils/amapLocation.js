@@ -44,6 +44,6 @@ export async function amapGetPosition(timeoutMs = 30000) {
       error = 'unknown';
     }
     if (__DEV__) console.log('[amap] 定位失败:', msg, '→', error);
-    return { error };
+    return { error, detail: msg };
   }
 }

@@ -60,7 +60,7 @@ export async function getPositionFast({ maxAge = 5 * 60 * 1000, timeoutMs = 2500
   const amapP = amapGetPosition(timeoutMs).then((r) =>
     r && r.loc
       ? { loc: r.loc, reason: 'ok', provider: 'amap' }
-      : { loc: null, reason: (r && r.error) || 'timeout', provider: 'amap' }
+      : { loc: null, reason: (r && r.error) || 'timeout', detail: (r && r.detail) || '', provider: 'amap' }
   );
   const sysP = systemGetPosition({ maxAge, timeoutMs }).then((r) => ({ ...r, provider: 'system' }));
 
@@ -154,13 +154,13 @@ export async function diagnoseLocation() {
     'amap-error': '高德定位失败',
   };
   let lat = null, lng = null;
-  const { loc, reason, provider } = await getPositionFast();
+  const { loc, reason, provider, detail } = await getPositionFast();
   if (loc) {
     lat = loc.coords.latitude;
     lng = loc.coords.longitude;
     lines.push(`• 实时定位(${provider === 'amap' ? '高德' : '系统'})：✅ ${lat.toFixed(5)}, ${lng.toFixed(5)} · 精度 ${Math.round(loc.coords.accuracy || 0)}m`);
   } else {
-    lines.push(`• 实时定位：❌ ${reasonText[reason] || '失败'}`);
+    lines.push(`• 实时定位：❌ ${reasonText[reason] || '失败'}${detail ? `（${detail}）` : ''}`);
   }
 
   if (lat != null && lng != null) {
