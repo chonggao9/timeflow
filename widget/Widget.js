@@ -32,45 +32,57 @@ export function TimeFlowWidget({ data, colors, strings }) {
         justifyContent: 'space-between',
       }}
     >
-      {/* 上：品牌标题 + 今日状态 */}
-      <FlexWidget style={{ flexDirection: 'column', flex: 1 }}>
-        <TextWidget text={strings.title} style={{ fontSize: 13, fontWeight: '700', color: primary }} />
-        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-          <TextWidget
-            text={count > 0 ? strings.checkedIn : strings.notYet}
-            style={{ fontSize: 16, fontWeight: '700', color: ink }}
-          />
-          <TextWidget
-            text={strings.count.replace('${n}', String(count))}
-            style={{ fontSize: 12, color: ink2, marginLeft: 8 }}
-          />
+      {/* 上：信息区（横向撑满，避免右侧空白） */}
+      <FlexWidget style={{ flexDirection: 'column', flex: 1, width: 'match_parent' }}>
+        {/* 第一行：品牌 + 状态 + 次数（左品牌、右状态次数） */}
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', width: 'match_parent', justifyContent: 'space-between' }}>
+          <TextWidget text={strings.title} style={{ fontSize: 13, fontWeight: '700', color: primary }} />
+          <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TextWidget
+              text={count > 0 ? strings.checkedIn : strings.notYet}
+              style={{ fontSize: 16, fontWeight: '700', color: ink }}
+            />
+            <TextWidget
+              text={strings.count.replace('${n}', String(count))}
+              style={{ fontSize: 12, color: ink2, marginLeft: 8 }}
+            />
+          </FlexWidget>
         </FlexWidget>
-        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+        {/* 第二行：最新时间 + 地点（小字，左对齐整行） */}
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, width: 'match_parent' }}>
           <TextWidget
             text={strings.latest + (latestTime ? ' ' + strings.at.replace('${t}', latestTime) : '')}
             style={{ fontSize: 12, color: ink2 }}
           />
+          {place ? (
+            <TextWidget
+              text={' · ' + place}
+              style={{ fontSize: 12, color: ink2, marginLeft: 0 }}
+              maxLines={1}
+              truncate="END"
+            />
+          ) : null}
         </FlexWidget>
-        <TextWidget
-          text={place}
-          style={{ fontSize: 12, color: ink2, marginTop: 2 }}
-          maxLines={1}
-          truncate="END"
-        />
       </FlexWidget>
 
-      {/* 下：打卡按钮 */}
+      {/* 下：打卡按钮（胶囊，宽度随文字自适应，本身居中，不铺满整行） */}
       <FlexWidget
-        clickAction="checkIn"
-        style={{
-          height: 44,
-          backgroundColor: primary,
-          borderRadius: 22,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
+        style={{ width: 'match_parent', alignItems: 'center' }}
       >
-        <TextWidget text={strings.checkinBtn} style={{ fontSize: 15, fontWeight: '800', color: '#FFFFFF' }} />
+        <FlexWidget
+          clickAction="checkIn"
+          style={{
+            width: 'wrap_content',
+            height: 44,
+            paddingHorizontal: 28,
+            backgroundColor: primary,
+            borderRadius: 22,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <TextWidget text={strings.checkinBtn} style={{ fontSize: 15, fontWeight: '800', color: '#FFFFFF' }} />
+        </FlexWidget>
       </FlexWidget>
     </FlexWidget>
   );

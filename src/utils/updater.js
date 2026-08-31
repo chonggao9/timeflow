@@ -13,8 +13,17 @@ export function getAppVersion() {
 function parseVersion(v) {
   return String(v).replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
 }
+// 版本后缀，如 1.0.18-eas8 -> "eas8"。用于宽松规则：核心版本相同时，有后缀视为新版本。
+function parseSuffix(v) {
+  const s = String(v).replace(/^v/i, '');
+  const i = s.indexOf('-');
+  return i < 0 ? '' : s.slice(i + 1);
+}
 
-// 判断 a 是否比 b 新（逐段比较）
+// 判断 a 是否比 b 新（宽松规则）：
+// 1. 核心版本号逐段比较，大的新；
+// 2. 核心相同但 a 带后缀、b 不带 → a 视为新（如 1.0.18-eas8 > 1.0.18）；
+//    后缀都存在则按字典序判，都不带后缀则视为相同（无更新）。
 function isNewer(a, b) {
   const A = parseVersion(a), B = parseVersion(b);
   const len = Math.max(A.length, B.length);
@@ -23,7 +32,12 @@ function isNewer(a, b) {
     if (x > y) return true;
     if (x < y) return false;
   }
-  return false;
+  // 核心版本部分相同
+  const sa = parseSuffix(a), sb = parseSuffix(b);
+  if (sa && !sb) return true;      // a 有后缀 b 没有：如 1.0.18-eas8 vs 1.0.18
+  if (sb && !sa) return false;     // b 有后缀 a 没有
+  if (sa && sb) return sa !== sb;  // 都有后缀：不同后缀视为有新包
+  return false;                    // 都不带后缀且核心相同 → 无更新
 }
 
 // 检查是否有新版本。出错/无新版返回 null，静默失败不打扰用户。
