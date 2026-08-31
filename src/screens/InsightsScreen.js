@@ -12,6 +12,7 @@ import { useI18n } from '../i18n/LanguageContext';
 import ModeIcon from '../components/ModeIcon';
 import BarChart from '../components/charts/BarChart';
 import HistoryView from '../components/HistoryView';
+import RouteMapScreen from './RouteMapScreen';
 
 export default function InsightsScreen() {
   const insets = useSafeAreaInsets();
@@ -27,6 +28,7 @@ export default function InsightsScreen() {
   const [pickerFor, setPickerFor] = useState(null); // 'from' | 'to' | null
   const [result, setResult] = useState(null);
   const [view, setView] = useState('stats'); // 'stats' | 'history'
+  const [mapTrip, setMapTrip] = useState(null); // 当前查看地图的行程
 
   useFocusEffect(useCallback(() => {
     (async () => {
@@ -92,7 +94,7 @@ export default function InsightsScreen() {
       </View>
 
       {view === 'history' ? (
-        <HistoryView records={records} />
+        <HistoryView records={records} onShowMap={setMapTrip} />
       ) : noData ? (
         <View style={styles.empty}>
           <Ionicons name="analytics-outline" size={40} color={colors.ink3} />
@@ -237,6 +239,9 @@ export default function InsightsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 线路轨迹地图（全屏） */}
+      <RouteMapScreen visible={mapTrip != null} tripRecords={mapTrip?.records || []} onClose={() => setMapTrip(null)} />
     </ScrollView>
   );
 }

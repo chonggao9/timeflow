@@ -12,8 +12,11 @@ const MODES = ['walk', 'bike', 'drive', 'transit'];
 // 未知方式（旧数据可能存了 walk/bike/drive/transit 之外的值）→ 兜底文案
 const modeLabelKey = (mode) => (MODES.includes(mode) ? 'mode.' + mode : 'history.otherMode');
 
+// 是否有 ≥2 个有效坐标点（≥2 才能连成轨迹，否则不显示「查看地图」）
+const hasCoords = (records) => (records || []).filter(r => r.lat != null && r.lng != null).length >= 2;
+
 // 历史行程视图：搜索 + 方式筛选 + 按日期分组的行程列表 + 卡片内展开每一站
-export default function HistoryView({ records }) {
+export default function HistoryView({ records, onShowMap }) {
   const { t, lang, formatDate } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -75,6 +78,11 @@ export default function HistoryView({ records }) {
                   <View style={styles.tripHead}>
                     <ModeIcon mode={trip.mode} size={16} color={colors.primaryStrong} />
                     <Text style={styles.tripTitle} numberOfLines={1}>{title}</Text>
+                    {onShowMap && hasCoords(trip.records) ? (
+                      <TouchableOpacity style={styles.mapBtn} onPress={() => onShowMap(trip)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="map" size={17} color={colors.primaryStrong} />
+                      </TouchableOpacity>
+                    ) : null}
                     <Text style={styles.tripDur}>{dur}</Text>
                   </View>
                   <View style={styles.tripMeta}>
@@ -140,6 +148,7 @@ const makeStyles = (colors) => StyleSheet.create({
   },
   tripHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   tripTitle: { flex: 1, fontSize: 15, color: colors.ink, fontWeight: '700' },
+  mapBtn: { paddingHorizontal: 2, alignItems: 'center', justifyContent: 'center' },
   tripDur: { fontSize: 15, color: colors.primaryStrong, fontWeight: '800' },
   tripMeta: { flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 24 },
   tripMetaText: { fontSize: 12, color: colors.ink3 },

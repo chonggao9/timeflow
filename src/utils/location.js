@@ -34,6 +34,23 @@ function firstSuccess(promises) {
   });
 }
 
+// 通用并行竞速：取第一个解析出「有效值(truthy)」的 Promise；全部无效/失败则解析 null。
+// 与上面的 firstSuccess 不同——这里候选的 resolve 值本身即"成功"，无需 loc/权重，反查地名用。
+function firstSuccessValue(promises) {
+  return new Promise((resolve) => {
+    let pending = promises.length;
+    let done = false;
+    for (const p of promises) {
+      Promise.resolve(p).then((v) => {
+        if (v && !done) { done = true; resolve(v); }
+        else if (--pending === 0 && !done) resolve(null);
+      }, () => {
+        if (--pending === 0 && !done) resolve(null);
+      });
+    }
+  });
+}
+
 // 系统定位（expo-location）：服务开关 → 缓存(maxAge) → 实时低精度(timeoutMs)
 // 每个原生调用都套超时：无 GMS / 国区 Google 不可达时也不会永久挂起。
 async function systemGetPosition({ maxAge, timeoutMs }) {
@@ -53,6 +70,16 @@ async function systemGetPosition({ maxAge, timeoutMs }) {
   } catch (e) {
     return { loc: null, reason: e && e.message === 'timeout' ? 'timeout' : 'error' };
   }
+}
+
+// 系统反查地名（Google Geocoder）：坐标 → 地名，失败/无数据返回 null。
+// 独立封装，可与高德反查并行竞速；超时/无GMS/空结果一律视为"无效"，不抛错。
+async function systemReverseGeocode(lat, lng, timeout = 5000) {
+  try {
+    const [addr] = await withTimeout(Location.reverseGeocodeAsync({ latitude: lat, longitude: lng }), timeout);
+    if (addr) return [addr.street, addr.district, addr.city].filter(Boolean).join(' ') || addr.name || null;
+    return null;
+  } catch (e) { /* 忽略：网络/禁用/无数据 */ return null; }
 }
 
 // 双后端定位：返回 { loc, reason, provider }。并行竞速，谁先成功用谁。
@@ -100,15 +127,19 @@ async function amapReverseGeocode(lat, lng, timeout = 4000) {
   }
 }
 
-// 反查地名：高德优先，失败回退系统反查；都失败返回 null
+// 并行反查地名：高德(国内) + 系统(Google/国外) 同时跑，谁先拿到地名用谁 —— 无需区分地域，自动适配。
+// 返回 { name, provider } | null，供打卡与定位排查共用，便于区分是哪一路出的结果。
+async function reverseGeocode(lat, lng) {
+  return firstSuccessValue([
+    amapReverseGeocode(lat, lng).then((name) => (name ? { name, provider: 'amap' } : null)),
+    systemReverseGeocode(lat, lng).then((name) => (name ? { name, provider: 'system' } : null)),
+  ]);
+}
+
+// 对外：只取地名（打卡用）。返回 string | null。签名不变，调用方无需改动。
 export async function reverseGeocodeWithTimeout(lat, lng) {
-  const amap = await amapReverseGeocode(lat, lng);
-  if (amap) return amap;
-  try {
-    const [addr] = await withTimeout(Location.reverseGeocodeAsync({ latitude: lat, longitude: lng }), 4000);
-    if (addr) return [addr.street, addr.district, addr.city].filter(Boolean).join(' ') || addr.name || null;
-  } catch (e) { /* 忽略 */ }
-  return null;
+  const r = await reverseGeocode(lat, lng);
+  return r ? r.name : null;
 }
 
 // 「定位排查」逐项自检：并行竞速 + 各后端/反查实时结果
@@ -164,10 +195,16 @@ export async function diagnoseLocation() {
   }
 
   if (lat != null && lng != null) {
-    const addr = loc.address || await reverseGeocodeWithTimeout(lat, lng);
-    lines.push(addr
-      ? `• 地名反查：✅ ${addr}`
-      : '• 地名反查：❌ 未识别（高德WebKey未配置或反查失败，可手动改地名）');
+    const race = await reverseGeocode(lat, lng);
+    const addr = loc.address || (race && race.name);
+    if (addr) {
+      const from = loc.address ? '高德SDK自带' : (race.provider === 'amap' ? '高德' : '系统/Google');
+      lines.push(`• 地名反查：✅ ${addr}（${from}）`);
+    } else {
+      lines.push(amapWebKey
+        ? '• 地名反查：❌ 高德与系统都未反查到地名（可能确无地名，可手动改）'
+        : '• 地名反查：❌ 未配高德WebKey，系统(Google)反查也无效（可手动改地名）');
+    }
   }
 
   return lines.join('\n');

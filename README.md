@@ -8,8 +8,10 @@
 - **时间轴**：今日打卡记录，可改名 / 删除
 - **洞察统计**：A→B 路段耗时查询（典型耗时 / 分布 / 时段 / 周趋势）、常见路段
 - **历史行程**：按日期分组回看、搜索 / 方式筛选、展开每一站
+- **线路轨迹地图**：某次行程的打卡点连成轨迹（起终点 / 站点 / 全程耗时一览），通勤复盘更有仪式感
 - **深色模式 / 多语言**：跟随系统 / 浅色 / 深色，中文 / English
 - **定位排查**：逐项自检定位链路，显示具体失败原因
+- **数据备份 + 云同步**：全部打卡记录与设备偏好加密成备份文件，可本地保存 / 分享，或配置自带的 WebDAV（坚果云 / Nextcloud）自动上传，换机也能恢复
 
 ## 技术栈
 
@@ -17,6 +19,7 @@
 - expo-sqlite（本地存储，无服务器、无账号）
 - 高德开放平台定位 SDK（自定义 Expo 原生模块 `modules/amap-location`）
 - 高德 + 系统(Google) 并行竞速定位，全程超时兜底
+- react-native-maps（线路轨迹地图，Google Maps 瓦片，依赖 GMS 机型）
 
 ## 快速开始
 
@@ -62,17 +65,30 @@ npm run release -- --commit --push
 - 无 GMS 的国区机型回退高德；高德 SDK 自带逆地理返回地名
 - 权限先只读查、未授权才请求，绕开部分 Android 的权限请求挂起问题
 
+## 线路轨迹地图（Google Maps）
+
+- 用 `react-native-maps` 把某次行程的打卡点连成轨迹（连点成线，不做路径规划，不调 Directions API）
+- 需要 Google Maps Android key：在 `app.json` 的 `android.config.googleMaps.apiKey` 配置（**构建前替换为真实 key**）
+- Google Maps key 受「应用包名 + 签名 SHA1」双校验，请在 Google Cloud Console 按此配置限制
+- 依赖 GMS（Google Play Services）；无 GMS 机型不渲染瓦片，App 内给友好空态提示不崩溃
+
 ## 项目结构
 
 ```
 ├── App.js                        # 底部三 Tab（打卡 / 洞察 / 我的）
+├── index.js                      # App 入口 + 注册桌面小组件 task handler
 ├── modules/amap-location/        # 高德定位 Expo 原生模块（Kotlin）
 ├── privacy.html                  # 隐私政策公开页（托管 GitHub Pages）
+├── widget/                       # 桌面小组件（react-native-android-widget）
+│   ├── Widget.js                 # widget 视图（FlexWidget/TextWidget 渲染）
+│   ├── widgetData.js             # widget 展示数据构建（headless 与 App 共用）
+│   ├── widgetStrings.js          # widget 最小语言字典 + 主题解析
+│   └── widgetTaskHandler.js      # widget 事件处理：添加/更新/点击打卡
 ├── src/
 │   ├── screens/
 │   │   ├── HomeScreen.js         # 主界面：时间轴 + 一键打卡
 │   │   ├── InsightsScreen.js     # 洞察：统计 / 历史 切换
-│   │   ├── ProfileScreen.js      # 我的：设置 / 数据管理 / 位置调试
+│   │   ├── ProfileScreen.js      # 我的：设置 / 数据管理 / 位置调试 / 小组件说明
 │   │   └── PrivacyAgreement.js   # 隐私协议
 │   ├── components/
 │   │   ├── Timeline.js           # 时间轴
@@ -84,12 +100,19 @@ npm run release -- --commit --push
 │   ├── storage/
 │   │   ├── store.js              # 打卡记录 SQLite 读写
 │   │   └── profile.js            # 昵称等偏好
+│   ├── backup/
+│   │   ├── crypto.js             # 加密：PBKDF2 + AES-256-CBC + HMAC-SHA256
+│   │   ├── schema.js             # 备份明文结构与收集/校验
+│   │   ├── backup.js             # 本地备份生成 / 分享 / 恢复
+│   │   ├── webdav.js             # WebDAV 云同步（上传 / 下载 / 测试）
+│   │   └── schedule.js           # 自动备份节流（开关 / 口令 / 上次时间）
 │   ├── utils/
 │   │   ├── location.js           # 双兼容定位 + 地名反查 + 定位排查
 │   │   ├── amapLocation.js       # 高德定位封装
 │   │   ├── withTimeout.js        # 带超时的 Promise 竞速
 │   │   ├── analytics.js          # A→B 查询 / 历史行程分组
 │   │   ├── stats.js              # 中位数 / 地点聚类 / 格式化
+│   │   ├── widgetRefresh.js      # App 内主动刷新桌面小组件
 │   │   └── updater.js            # 版本检查
 │   ├── config.js                 # 高德 Key 管理（读写 AsyncStorage）
 │   ├── i18n/                     # 多语言（zh / en）
@@ -103,6 +126,7 @@ npm run release -- --commit --push
 - 打卡记录存储于本地 **SQLite**（`timeflow.db`），无需服务器、无需账号
 - 偏好（当前行程 / 上次出行方式）存于 AsyncStorage
 - 位置数据仅通过高德 SDK 采集 / 反查，不落任何第三方服务器
+- 备份：记录与偏好加密成备份文件（口令派生密钥，AES-256-CBC + HMAC-SHA256），本地保存 / 分享；配 WebDAV 后上传的也是加密文件，云端看不到明文
 
 ## 隐私政策
 

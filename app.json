@@ -28,7 +28,12 @@
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_KEY"
+        }
+      }
     },
     "plugins": [
       [
@@ -48,7 +53,25 @@
           }
         }
       ],
-      "./plugins/withAbiFilter"
+      "./plugins/withAbiFilter",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "TimeFlowWidget",
+              "label": "TimeFlow 打卡",
+              "description": "一键打卡 + 今日状态",
+              "minWidth": "250dp",
+              "minHeight": "120dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ],
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {

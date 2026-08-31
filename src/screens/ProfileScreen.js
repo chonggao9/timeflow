@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Modal, TextInput, Linking,
 } from 'react-native';
@@ -6,12 +6,21 @@ import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords, clearAll } from '../storage/store';
 import { getProfile, saveProfile } from '../storage/profile';
 import { getAmapKey, setAmapKey, getAmapLocKeyRaw, setAmapLocKey } from '../config';
 import { checkForUpdate } from '../utils/updater';
 import { diagnoseLocation } from '../utils/location';
+import { refreshWidget } from '../utils/widgetRefresh';
+import { makeLocalBackup, shareBackup, readAndRestore, readAndRestoreFromRaw } from '../backup/backup';
+import {
+  backupNow, getBackupPassphrase, setBackupPassphrase, setAutoBackup, isAutoBackupEnabled, getLastBackupTime,
+} from '../backup/schedule';
+import {
+  getWebDavConfig, saveWebDavConfig, clearWebDavConfig, testConnectionWith, getLatestBackupRaw, WebDavError,
+} from '../backup/webdav';
 import { useI18n } from '../i18n/LanguageContext';
 import { radius, shadow } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
@@ -64,6 +73,30 @@ export default function ProfileScreen() {
   const [locKeyState, setLocKeyState] = useState('default'); // 'default' | 'set' | 'disabled'
   const [locKeyInvalid, setLocKeyInvalid] = useState(false);
   const [showLocationDebug, setShowLocationDebug] = useState(false);
+  const [showWidgetGuide, setShowWidgetGuide] = useState(false);
+
+  // 数据备份
+  const [autoEnabled, setAutoEnabled] = useState(false);
+  const [hasPassphrase, setHasPassphrase] = useState(false);
+  const [cloudSet, setCloudSet] = useState(false);
+  const [lastBackup, setLastBackup] = useState(0);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const pendingActionRef = useRef(null); // 'auto' | 'backup' | 'export' 待口令设置后执行
+  // 备份口令弹窗
+  const [showPassphrase, setShowPassphrase] = useState(false);
+  const [passDraft, setPassDraft] = useState('');
+  const [passConfirm, setPassConfirm] = useState('');
+  const [passError, setPassError] = useState('');
+  // WebDAV 弹窗
+  const [showWebdav, setShowWebdav] = useState(false);
+  const [webdavUrl, setWebdavUrl] = useState('');
+  const [webdavUser, setWebdavUser] = useState('');
+  const [webdavPass, setWebdavPass] = useState('');
+  const [webdavTesting, setWebdavTesting] = useState(false);
+  // 恢复弹窗
+  const [showRestore, setShowRestore] = useState(false);
+  const [restorePassDraft, setRestorePassDraft] = useState('');
+  const [restoreBusy, setRestoreBusy] = useState(false);
 
   const loadProfile = useCallback(async () => {
     const p = await getProfile();
@@ -82,6 +115,173 @@ export default function ProfileScreen() {
     setLocKeyState(raw === null ? 'default' : raw === '' ? 'disabled' : 'set');
   }, []);
   React.useEffect(() => { loadLocKey(); }, [loadLocKey]);
+
+  // ---------- 数据备份 ----------
+  const WEBDAV_FAIL_KEY = {
+    auth: 'backup.webdavFailAuth',
+    network: 'backup.webdavFailNet',
+    notFound: 'backup.webdavFailNotFound',
+    server: 'backup.webdavFailServer',
+    conflict: 'backup.webdavFailConflict',
+    unknown: 'backup.webdavFailUnknown',
+  };
+
+  const loadBackupState = useCallback(async () => {
+    const [auto, pass, cloud, last] = await Promise.all([
+      isAutoBackupEnabled(), getBackupPassphrase(), getWebDavConfig(), getLastBackupTime(),
+    ]);
+    setAutoEnabled(auto);
+    setHasPassphrase(!!pass);
+    setCloudSet(!!(cloud && cloud.url));
+    setLastBackup(last || 0);
+  }, []);
+  React.useEffect(() => { loadBackupState(); }, [loadBackupState]);
+
+  const fmtBackupTime = (ms) => {
+    if (!ms) return t('backup.never');
+    const d = new Date(ms);
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+
+  // 需要口令的动作用 withPassphrase 包一层：有口令直接跑，否则开弹窗并记录待执行动作（存证在 pendingActionRef）。
+  const runAction = async (action) => {
+    if (action === 'auto') {
+      await setAutoBackup(true);
+      await loadBackupState();
+    } else if (action === 'backup') {
+      setBackupBusy(true);
+      try {
+        const res = await backupNow({});
+        if (!res) { Alert.alert(t('backup.failTitle'), t('backup.fail')); return; }
+        Alert.alert(t('backup.successTitle'), res.uploaded ? t('backup.successUploaded') : t('backup.successLocal'));
+        await loadBackupState();
+      } finally { setBackupBusy(false); }
+    } else if (action === 'export') {
+      setBackupBusy(true);
+      try {
+        const pass = await getBackupPassphrase();
+        const uri = await makeLocalBackup({ passphrase: pass });
+        await shareBackup(uri, t('backup.exportTitle'));
+        await loadBackupState();
+      } finally { setBackupBusy(false); }
+    }
+  };
+  const withPassphrase = async (action) => {
+    const pass = await getBackupPassphrase();
+    if (!pass) { pendingActionRef.current = action; setShowPassphrase(true); return; }
+    await runAction(action);
+  };
+
+  const toggleAuto = () => {
+    if (autoEnabled) { setAutoBackup(false).then(loadBackupState); }
+    else withPassphrase('auto');
+  };
+
+  // 备份口令弹窗
+  const confirmPassphrase = async () => {
+    const p = passDraft;
+    if (!p) { setPassError(t('backup.passphraseEmpty')); return; }
+    if (p.length < 4) { setPassError(t('backup.passphraseShort')); return; }
+    if (p !== passConfirm) { setPassError(t('backup.passphraseMismatch')); return; }
+    await setBackupPassphrase(p);
+    setShowPassphrase(false); setPassDraft(''); setPassConfirm(''); setPassError('');
+    await loadBackupState();
+    if (pendingActionRef.current) {
+      const a = pendingActionRef.current; pendingActionRef.current = null; await runAction(a);
+    }
+  };
+  const clearPassphrase = () => {
+    Alert.alert(t('backup.clearPassTitle'), t('backup.clearPassBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('backup.passphraseClear'), style: 'destructive', onPress: async () => {
+        await setBackupPassphrase(null); await setAutoBackup(false); await loadBackupState();
+        setShowPassphrase(false); setPassDraft(''); setPassConfirm(''); setPassError('');
+      } },
+    ]);
+  };
+
+  // WebDAV 配置弹窗
+  const openWebdav = async () => {
+    const cfg = await getWebDavConfig();
+    setWebdavUrl(cfg ? cfg.url : '');
+    setWebdavUser(cfg ? cfg.username : '');
+    setWebdavPass('');
+    setShowWebdav(true);
+  };
+  const closeWebdav = () => { setShowWebdav(false); setWebdavTesting(false); };
+  const confirmWebdav = async () => {
+    if (!webdavUrl.trim() || !webdavUser.trim()) {
+      Alert.alert(t('backup.webdavFailTitle'), t('backup.webdavFailAuth')); return;
+    }
+    setWebdavTesting(true);
+    try {
+      await testConnectionWith(webdavUrl, webdavUser, webdavPass);
+      await saveWebDavConfig({ url: webdavUrl, username: webdavUser, appPassword: webdavPass });
+      Alert.alert(undefined, t('backup.webdavSaved'));
+      setShowWebdav(false);
+      await loadBackupState();
+    } catch (e) {
+      const code = e instanceof WebDavError ? e.code : 'unknown';
+      Alert.alert(t('backup.webdavFailTitle'), t(WEBDAV_FAIL_KEY[code] || 'backup.webdavFailUnknown'));
+    } finally { setWebdavTesting(false); }
+  };
+  const clearWebdav = () => {
+    Alert.alert(t('backup.webdavClear'), t('backup.webdavNoConfig'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('backup.webdavClear'), style: 'destructive', onPress: async () => {
+        await clearWebDavConfig(); await loadBackupState(); setShowWebdav(false);
+      } },
+    ]);
+  };
+
+  // 恢复弹窗
+  const openRestore = () => { setRestorePassDraft(''); setShowRestore(true); };
+  const closeRestore = () => { setShowRestore(false); setRestorePassDraft(''); };
+
+  // 拿到数据源（uri 或 raw 串）后：确认 → 拿口令 → 恢复 → 提示结果。
+  const doRestore = (restoreFn) => {
+    if (!restorePassDraft) { Alert.alert(t('backup.restoreTitle'), t('backup.passphraseEmpty')); return; }
+    Alert.alert(t('backup.restoreConfirmTitle'), t('backup.restoreConfirmBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('backup.confirmRestore'), onPress: async () => {
+        setRestoreBusy(true);
+        try {
+          const { imported, skipped } = await restoreFn(restorePassDraft);
+          Alert.alert(t('backup.restoreTitle'), t('backup.restoreDone', { imported, skipped }));
+          setShowRestore(false);
+          await loadBackupState();
+        } catch (e) {
+          Alert.alert(t('backup.restoreTitle'), t('backup.restoreWrongPass'));
+        } finally { setRestoreBusy(false); }
+      } },
+    ]);
+  };
+
+  const pickRestoreFile = async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true });
+      if (res.canceled || !res.assets || !res.assets[0]) return;
+      const uri = res.assets[0].uri;
+      await doRestore((pass) => readAndRestore(uri, pass));
+    } catch (e) {
+      Alert.alert(t('backup.restoreTitle'), t('backup.restoreNoFile'));
+    }
+  };
+
+  const restoreFromCloud = async () => {
+    if (!cloudSet) { Alert.alert(t('backup.webdavTitle'), t('backup.webdavNoConfig')); return; }
+    setRestoreBusy(true);
+    try {
+      const raw = await getLatestBackupRaw();
+      setRestoreBusy(false);
+      await doRestore((pass) => readAndRestoreFromRaw(raw, pass));
+    } catch (e) {
+      setRestoreBusy(false);
+      const code = e instanceof WebDavError ? e.code : 'unknown';
+      Alert.alert(t('backup.webdavFailTitle'), t(WEBDAV_FAIL_KEY[code] || 'backup.webdavFailUnknown'));
+    }
+  };
 
   const persistNickname = async () => {
     await saveProfile({ nickname: nickname.trim() });
@@ -245,6 +445,39 @@ export default function ProfileScreen() {
           <Row icon="trash-outline" label={t('profile.clear')} danger onPress={handleClear} />
         </View>
 
+        {/* 数据备份 */}
+        <Text style={styles.section}>{t('backup.sectionData')}</Text>
+        <View style={styles.card}>
+          <Row
+            icon="cloud-upload-outline"
+            label={t('backup.cloud')}
+            value={cloudSet ? t('backup.cloudSet') : t('backup.cloudEmpty')}
+            onPress={openWebdav}
+          />
+          <View style={styles.divider} />
+          <Row icon="flash-outline" label={t('backup.auto')} value={autoEnabled ? t('backup.on') : t('backup.off')} onPress={toggleAuto} />
+          <View style={styles.divider} />
+          <Row
+            icon="shield-checkmark-outline"
+            label={t('backup.passphraseTitle')}
+            value={hasPassphrase ? t('backup.on') : t('backup.off')}
+            onPress={() => setShowPassphrase(true)}
+          />
+          <View style={styles.divider} />
+          <Row
+            icon="save-outline"
+            label={t('backup.now')}
+            onPress={() => withPassphrase('backup')}
+            value={backupBusy ? '…' : undefined}
+          />
+          <View style={styles.divider} />
+          <Row icon="share-outline" label={t('backup.export')} onPress={() => withPassphrase('export')} value={backupBusy ? '…' : undefined} />
+          <View style={styles.divider} />
+          <Row icon="refresh-outline" label={t('backup.restore')} onPress={openRestore} />
+          <View style={styles.divider} />
+          <Row icon="time-outline" label={t('backup.last')} value={fmtBackupTime(lastBackup)} />
+        </View>
+
         {/* 位置服务 */}
         <Text style={styles.section}>{t('profile.sectionLocation')}</Text>
         <View style={styles.card}>
@@ -253,6 +486,12 @@ export default function ProfileScreen() {
             label={t('profile.locationDebug')}
             onPress={() => setShowLocationDebug(true)}
           />
+        </View>
+
+        {/* 桌面小组件 */}
+        <Text style={styles.section}>{t('profile.sectionWidget')}</Text>
+        <View style={styles.card}>
+          <Row icon="grid-outline" label={t('widget.desc')} onPress={() => { refreshWidget(); setShowWidgetGuide(true); }} />
         </View>
 
         {/* 关于 */}
@@ -367,6 +606,149 @@ export default function ProfileScreen() {
             />
             <View style={styles.dialogRow}>
               <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={() => setShowLocationDebug(false)}>
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 桌面小组件说明弹窗 */}
+      <Modal visible={showWidgetGuide} transparent animationType="fade" onRequestClose={() => setShowWidgetGuide(false)}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('widget.desc')}</Text>
+            <Text style={styles.dialogSub}>{t('widget.guide')}</Text>
+            <Text style={styles.dialogSub}>{t('widget.howto')}</Text>
+            <View style={styles.dialogRow}>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={() => setShowWidgetGuide(false)}>
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 备份口令弹窗 */}
+      <Modal visible={showPassphrase} transparent animationType="fade" onRequestClose={() => { setShowPassphrase(false); pendingActionRef.current = null; }}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('backup.passphraseTitle')}</Text>
+            <Text style={styles.dialogSub}>{t('backup.passphraseSub')}</Text>
+            <TextInput
+              style={styles.input}
+              value={passDraft}
+              onChangeText={setPassDraft}
+              placeholder={t('backup.passphrasePlaceholder')}
+              placeholderTextColor={colors.ink3}
+              secureTextEntry
+              autoFocus
+            />
+            <TextInput
+              style={styles.input}
+              value={passConfirm}
+              onChangeText={setPassConfirm}
+              placeholder={t('backup.passphraseConfirm')}
+              placeholderTextColor={colors.ink3}
+              secureTextEntry
+            />
+            {!!passError && <Text style={styles.errorText}>{passError}</Text>}
+            <View style={styles.dialogRow}>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogGhost]} onPress={clearPassphrase}>
+                <Text style={styles.dialogGhostText}>{t('backup.passphraseClear')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, styles.dialogCancel]}
+                onPress={() => { setShowPassphrase(false); setPassDraft(''); setPassConfirm(''); setPassError(''); pendingActionRef.current = null; }}
+              >
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmPassphrase}>
+                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* WebDAV 云同步弹窗 */}
+      <Modal visible={showWebdav} transparent animationType="fade" onRequestClose={closeWebdav}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('backup.webdavTitle')}</Text>
+            <Text style={styles.dialogSub}>{t('backup.webdavSub')}</Text>
+            <TextInput
+              style={styles.input}
+              value={webdavUrl}
+              onChangeText={setWebdavUrl}
+              placeholder={t('backup.webdavUrlPlaceholder')}
+              placeholderTextColor={colors.ink3}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            <TextInput
+              style={styles.input}
+              value={webdavUser}
+              onChangeText={setWebdavUser}
+              placeholder={t('backup.webdavUser')}
+              placeholderTextColor={colors.ink3}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.input}
+              value={webdavPass}
+              onChangeText={setWebdavPass}
+              placeholder={t('backup.webdavPassPlaceholder')}
+              placeholderTextColor={colors.ink3}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {webdavTesting && <Text style={styles.errorText}>{t('backup.webdavTesting')}</Text>}
+            <View style={styles.dialogRow}>
+              {cloudSet && (
+                <TouchableOpacity style={[styles.dialogBtn, styles.dialogGhost]} onPress={clearWebdav}>
+                  <Text style={styles.dialogGhostText}>{t('backup.webdavClear')}</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeWebdav}>
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmWebdav} disabled={webdavTesting}>
+                <Text style={styles.dialogOkText}>{t('backup.webdavSave')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 从备份恢复弹窗 */}
+      <Modal visible={showRestore} transparent animationType="fade" onRequestClose={closeRestore}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('backup.restoreTitle')}</Text>
+            <Text style={styles.dialogSub}>{t('backup.restoreSub')}</Text>
+            <TextInput
+              style={styles.input}
+              value={restorePassDraft}
+              onChangeText={setRestorePassDraft}
+              placeholder={t('backup.passphrasePlaceholder')}
+              placeholderTextColor={colors.ink3}
+              secureTextEntry
+            />
+            {restoreBusy && <Text style={styles.errorText}>{t('backup.restoreBusy')}</Text>}
+            <View style={styles.dialogRow}>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={pickRestoreFile} disabled={restoreBusy}>
+                <Text style={styles.dialogCancelText}>{t('backup.restoreFile')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={restoreFromCloud} disabled={restoreBusy}>
+                <Text style={styles.dialogOkText}>{t('backup.restoreCloud')}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.dialogRow}>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeRestore}>
                 <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
             </View>

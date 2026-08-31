@@ -12,6 +12,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import { LanguageProvider, useI18n } from './src/i18n/LanguageContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { checkForUpdate } from './src/utils/updater';
+import { runBackupIfDue } from './src/backup/schedule';
 
 const Tab = createBottomTabNavigator();
 
@@ -88,6 +89,11 @@ function AppInner() {
       );
     });
   }, [t]);
+
+  // 启动时触发一次自动备份（fire-and-forget；节流+无口令则内部静默跳过）
+  useEffect(() => {
+    runBackupIfDue().catch(() => {});
+  }, []);
 
   return (
     <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>

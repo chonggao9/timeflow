@@ -78,7 +78,10 @@ function groupByTrip(records) {
   return groups.sort((a, b) => b.firstT - a.firstT); // 最新组在前
 }
 
-export default function Timeline({ records, estimate, onRename }) {
+// 是否有 ≥2 个有效坐标点（≥2 才能连成轨迹，否则不显示「查看地图」）
+const hasCoords = (records) => (records || []).filter(r => r.lat != null && r.lng != null).length >= 2;
+
+export default function Timeline({ records, estimate, onRename, onShowMap }) {
   const { t, lang } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -110,7 +113,19 @@ export default function Timeline({ records, estimate, onRename }) {
     // 最新行程的组内第一个点 = 全局最新
     return (
       <View key={g.tripId}>
-        {showLabels && <Text style={styles.tripLabel}>{g.tripId === LEGACY ? t('timeline.legacy') : `${t('timeline.trip')} ${gi + 1}`}</Text>}
+        {(showLabels || (onShowMap && hasCoords(g.records))) && (
+          <View style={styles.tripLabelRow}>
+            {showLabels ? (
+              <Text style={styles.tripLabel}>{g.tripId === LEGACY ? t('timeline.legacy') : `${t('timeline.trip')} ${gi + 1}`}</Text>
+            ) : null}
+            <View style={styles.tripLabelFlex} />
+            {onShowMap && hasCoords(g.records) ? (
+              <TouchableOpacity onPress={() => onShowMap(g)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="map" size={15} color={colors.primaryStrong} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )}
         {rev.map((r, j) => {
           const isCurrent = gi === 0 && j === 0;
           const durBelow = j < rev.length - 1 ? (r.timestamp - rev[j + 1].timestamp) / 1000 : null;
@@ -197,8 +212,13 @@ const makeStyles = (colors) => StyleSheet.create({
   sectionRight: { fontSize: 12, color: colors.ink3 },
   tripLabel: {
     fontSize: 12, color: colors.primaryStrong, fontWeight: '700',
-    marginTop: 12, marginBottom: 2, letterSpacing: 0.4,
+    letterSpacing: 0.4,
   },
+  tripLabelRow: {
+    flexDirection: 'row', alignItems: 'center',
+    marginTop: 12, marginBottom: 2, paddingRight: 4, gap: 6,
+  },
+  tripLabelFlex: { flex: 1 },
   tripGap: { height: 20 },
 
   row: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },

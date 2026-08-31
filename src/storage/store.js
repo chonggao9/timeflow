@@ -161,3 +161,40 @@ export async function clearAll() {
   await db.runAsync('DELETE FROM records');
   await AsyncStorage.multiRemove([TRIP_KEY, RECORDS_KEY]);
 }
+
+// 记录总数（用于导入结果 / 数据量展示）
+export async function countRecords() {
+  const db = await getDb();
+  const row = await db.getFirstAsync('SELECT COUNT(*) AS c FROM records');
+  return row ? row.c : 0;
+}
+
+// 恢复偏好时写回当前行程标识；id 空则清除（结束行程语义）
+export async function setCurrentTripId(id) {
+  if (id) await AsyncStorage.setItem(TRIP_KEY, id);
+  else await AsyncStorage.removeItem(TRIP_KEY);
+}
+
+// 幂等批量导入备份记录：INSERT OR IGNORE，同 id 已存在则跳过。
+// 复用 migrateLegacy 的 withTransactionAsync 模板，保证整体原子。
+// 返回 { imported, skipped }：imported=实际新增数，skipped=已存在/无效跳过数。
+// 用 countRecords 前后差统计 imported，不依赖 runAsync 的 changes 字段（各版本可能不一致）。
+export async function importRecords(records) {
+  const input = Array.isArray(records) ? records : [];
+  const list = input.filter(r => r && typeof r.id === 'string' && r.id);
+  const skippedInvalid = input.length - list.length;
+  if (!list.length) return { imported: 0, skipped: skippedInvalid || input.length };
+  const db = await getDb();
+  const before = await countRecords();
+  await db.withTransactionAsync(async () => {
+    for (const r of list) {
+      await db.runAsync(
+        'INSERT OR IGNORE INTO records (id, timestamp, location_name, lat, lng, mode, trip_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        r.id, r.timestamp ?? null, r.locationName ?? null, r.lat ?? null, r.lng ?? null, r.mode ?? null, r.tripId ?? null
+      );
+    }
+  });
+  const after = await countRecords();
+  const imported = after - before;
+  return { imported, skipped: list.length - imported + skippedInvalid };
+}

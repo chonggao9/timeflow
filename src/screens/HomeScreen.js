@@ -14,9 +14,12 @@ import { computePathStats, placeKey, UNNAMED } from '../utils/stats';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import { getPositionFast, reverseGeocodeWithTimeout } from '../utils/location';
+import { refreshWidget } from '../utils/widgetRefresh';
+import { runBackupIfDue } from '../backup/schedule';
 import Timeline from '../components/Timeline';
 import CheckInButton from '../components/CheckInButton';
 import TransportPicker from '../components/TransportPicker';
+import RouteMapScreen from './RouteMapScreen';
 
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -37,6 +40,8 @@ export default function HomeScreen() {
 
   const [renameTarget, setRenameTarget] = useState(null);
   const [draftName, setDraftName] = useState('');
+
+  const [mapTrip, setMapTrip] = useState(null); // 当前查看地图的行程
 
   const loadToday = useCallback(async () => {
     const today = await getTodayRecords();
@@ -85,6 +90,8 @@ export default function HomeScreen() {
       setSuccess(true);
       Vibration.vibrate(15); // 轻触感：确认打卡（秒级，紧贴点击）
       await loadToday();
+      refreshWidget(); // 桌面 widget 即时同步最新次数/时间（无 widget 时静默）
+      runBackupIfDue().catch(() => {}); // 打卡触发自动备份（fire-and-forget，节流/未开则跳过）
       setTimeout(() => setSuccess(false), 1200);
 
       fillLocation(id); // 后台定位 + 反查，不阻塞打卡
@@ -135,6 +142,7 @@ export default function HomeScreen() {
       await updateRecord(id, patch);
       log('step4 写库完成');
       await loadToday(); // 旧补位也刷新，把已解析的地名补上
+      refreshWidget(); // 补位完成，同步 widget 上的地名
       log('step5 完成，清状态条');
       if (!isStale()) setLocStatus(null);
     } catch (e) {
@@ -179,6 +187,7 @@ export default function HomeScreen() {
     await updateRecord(renameTarget.id, { locationName: name });
     closeRename();
     await loadToday();
+    refreshWidget(); // 改名后同步 widget 地名
   };
 
   // 误打卡：确认后删除这条记录
@@ -191,6 +200,7 @@ export default function HomeScreen() {
         setLocStatus(null); // 这条的后台补位不再有意义
         closeRename();
         await loadToday();
+        refreshWidget(); // 删除后同步 widget
       } },
     ]);
   };
@@ -233,7 +243,7 @@ export default function HomeScreen() {
       )}
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Timeline records={records} estimate={estimate} onRename={openRename} />
+        <Timeline records={records} estimate={estimate} onRename={openRename} onShowMap={setMapTrip} />
       </ScrollView>
 
       {/* 底部操作区 */}
@@ -286,6 +296,9 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 线路轨迹地图（全屏） */}
+      <RouteMapScreen visible={mapTrip != null} tripRecords={mapTrip?.records || []} onClose={() => setMapTrip(null)} />
     </View>
   );
 }
