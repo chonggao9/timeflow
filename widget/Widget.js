@@ -1,6 +1,6 @@
 // 桌面小组件的 JSX 视图（用 react-native-android-widget 的 RN 组件）。
 // 纯展示，不含任何副作用；数据与配色由调用方（widgetTaskHandler）提前算好传入。
-// 布局：上=今日状态（是否已打卡 + 最新一次时间 + 上次地点），下=打卡按钮。
+// 布局：上=信息区（品牌 + 状态/次数 + 时间/地点，横向铺满），下=打卡胶囊按钮（自适应宽度、居中）。
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
 
 // 打卡按钮在 widget 里的样式：主色圆角块。点击走 clickAction='checkIn' → 回调到 task handler。
