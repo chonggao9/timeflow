@@ -29,8 +29,8 @@ Thumbs.db
 *.mobileprovision
 
 # 本地私密环境变量（令牌等，勿提交）
-.env
-.env.local
+.env*
+!.env.example
 
 # 构建产物
 *.apk

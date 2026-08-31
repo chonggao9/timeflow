@@ -14,7 +14,6 @@ export const translations = {
 
     // 打卡首页
     'home.today': '今天',
-    'home.subtitle': '记录你的一天，轻松看路段耗时',
     'home.checkins': '{n} 次打卡',
     'home.failTitle': '打卡失败',
     'home.failBody': '保存失败，请重试',
@@ -30,7 +29,6 @@ export const translations = {
     'home.deleteTitle': '删除打卡',
     'home.deleteBody': '确定删除这条打卡记录？删除后不可恢复。',
     'home.deleteBtn': '删除此打卡',
-    'home.startGuide': '点下方按钮，记录你的第一条行程',
 
     // 打卡按钮
     'checkin.btn': '打 卡',
@@ -54,9 +52,6 @@ export const translations = {
     // 洞察
     'insights.title': '洞察',
     'insights.subtitle': '你的出行路线与耗时规律',
-    'insights.tCheckins': '累计打卡',
-    'insights.tDays': '打卡天数',
-    'insights.tPaths': '已分析路段',
     'insights.section': '路段规律',
     'insights.queryTitle': 'A→B 耗时查询',
     'insights.from': '出发地',
@@ -108,7 +103,6 @@ export const translations = {
     'profile.sectionProfile': '个人信息',
     'profile.nickname': '昵称',
     'profile.nicknamePlaceholder': '给自己起个名字',
-    'profile.saveNickname': '保存昵称',
     'profile.savedTitle': '已保存',
     'profile.savedBody': '昵称已更新',
     'profile.sectionData': '数据管理',
@@ -184,7 +178,6 @@ export const translations = {
     'tab.profile': 'Profile',
 
     'home.today': 'Today',
-    'home.subtitle': 'Track your trips and see route durations',
     'home.checkins': '{n} check-ins',
     'home.failTitle': 'Check-in failed',
     'home.failBody': 'Failed to save. Please try again.',
@@ -200,8 +193,6 @@ export const translations = {
     'home.deleteTitle': 'Delete check-in',
     'home.deleteBody': 'Delete this check-in? This cannot be undone.',
     'home.deleteBtn': 'Delete this check-in',
-    'home.startGuide': 'Tap below to start your first trip',
-
     'checkin.btn': 'Check In',
     'checkin.done': 'Checked In',
 
@@ -220,9 +211,6 @@ export const translations = {
 
     'insights.title': 'Insights',
     'insights.subtitle': 'Your routes & travel time patterns',
-    'insights.tCheckins': 'Check-ins',
-    'insights.tDays': 'Days',
-    'insights.tPaths': 'Routes',
     'insights.section': 'Route patterns',
     'insights.queryTitle': 'A→B travel time',
     'insights.from': 'From',
@@ -272,7 +260,6 @@ export const translations = {
     'profile.sectionProfile': 'Personal',
     'profile.nickname': 'Nickname',
     'profile.nicknamePlaceholder': 'Enter a nickname',
-    'profile.saveNickname': 'Save nickname',
     'profile.savedTitle': 'Saved',
     'profile.savedBody': 'Nickname updated',
     'profile.sectionData': 'Data',

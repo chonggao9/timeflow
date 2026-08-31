@@ -122,9 +122,11 @@ export async function getRecords() {
 export async function getTodayRecords() {
   const db = await getDb();
   const start = dayStart(Date.now());
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1); // 次日本地零点，避免 DST 时区一天不等于 86400000ms
   return db.getAllAsync(
     `SELECT ${COLS} FROM records WHERE timestamp >= ? AND timestamp < ? ORDER BY timestamp ASC`,
-    start, start + 86400000
+    start, end.getTime()
   );
 }
 

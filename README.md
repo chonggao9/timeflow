@@ -91,8 +91,10 @@ npm run release -- --commit --push
 │   │   ├── analytics.js          # A→B 查询 / 历史行程分组
 │   │   ├── stats.js              # 中位数 / 地点聚类 / 格式化
 │   │   └── updater.js            # 版本检查
+│   ├── config.js                 # 高德 Key 管理（读写 AsyncStorage）
 │   ├── i18n/                     # 多语言（zh / en）
-│   └── theme/                    # 深色模式主题
+│   ├── theme.js                  # 设计令牌：浅/深色配色、圆角、阴影
+│   └── theme/ThemeContext.js     # 主题上下文（system/light/dark）
 └── scripts/release.js            # 一键发版脚本
 ```
 

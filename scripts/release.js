@@ -29,21 +29,25 @@ const versionArg = val('--version');
 const doCommit = args.includes('--commit');
 const doPush = args.includes('--push');
 
-// 从本机 .env.local（git-ignored）加载令牌：避免把密钥明文贴进聊天/会话记录。
-// 必须在读取 EXPO_TOKEN/GH_TOKEN 之前执行；已存在的环境变量优先，文件值仅作兜底。
-const envLocal = path.join(ROOT, '.env.local');
-if (fs.existsSync(envLocal)) {
-  for (const line of fs.readFileSync(envLocal, 'utf8').split(/\r?\n/)) {
-    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
-    if (!m) continue;
-    const [, key, raw] = m;
-    const val = raw.replace(/^(['"])(.*)\1$/, '$2'); // 去首尾引号
-    if (process.env[key] === undefined) process.env[key] = val;
-  }
-}
+// 从本机 .env / .env.local（git-ignored）加载令牌：避免把密钥明文贴进聊天/会话记录。
+// 用 dotenv.parse 解析：正确处理 inline `#` 注释、export 前缀、引号、空值（普通正则做不到）。
+// 覆盖 .env（优先）+ .env.local（优先于 .env）；优先级：已有环境变量(非空) > .env.local > .env。
+// 必须在读取 EXPO_TOKEN/GH_TOKEN 之前执行。
+const dotenv = require('dotenv');
 
-const EXPO_TOKEN = process.env.EXPO_TOKEN;
-const GH_TOKEN = process.env.GH_TOKEN;
+function loadEnvFile(file) {
+  try { return dotenv.parse(fs.readFileSync(file, 'utf8')); }
+  catch (e) { return {}; } // 文件不存在/不可读 → 视为无，避免未捕获错误栈
+}
+const fileEnv = { ...loadEnvFile(path.join(ROOT, '.env')), ...loadEnvFile(path.join(ROOT, '.env.local')) };
+
+function resolveEnv(key) {
+  const v = process.env[key];
+  if (v !== undefined && v !== '') return v; // 已有有效值(空串视为未设) → 优先，文件仅兜底
+  return fileEnv[key];
+}
+const EXPO_TOKEN = resolveEnv('EXPO_TOKEN');
+const GH_TOKEN = resolveEnv('GH_TOKEN');
 
 function fail(msg) { console.error('\n[release] ✗ ' + msg); process.exit(1); }
 function step(msg) { console.log('\n[release] ▶ ' + msg); }

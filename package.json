@@ -16,6 +16,7 @@
     "@types/react": "~18.2.79",
     "expo": "~51.0.0",
     "expo-build-properties": "~0.12.5",
+    "expo-file-system": "~17.0.1",
     "expo-localization": "~15.0.3",
     "expo-location": "~17.0.1",
     "expo-navigation-bar": "~3.0.7",
@@ -30,7 +31,8 @@
     "typescript": "~5.3.3"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "dotenv": "^16.4.7"
   },
   "private": true
 }

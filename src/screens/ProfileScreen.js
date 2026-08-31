@@ -83,10 +83,6 @@ export default function ProfileScreen() {
   }, []);
   React.useEffect(() => { loadLocKey(); }, [loadLocKey]);
 
-  const saveNickname = async () => {
-    await saveProfile({ nickname: nickname.trim() });
-    Alert.alert(t('profile.savedTitle'), t('profile.savedBody'));
-  };
   const persistNickname = async () => {
     await saveProfile({ nickname: nickname.trim() });
   };
@@ -280,7 +276,6 @@ export default function ProfileScreen() {
         <PrivacyAgreement onClose={() => setShowPrivacy(false)} />
       </Modal>
 
-      {/* 语言选择弹窗 */}
       {/* 高德 Key 配置弹窗 */}
       <Modal visible={showAmapKey} transparent animationType="fade" onRequestClose={closeAmapKey}>
         <View style={styles.overlay}>
