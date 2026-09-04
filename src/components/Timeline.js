@@ -95,6 +95,7 @@ const hasCoords = (records) => (records || []).filter(r => r.lat != null && r.ln
 export default function Timeline({ records, estimate, onRename, onShowMap, hasActiveTrip = false }) {
   const { t, lang } = useI18n();
   const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const MODE_LABEL = {
     walk: t('mode.walk'),
     bike: t('mode.bike'),

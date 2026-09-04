@@ -261,14 +261,91 @@ function Root() {
   );
 }
 
+// 错误边界组件：拦截未捕获的渲染异常，杜绝全屏空白
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('[ErrorBoundary caught error]', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={errStyles.container}>
+          <Ionicons name="alert-circle" size={54} color="#FF6B6B" style={errStyles.icon} />
+          <Text style={errStyles.title}>界面加载异常</Text>
+          <Text style={errStyles.msg} numberOfLines={3}>
+            {this.state.error?.message || '组件渲染发生未知错误'}
+          </Text>
+          <TouchableOpacity
+            style={errStyles.btn}
+            onPress={() => this.setState({ hasError: false, error: null })}
+            activeOpacity={0.8}
+          >
+            <Text style={errStyles.btnText}>重新加载</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const errStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    backgroundColor: '#FAF7F4',
+  },
+  icon: {
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1C1917',
+    marginBottom: 8,
+  },
+  msg: {
+    fontSize: 13,
+    color: '#78716C',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 24,
+  },
+  btn: {
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  btnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+});
+
 export default function App() {
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <LanguageProvider>
-          <Root />
-        </LanguageProvider>
-      </ThemeProvider>
+      <ErrorBoundary>
+        <ThemeProvider>
+          <LanguageProvider>
+            <Root />
+          </LanguageProvider>
+        </ThemeProvider>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

@@ -56,6 +56,14 @@ function step(msg) { console.log('\n[release] ▶ ' + msg); }
 if (!EXPO_TOKEN) fail('缺少 EXPO_TOKEN 环境变量');
 if (!GH_TOKEN) fail('缺少 GH_TOKEN 环境变量');
 
+// ---- 1.5 静态代码审查与未声明变量门禁 ----
+step('执行代码静态审查与未声明变量扫描');
+try {
+  execSync(`node "${path.join(__dirname, 'audit_code.js')}"`, { stdio: 'inherit' });
+} catch (e) {
+  fail('代码静态审查未通过，已终止发版！请修复上述代码问题后重试。');
+}
+
 // ---- 2. 版本号（app.json 里在 expo.version 下）----
 const app = JSON.parse(fs.readFileSync(APP_JSON, 'utf8'));
 const cur = app.expo.version;
