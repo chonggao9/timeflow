@@ -1,6 +1,6 @@
 # TimeFlow · 时光流
 
-极简时间打卡 App，基于 Expo (React Native) + SQLite，支持高德/系统双兼容定位，数据全本地存储。
+极简时间打卡 App，基于 Expo (React Native) + SQLite，支持高德/系统（Google）双兼容定位，数据全本地存储。
 
 ## 功能特性
 
