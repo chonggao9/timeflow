@@ -3,7 +3,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/chonggao9/timeflow?color=FF6B6B&style=flat-square)](https://github.com/chonggao9/timeflow/releases/latest)
 [![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square)](#平台支持)
 
-> [📥 **点击直接下载最新 Android 安装包 (v1.0.20 APK)**](https://github.com/chonggao9/timeflow/releases/download/v1.0.20/timeflow-v1.0.20.apk)
+> [📥 **点击直接下载最新 Android 安装包 (v1.0.21 APK)**](https://github.com/chonggao9/timeflow/releases/download/v1.0.21/timeflow-v1.0.21.apk)
 
 极简时间打卡 App，基于 Expo (React Native) + SQLite，支持高德/系统（Google）双兼容定位，数据全本地存储。
 
@@ -146,6 +146,11 @@ npm run release -- --commit --push
 - 源码：`privacy.html`（与 app 内 `PrivacyAgreement.js` 内容一致）
 
 ## 版本记录
+
+### v1.0.21 (2026-09-04)
+- **稳定性紧急修复**：修复时间轴组件缺失样式声明导致的冷启动空白崩溃异常。
+- **全局错误边界保护**：根层级引入 ErrorBoundary，杜绝子组件渲染异常引起全屏白屏。
+- **自动化代码审查门禁**：集成 AST 静态检查与未声明变量扫描，阻断潜在语法与变量缺陷。
 
 ### v1.0.20 (2026-09-04)
 - **打卡交互重构**：打卡按钮全宽居中，轻按记录途经点，长按（>500ms）一步记录终点并完结行程；智能超时断程调整至 90 分钟。
