@@ -7,7 +7,7 @@ import * as SQLite from 'expo-sqlite';
 const RECORDS_KEY = 'timeflow_records';
 const TRIP_KEY = 'timeflow_current_trip';
 const LAST_CHECKIN_TS_KEY = 'timeflow_last_checkin_ts';
-const TRIP_TIMEOUT_MS = 3 * 60 * 60 * 1000; // 3小时无打卡自动断开行程
+const TRIP_TIMEOUT_MS = 90 * 60 * 1000; // 90分钟无打卡自动断开行程
 const MODE_KEY = 'timeflow_mode';
 
 // 旧数据无 tripId，统一归为该值（一条历史行程）

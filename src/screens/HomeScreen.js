@@ -18,9 +18,9 @@ import { refreshWidget } from '../utils/widgetRefresh';
 import { runBackupIfDue } from '../backup/schedule';
 import Timeline from '../components/Timeline';
 import CheckInButton from '../components/CheckInButton';
-import TransportPicker from '../components/TransportPicker';
+import TransportPicker, { MODE_KEYS } from '../components/TransportPicker';
+import ModeIcon from '../components/ModeIcon';
 import RouteMapScreen from './RouteMapScreen';
-
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 export default function HomeScreen() {
@@ -42,6 +42,7 @@ export default function HomeScreen() {
 
   const [renameTarget, setRenameTarget] = useState(null);
   const [draftName, setDraftName] = useState('');
+  const [draftMode, setDraftMode] = useState('walk');
 
   const [mapTrip, setMapTrip] = useState(null); // 当前查看地图的行程
 
@@ -101,8 +102,8 @@ export default function HomeScreen() {
     })();
   }, [records]);
 
-  // 一键打卡：加入当前行程。立即落库（秒完成），坐标 + 地名后台异步补。
-  const handleCheckIn = async () => {
+  // 一键打卡：轻按记录途经点，长按结程（打卡同时结束本次行程）
+  const handleCheckIn = async (isEndTrip = false) => {
     if (checkingInRef.current) return;
     checkingInRef.current = true;
     setLoading(true);
@@ -113,13 +114,22 @@ export default function HomeScreen() {
       await saveRecord({ id, timestamp: tnow, locationName: UNNAMED, lat: null, lng: null, mode, tripId });
       await setLastMode(mode);
 
+      if (isEndTrip) {
+        await endTrip(); // 立即封存关闭当前行程，下次打卡自动开启新行程
+      }
+
       setLoading(false);
-      setSuccess(true);
-      Vibration.vibrate(15); // 轻触感：确认打卡（秒级，紧贴点击）
+      setSuccess(isEndTrip ? 'ended' : true);
+      if (isEndTrip) {
+        Vibration.vibrate(40); // 确定性触觉反馈：结程
+      } else {
+        Vibration.vibrate(15); // 轻触感：普通打卡
+      }
+
       await loadToday();
-      refreshWidget(); // 桌面 widget 即时同步最新次数/时间（无 widget 时静默）
-      runBackupIfDue().catch(() => {}); // 打卡触发自动备份（fire-and-forget，节流/未开则跳过）
-      setTimeout(() => setSuccess(false), 1200);
+      refreshWidget(); // 桌面 widget 即时同步最新次数/时间
+      runBackupIfDue().catch(() => {}); // 打卡触发自动备份（fire-and-forget）
+      setTimeout(() => setSuccess(false), isEndTrip ? 1500 : 1200);
 
       fillLocation(id); // 后台定位 + 反查，不阻塞打卡
     } catch (e) {
@@ -131,8 +141,7 @@ export default function HomeScreen() {
     }
   };
 
-  // 后台补坐标 + 地名：状态条呈现 补位中/被拒/服务关闭/超时，成功则静默消失。
-  // 序号守卫：连打两次时，旧补位照常落库/刷新，但只有最新一次能更新状态条。
+  // 后台补坐标 + 地名：状态条呈现 补位中/被拒/服务关闭/超时，成功则静默消失
   const fillLocation = async (id) => {
     const seq = ++fillSeqRef.current;
     locTargetRef.current = id;
@@ -140,7 +149,6 @@ export default function HomeScreen() {
     const isStale = () => seq !== fillSeqRef.current;
     const log = (...a) => { if (__DEV__) console.log(`[fillLocation:${seq}]`, ...a); };
     try {
-      // 先只读查权限（绕开 requestForegroundPermissionsAsync 在部分 Android 上挂起的问题），未授权才真正请求
       log('step1 权限只读查询');
       let { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -159,14 +167,13 @@ export default function HomeScreen() {
       }
       const lat = loc.coords.latitude, lng = loc.coords.longitude;
 
-      let addr = loc.address; // 高德 SDK 可能已带回地名
+      let addr = loc.address;
       if (!addr) {
         log('step3 反查地名（SDK 无地址）');
         addr = await reverseGeocodeWithTimeout(lat, lng);
       }
       log('step3b 地名 =', addr);
 
-      // 检查记录当前状态：若在定位反查期间已被删除或用户已手动重命名，则避免破坏
       const current = await getRecordById(id);
       if (!current) {
         log('step4 记录已被删除，跳过写库');
@@ -175,14 +182,13 @@ export default function HomeScreen() {
       }
 
       const patch = { lat, lng };
-      // 仅在当前地名仍为占位名（未命名）时回写反查地名；若用户已手动重命名则保留用户自定义地名
       if (addr && isPlaceholderName(current.locationName)) {
         patch.locationName = addr;
       }
       await updateRecord(id, patch);
       log('step4 写库完成');
-      await loadToday(); // 旧补位也刷新，把已解析的地名补上
-      refreshWidget(); // 补位完成，同步 widget 上的地名
+      await loadToday();
+      refreshWidget();
       log('step5 完成，清状态条');
       if (!isStale()) setLocStatus(null);
     } catch (e) {
@@ -191,7 +197,7 @@ export default function HomeScreen() {
     }
   };
 
-  // 定位状态条点击：被拒→已授权则重试否则去设置；服务关闭→去设置；超时→服务没开则去设置否则重试
+  // 定位状态条点击
   const handleLocBarPress = async () => {
     if (locStatus === 'denied') {
       const { status } = await Location.getForegroundPermissionsAsync();
@@ -207,40 +213,33 @@ export default function HomeScreen() {
     }
   };
 
-  // 结束当前行程（二次确认防误触）
-  const handleEndTrip = () => {
-    Alert.alert(
-      t('trip.endConfirmTitle'),
-      t('trip.endConfirmBody'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('trip.end'),
-          style: 'destructive',
-          onPress: async () => {
-            await endTrip();
-            await loadToday();
-            Alert.alert(t('trip.endedTitle'), t('trip.ended'));
-          },
-        },
-      ]
-    );
-  };
-
-  // ---- 地名编辑 ----
+  // ---- 地名与交通方式编辑 ----
   const openRename = (record) => {
     setRenameTarget(record);
     setDraftName(record.locationName && record.locationName !== UNNAMED ? record.locationName : '');
+    setDraftMode(record.mode || 'walk');
   };
-  const closeRename = () => { setRenameTarget(null); setDraftName(''); };
+  const closeRename = () => {
+    setRenameTarget(null);
+    setDraftName('');
+    setDraftMode('walk');
+  };
   const confirmRename = async () => {
     if (!renameTarget) return;
     const name = draftName.trim();
     if (!name) { Alert.alert(t('home.renameEmpty')); return; }
-    await updateRecord(renameTarget.id, { locationName: name });
+    await updateRecord(renameTarget.id, { locationName: name, mode: draftMode });
     closeRename();
     await loadToday();
-    refreshWidget(); // 改名后同步 widget 地名
+    refreshWidget();
+  };
+
+  // 补救结程：在编辑弹窗中直接将当前点标记为终点
+  const handleModalEndTrip = async () => {
+    await endTrip();
+    closeRename();
+    await loadToday();
+    Alert.alert(t('trip.endedTitle'), t('trip.endedToast'));
   };
 
   // 误打卡：确认后删除这条记录
@@ -250,10 +249,10 @@ export default function HomeScreen() {
       { text: t('common.cancel'), style: 'cancel' },
       { text: t('common.delete'), style: 'destructive', onPress: async () => {
         await deleteRecord(renameTarget.id);
-        setLocStatus(null); // 这条的后台补位不再有意义
+        setLocStatus(null);
         closeRename();
         await loadToday();
-        refreshWidget(); // 删除后同步 widget
+        refreshWidget();
       } },
     ]);
   };
@@ -272,7 +271,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* 定位状态条：补位中 / 权限被拒 / 定位失败 */}
+      {/* 定位状态条 */}
       {locStatus && (
         <TouchableOpacity
           style={[styles.locBar, locStatus === 'pending' && styles.locBarPending]}
@@ -296,29 +295,30 @@ export default function HomeScreen() {
       )}
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Timeline records={records} estimate={estimate} onRename={openRename} onShowMap={setMapTrip} />
+        <Timeline
+          records={records}
+          estimate={estimate}
+          onRename={openRename}
+          onShowMap={setMapTrip}
+          hasActiveTrip={hasActiveTrip}
+        />
       </ScrollView>
 
-      {/* 底部操作区 */}
+      {/* 底部居中全宽操作区 */}
       <View style={styles.composer}>
         <TransportPicker selected={mode} onSelect={setMode} />
         <View style={styles.gap} />
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.endBtn, !hasActiveTrip && styles.endBtnDisabled]}
-            onPress={handleEndTrip}
-            disabled={!hasActiveTrip}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.endBtnText, !hasActiveTrip && styles.endBtnTextDisabled]}>{t('trip.end')}</Text>
-          </TouchableOpacity>
-          <View style={styles.checkinWrap}>
-            <CheckInButton onPress={handleCheckIn} loading={loading} success={success} />
-          </View>
+        <View style={styles.checkinWrap}>
+          <CheckInButton
+            onPress={() => handleCheckIn(false)}
+            onLongPress={() => handleCheckIn(true)}
+            loading={loading}
+            success={success}
+          />
         </View>
       </View>
 
-      {/* 地名编辑弹窗 */}
+      {/* 地名与交通方式编辑弹窗 */}
       <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={closeRename}>
         <View style={styles.overlay}>
           <View style={styles.dialog}>
@@ -330,10 +330,30 @@ export default function HomeScreen() {
               onChangeText={setDraftName}
               placeholder={t('home.renamePlaceholder')}
               placeholderTextColor={colors.ink3}
-              autoFocus
+              autoFocus={false}
               returnKeyType="done"
               onSubmitEditing={confirmRename}
             />
+
+            {/* 切换出行方式 */}
+            <Text style={styles.dialogSectionLabel}>{t('home.editMode')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dialogModeScroll}>
+              {MODE_KEYS.map((k) => {
+                const on = draftMode === k;
+                return (
+                  <TouchableOpacity
+                    key={k}
+                    style={[styles.dialogModeItem, on && styles.dialogModeItemSelected]}
+                    onPress={() => setDraftMode(k)}
+                    activeOpacity={0.7}
+                  >
+                    <ModeIcon mode={k} size={16} color={on ? colors.primaryStrong : colors.ink2} />
+                    <Text style={[styles.dialogModeLabel, on && styles.dialogModeLabelSelected]}>{t(`mode.${k}`)}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
             <View style={styles.dialogRow}>
               <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeRename}>
                 <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
@@ -342,10 +362,21 @@ export default function HomeScreen() {
                 <Text style={styles.dialogOkText}>{t('common.save')}</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.dialogDelete} onPress={confirmDelete} activeOpacity={0.6}>
-              <Ionicons name="trash-outline" size={15} color={colors.danger} />
-              <Text style={styles.dialogDeleteText}>{t('home.deleteBtn')}</Text>
-            </TouchableOpacity>
+
+            <View style={styles.dialogFooterRow}>
+              {hasActiveTrip && records.length > 0 && renameTarget && renameTarget.id === records[records.length - 1].id ? (
+                <TouchableOpacity style={styles.dialogEndTrip} onPress={handleModalEndTrip} activeOpacity={0.6}>
+                  <Ionicons name="flag-outline" size={15} color={colors.primary} />
+                  <Text style={styles.dialogEndTripText}>{t('trip.markAsEnd')}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View />
+              )}
+              <TouchableOpacity style={styles.dialogDelete} onPress={confirmDelete} activeOpacity={0.6}>
+                <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                <Text style={styles.dialogDeleteText}>{t('home.deleteBtn')}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -386,19 +417,11 @@ const makeStyles = (colors) => StyleSheet.create({
   scrollContent: { paddingHorizontal: 16, paddingBottom: 12 },
 
   composer: {
-    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14,
+    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12,
     backgroundColor: colors.bg,
   },
-  gap: { height: 12 },
-  actions: { flexDirection: 'row', gap: 10 },
-  checkinWrap: { flex: 1 },
-  endBtn: {
-    width: 92, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.chip, borderWidth: 1.5, borderColor: colors.line,
-  },
-  endBtnDisabled: { opacity: 0.4 },
-  endBtnText: { fontSize: 14, color: colors.ink2, fontWeight: '700', letterSpacing: 1 },
-  endBtnTextDisabled: { color: colors.ink3 },
+  gap: { height: 10 },
+  checkinWrap: { width: '100%' },
 
   overlay: {
     flex: 1, backgroundColor: colors.scrim,
@@ -408,19 +431,38 @@ const makeStyles = (colors) => StyleSheet.create({
   dialogTitle: { fontSize: 18, fontWeight: '700', color: colors.ink },
   dialogSub: { fontSize: 13, color: colors.ink3, marginTop: 4 },
   input: {
-    marginTop: 16, borderWidth: 1.5, borderColor: colors.line2, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: colors.ink,
+    marginTop: 14, borderWidth: 1.5, borderColor: colors.line2, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: colors.ink,
     backgroundColor: colors.chip,
   },
+  dialogSectionLabel: {
+    fontSize: 13, color: colors.ink2, fontWeight: '600', marginTop: 14, marginBottom: 8,
+  },
+  dialogModeScroll: { flexDirection: 'row', gap: 8, paddingVertical: 2 },
+  dialogModeItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    paddingVertical: 8, paddingHorizontal: 11, borderRadius: 10, backgroundColor: colors.chip,
+    borderWidth: 1.5, borderColor: colors.line,
+  },
+  dialogModeItemSelected: {
+    backgroundColor: colors.primarySoft, borderColor: colors.primary,
+  },
+  dialogModeLabel: { fontSize: 12, color: colors.ink2, fontWeight: '600' },
+  dialogModeLabelSelected: { color: colors.primaryStrong },
+
   dialogRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  dialogBtn: { flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  dialogBtn: { flex: 1, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   dialogCancel: { backgroundColor: colors.chip },
   dialogCancelText: { fontSize: 15, color: colors.ink2, fontWeight: '600' },
   dialogOk: { backgroundColor: colors.primary },
   dialogOkText: { fontSize: 15, color: '#fff', fontWeight: '700' },
-  dialogDelete: {
+
+  dialogFooterRow: {
     marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.line,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  dialogDeleteText: { fontSize: 14, color: colors.danger, fontWeight: '600' },
+  dialogEndTrip: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  dialogEndTripText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
+  dialogDelete: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  dialogDeleteText: { fontSize: 13, color: colors.danger, fontWeight: '600' },
 });

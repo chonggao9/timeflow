@@ -40,10 +40,10 @@ export default function PrivacyAgreement({ onClose }) {
 const CONTENT_ZH = {
   title: '隐私协议',
   h1: 'TimeFlow 隐私政策',
-  date: '更新日期：2026 年 8 月 29 日',
+  date: '更新日期：2026 年 9 月 4 日',
   intro: 'TimeFlow（时光流）尊重并保护你的个人信息。本政策依据适用的法律法规制定，请在使用前仔细阅读、充分理解。',
   sections: [
-    ['一、我们收集的信息', '我们仅处理实现功能所必需的最少信息（最小必要原则）：\n1. 位置信息（敏感个人信息）：仅在你主动打卡时，读取当前位置的经纬度坐标，用于记录打卡地点。\n2. 时间信息：打卡发生的具体时间。\n3. 出行方式：你选择的出行方式（步行/骑行/驾车/公交）。\n4. 你主动填写的内容：地点名（如「家」「公司」）、昵称等。\n我们不收集与上述功能无关的信息。'],
+    ['一、我们收集的信息', '我们仅处理实现功能所必需的最少信息（最小必要原则）：\n1. 位置信息（敏感个人信息）：仅在你主动打卡时，读取当前位置的经纬度坐标，用于记录打卡地点。\n2. 时间信息：打卡发生的具体时间。\n3. 出行方式：你选择的出行方式（步行/骑行/自驾/打车/地铁/公交/高铁/飞机/轮渡）。\n4. 你主动填写的内容：地点名（如「家」「公司」）、昵称等。\n我们不收集与上述功能无关的信息。'],
     ['二、第三方 SDK 及信息共享', '为实现定位功能，本应用集成了高德开放平台定位 SDK，相关信息披露如下：\n• 使用 SDK 名称：高德开放平台定位 SDK\n• 第三方名称：北京高德图强科技有限公司\n• 使用目的：为了向你提供定位服务\n• 收集个人信息：经纬度、设备信息（如 IP 地址、GNSS 信息、网络类型、WiFi 状态、WiFi 参数、WiFi 列表、WiFi 信号强度、WiFi 网关地址、SSID、BSSID、基站信息、传感器信息、设备信号强度信息）、OAID、当前应用信息（应用名、应用版本号）、设备参数及系统信息（设备品牌及型号、操作系统、运营商信息、屏幕分辨率）\n• 信息收集方式：SDK 本机采集\n• 第三方隐私政策：https://lbs.amap.com/pages/privacy/\n除上述高德 SDK 外，本应用没有服务器，不会将你的个人信息上传、分享或提供给任何其他第三方。若你在「我的 → 位置服务」配置了高德 Web 服务 Key，打卡坐标会发送给高德地图用于反查附近地名，同样受高德隐私政策约束。'],
     ['三、信息的存储与安全', '1. 存储位置：所有打卡信息默认仅存储于手机本地应用沙盒内，本应用不设中心化业务服务器。\n2. 加密传输：打卡坐标在通过高德 SDK 定位及反查地名时，均使用 HTTPS 加密传输；本地数据存储于应用沙盒内。\n3. 存储期限：自你保存起保留，直至你主动清空数据或卸载本应用时删除。\n4. 安全措施：依赖系统提供的沙盒隔离与访问控制机制保护数据，无中心化账号体系。若你主动配置第三方 WebDAV 云同步，加密备份文件（经口令高强度 AES 加密）将仅同步至你指定的云存储，完全由你自主掌控。'],
     ['四、信息的使用', '你的信息仅用于向你展示：今日行程、历史行程、路段耗时统计、打卡记录。我们不会将你的信息用于任何其他用途，也不会进行自动化决策或用户画像。'],
@@ -59,10 +59,10 @@ const CONTENT_ZH = {
 const CONTENT_EN = {
   title: 'Privacy Policy',
   h1: 'TimeFlow Privacy Policy',
-  date: 'Last updated: Aug 29, 2026',
+  date: 'Last updated: Sep 4, 2026',
   intro: 'TimeFlow respects and protects your personal information. This policy is drafted in accordance with applicable laws and regulations. Please read and fully understand it before use.',
   sections: [
-    ['1. Information we collect', 'We process only the minimum information necessary to provide the functions (data minimization):\n1. Location (sensitive personal information): only when you check in, we read your current coordinates to record the place.\n2. Time: the exact time of each check-in.\n3. Transport mode: your chosen mode (walk / bike / drive / transit).\n4. Information you enter: place names (e.g. "Home", "Office"), nickname, etc.\nWe do not collect any information unrelated to the above functions.'],
+    ['1. Information we collect', 'We process only the minimum information necessary to provide the functions (data minimization):\n1. Location (sensitive personal information): only when you check in, we read your current coordinates to record the place.\n2. Time: the exact time of each check-in.\n3. Transport mode: your chosen mode (walk / bike / drive / taxi / subway / transit / train / flight / boat).\n4. Information you enter: place names (e.g. "Home", "Office"), nickname, etc.\nWe do not collect any information unrelated to the above functions.'],
     ['2. Third-party SDK & sharing', 'To provide location services, this app integrates the Amap Open Platform Location SDK, disclosed as follows:\n• SDK name: Amap Open Platform Location SDK\n• Third party: Beijing Amap Tuqiang Technology Co., Ltd.\n• Purpose: to provide you with location services\n• Information collected: latitude/longitude, device information (such as IP address, GNSS info, network type, Wi-Fi status/parameters/list/signal strength, Wi-Fi gateway address, SSID, BSSID, base station info, sensor info, device signal strength), OAID, current app info (app name, app version), device parameters and system info (device brand/model, OS, carrier, screen resolution)\n• Collection method: collected locally by the SDK\n• Third-party privacy policy: https://lbs.amap.com/pages/privacy/\nExcept for the Amap SDK above, this app has no server and never uploads, shares, or provides your personal information to any other third party. If you configure an Amap Web Service key under Profile → Location service, check-in coordinates are sent to Amap to look up a nearby place name, also subject to Amap’s privacy policy.'],
     ['3. Data storage & security', '1. Storage location: all check-in data is stored locally within the application sandbox by default; this application operates without central backend servers.\n2. Encryption in transit: check-in coordinates are transmitted over HTTPS when using the Amap SDK for location and reverse geocoding; local data is stored in the app sandbox.\n3. Retention: kept from the time you save it until you clear the data or uninstall the app.\n4. Security: protected by system sandbox isolation and access controls; no centralized account system. If you voluntarily configure third-party WebDAV cloud sync, strongly AES-encrypted backup packages will be synced only to your chosen cloud storage under your full control.'],
     ['4. Data usage', 'Your data is used solely to show you: today’s trips, history, route duration statistics, and check-in records. We do not use it for any other purpose, nor for automated decision-making or profiling.'],

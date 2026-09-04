@@ -26,13 +26,24 @@ function Node({ type }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const pulse = usePulse();
+
   if (type === 'current') {
     return (
       <View style={styles.nodeWrap}>
         <Animated.View
-          style={[styles.nodePulse, { transform: [{ scale: pulse }], opacity: pulse.interpolate({ inputRange: [0.6, 1.6], outputRange: [0.28, 0] }) }]}
+          style={[
+            styles.nodePulse,
+            { transform: [{ scale: pulse }], opacity: pulse.interpolate({ inputRange: [0.6, 1.6], outputRange: [0.28, 0] }) },
+          ]}
         />
         <View style={[styles.node, styles.nodeCurrent]} />
+      </View>
+    );
+  }
+  if (type === 'destination') {
+    return (
+      <View style={styles.nodeWrap}>
+        <View style={[styles.node, styles.nodeDestination]} />
       </View>
     );
   }
@@ -81,11 +92,20 @@ function groupByTrip(records) {
 // 是否有 ≥2 个有效坐标点（≥2 才能连成轨迹，否则不显示「查看地图」）
 const hasCoords = (records) => (records || []).filter(r => r.lat != null && r.lng != null).length >= 2;
 
-export default function Timeline({ records, estimate, onRename, onShowMap }) {
+export default function Timeline({ records, estimate, onRename, onShowMap, hasActiveTrip = false }) {
   const { t, lang } = useI18n();
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const MODE_LABEL = { walk: t('mode.walk'), bike: t('mode.bike'), drive: t('mode.drive'), transit: t('mode.transit') };
+  const MODE_LABEL = {
+    walk: t('mode.walk'),
+    bike: t('mode.bike'),
+    drive: t('mode.drive'),
+    taxi: t('mode.taxi'),
+    subway: t('mode.subway'),
+    transit: t('mode.transit'),
+    train: t('mode.train'),
+    flight: t('mode.flight'),
+    boat: t('mode.boat'),
+  };
 
   if (!records.length) {
     return (
@@ -110,7 +130,8 @@ export default function Timeline({ records, estimate, onRename, onShowMap }) {
   // 每个行程内部：最新点在前
   const renderTrip = (g, gi) => {
     const rev = g.records.slice().reverse(); // 最新在组内前面
-    // 最新行程的组内第一个点 = 全局最新
+    const isLatestTrip = gi === 0;
+
     return (
       <View key={g.tripId}>
         {(showLabels || (onShowMap && hasCoords(g.records))) && (
@@ -127,38 +148,47 @@ export default function Timeline({ records, estimate, onRename, onShowMap }) {
           </View>
         )}
         {rev.map((r, j) => {
-          const isCurrent = gi === 0 && j === 0;
+          const isTripHead = j === 0;
+          // 只有全局最新且当前行程未完结时，才为 current（带呼吸波）；若已完结则为 destination 终点态
+          let nodeType = 'past';
+          if (isTripHead) {
+            if (isLatestTrip && hasActiveTrip) {
+              nodeType = 'current';
+            } else {
+              nodeType = 'destination';
+            }
+          }
+
           const durBelow = j < rev.length - 1 ? (r.timestamp - rev[j + 1].timestamp) / 1000 : null;
+          const isHot = nodeType === 'current';
+
           return (
             <View key={r.id}>
               <View style={styles.row}>
-                <View style={styles.lineCol}><Node type={isCurrent ? 'current' : 'past'} /></View>
+                <View style={styles.lineCol}><Node type={nodeType} /></View>
                 <View style={styles.info}>
-                  <Text style={[styles.time, isCurrent && styles.timeCurrent]}>{formatTime(r.timestamp)}</Text>
+                  <Text style={[styles.time, isHot && styles.timeCurrent]}>{formatTime(r.timestamp)}</Text>
                   <TouchableOpacity style={styles.nameWrap} onPress={() => onRename && onRename(r)} activeOpacity={0.6}>
                     <Text
-                      style={[styles.name, isCurrent && styles.nameCurrent, isPlaceholderName(r.locationName) && styles.namePlaceholder]}
+                      style={[styles.name, isHot && styles.nameCurrent, isPlaceholderName(r.locationName) && styles.namePlaceholder]}
                       numberOfLines={1}
                     >
                       {isPlaceholderName(r.locationName) ? t('common.unnamed') : r.locationName}
                     </Text>
                     <Ionicons name="pencil" size={12} color={colors.ink3} style={styles.nameEditIcon} />
                   </TouchableOpacity>
-                  {r.mode && MODE_LABEL[r.mode] && (
-                    <View style={styles.modeChip}>
-                      <ModeIcon mode={r.mode} size={13} color={colors.ink2} />
-                      <Text style={styles.modeChipText}>{MODE_LABEL[r.mode]}</Text>
-                    </View>
-                  )}
                 </View>
               </View>
-              {isCurrent && estimate && (
+
+              {isHot && estimate && (
                 <React.Fragment>
                   <View style={styles.segmentRow}>
                     <View style={styles.lineCol}><DashedLine /></View>
-                    <Text style={[styles.segmentText, styles.segmentHot]}>
-                      {t('timeline.estimate', { d: formatDuration(estimate.estimatedSec, lang) })}
-                    </Text>
+                    <View style={styles.segmentInfo}>
+                      <Text style={[styles.segmentText, styles.segmentHot]}>
+                        {t('timeline.estimate', { d: formatDuration(estimate.estimatedSec, lang) })}
+                      </Text>
+                    </View>
                   </View>
                   <View style={styles.row}>
                     <View style={styles.lineCol}><Node type="future" /></View>
@@ -169,10 +199,20 @@ export default function Timeline({ records, estimate, onRename, onShowMap }) {
                   </View>
                 </React.Fragment>
               )}
+
               {durBelow != null && (
                 <View style={styles.segmentRow}>
                   <View style={styles.lineCol}><SolidLine /></View>
-                  <Text style={styles.segmentText}>{formatDuration(durBelow, lang)}</Text>
+                  <View style={styles.segmentInfo}>
+                    {r.mode && (
+                      <View style={styles.segmentModeWrap}>
+                        <ModeIcon mode={r.mode} size={12} color={colors.ink2} />
+                        {MODE_LABEL[r.mode] && <Text style={styles.segmentModeText}>{MODE_LABEL[r.mode]}</Text>}
+                      </View>
+                    )}
+                    {r.mode && <Text style={styles.segmentDot}>·</Text>}
+                    <Text style={styles.segmentText}>{formatDuration(durBelow, lang)}</Text>
+                  </View>
                 </View>
               )}
             </View>
@@ -227,6 +267,7 @@ const makeStyles = (colors) => StyleSheet.create({
   node: { width: 12, height: 12, borderRadius: 6 },
   nodePast: { backgroundColor: colors.past },
   nodeCurrent: { backgroundColor: colors.primary, shadowColor: colors.primary, shadowOpacity: 0.35, shadowRadius: 4, elevation: 2 },
+  nodeDestination: { backgroundColor: colors.primaryStrong, shadowColor: colors.primaryStrong, shadowOpacity: 0.25, shadowRadius: 3, elevation: 1 },
   nodeFuture: { backgroundColor: colors.surface, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.ink3 },
   nodePulse: { position: 'absolute', width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primary },
 
@@ -234,17 +275,24 @@ const makeStyles = (colors) => StyleSheet.create({
   time: { fontSize: 13, color: colors.ink2, width: 46, fontVariant: ['tabular-nums'] },
   timeCurrent: { color: colors.primaryStrong, fontWeight: '800', fontSize: 15 },
   name: { fontSize: 14, color: colors.ink2, fontWeight: '500', flex: 1 },
-  nameCurrent: { color: colors.primaryStrong, fontWeight: '800', fontSize: 20 },
+  nameCurrent: { color: colors.primaryStrong, fontWeight: '800', fontSize: 18 },
   nameWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0 },
   namePlaceholder: { color: colors.ink3, fontStyle: 'italic' },
-  nameEditIcon: { marginLeft: 4 },
-  modeChip: { flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 6 },
-  modeChipText: { fontSize: 11, color: colors.ink2 },
+  nameEditIcon: { marginLeft: 6 },
 
   segmentRow: { flexDirection: 'row', alignItems: 'center', height: 34 },
   solidLine: { width: 2, flex: 1, backgroundColor: colors.line2 },
   dashedLine: { width: 2, flex: 1, borderLeftWidth: 2, borderStyle: 'dashed', borderLeftColor: colors.ink3 },
-  segmentText: { fontSize: 12, color: colors.ink3, paddingLeft: 12 },
+  segmentInfo: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: 12, gap: 5,
+  },
+  segmentModeWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: colors.chip, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
+  },
+  segmentModeText: { fontSize: 11, color: colors.ink2, fontWeight: '600' },
+  segmentDot: { fontSize: 12, color: colors.ink3 },
+  segmentText: { fontSize: 12, color: colors.ink3, fontWeight: '500' },
   segmentHot: { color: colors.ink2, fontWeight: '500' },
   timeFuture: { color: colors.ink3 },
   nameFuture: { color: colors.ink3, fontWeight: '500' },

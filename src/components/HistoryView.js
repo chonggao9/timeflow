@@ -8,7 +8,7 @@ import { formatDuration, formatTime, isPlaceholderName } from '../utils/stats';
 import { radius, shadow } from '../theme';
 import ModeIcon from './ModeIcon';
 
-const MODES = ['walk', 'bike', 'drive', 'transit'];
+const MODES = ['walk', 'bike', 'drive', 'taxi', 'subway', 'transit', 'train', 'flight', 'boat'];
 // 未知方式（旧数据可能存了 walk/bike/drive/transit 之外的值）→ 兜底文案
 const modeLabelKey = (mode) => (MODES.includes(mode) ? 'mode.' + mode : 'history.otherMode');
 

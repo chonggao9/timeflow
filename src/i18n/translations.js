@@ -34,6 +34,11 @@ export const translations = {
     // 打卡按钮
     'checkin.btn': '打 卡',
     'checkin.done': '已打卡',
+    'checkin.ended': '行程已完成',
+    'checkin.hint': '轻按打卡 · 长按结束行程',
+    'home.editMode': '出行方式',
+    'trip.markAsEnd': '设为本次行程终点',
+    'trip.endedToast': '当前行程已结束',
 
     // 桌面小组件（widget 内文案与 widgetStrings.js 对齐，此处供 App 侧复用）
     'widget.title': 'TimeFlow',
@@ -130,8 +135,13 @@ export const translations = {
     // 出行方式
     'mode.walk': '步行',
     'mode.bike': '骑行',
-    'mode.drive': '驾车',
+    'mode.drive': '自驾',
+    'mode.taxi': '打车',
+    'mode.subway': '地铁',
     'mode.transit': '公交',
+    'mode.train': '高铁',
+    'mode.flight': '飞机',
+    'mode.boat': '轮渡',
 
     // 时间轴
     'timeline.title': '今日行程',
@@ -307,6 +317,11 @@ export const translations = {
     'home.deleteBtn': 'Delete this check-in',
     'checkin.btn': 'Check In',
     'checkin.done': 'Checked In',
+    'checkin.ended': 'Trip Ended',
+    'checkin.hint': 'Tap to check in · Hold to end trip',
+    'home.editMode': 'Transport',
+    'trip.markAsEnd': 'End trip here',
+    'trip.endedToast': 'Current trip ended',
 
     // Desktop widget (widget strings mirror widgetStrings.js; these are for in-app reuse)
     'widget.title': 'TimeFlow',
@@ -403,7 +418,12 @@ export const translations = {
     'mode.walk': 'Walk',
     'mode.bike': 'Bike',
     'mode.drive': 'Drive',
+    'mode.taxi': 'Taxi',
+    'mode.subway': 'Subway',
     'mode.transit': 'Transit',
+    'mode.train': 'Train',
+    'mode.flight': 'Flight',
+    'mode.boat': 'Boat',
 
     'timeline.title': "Today's route",
     'timeline.elapsed': 'Elapsed {d}',
