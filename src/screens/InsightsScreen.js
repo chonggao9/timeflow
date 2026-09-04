@@ -1,9 +1,9 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getRecords, clearAll } from '../storage/store';
+import { getRecords, clearAll, getRecordsFingerprint } from '../storage/store';
 import { computePathStats, formatDuration } from '../utils/stats';
 import { getPlaceOptions, queryJourney, buildDurationHistogram } from '../utils/analytics';
 import { radius, shadow } from '../theme';
@@ -29,13 +29,33 @@ export default function InsightsScreen() {
   const [result, setResult] = useState(null);
   const [view, setView] = useState('stats'); // 'stats' | 'history'
   const [mapTrip, setMapTrip] = useState(null); // 当前查看地图的行程
+  const lastFingerprintRef = useRef(null);
 
   useFocusEffect(useCallback(() => {
     (async () => {
+      const fp = await getRecordsFingerprint();
+      if (lastFingerprintRef.current === fp) {
+        // 数据未发生任何变动，直接复用已有缓存，零重算耗时（0ms）
+        return;
+      }
+      lastFingerprintRef.current = fp;
       const all = await getRecords();
       setRecords(all);
       setPlaceOptions(getPlaceOptions(all));
-      setPaths(computePathStats(all));
+      const computedPaths = computePathStats(all);
+      setPaths(computedPaths);
+
+      // 智能冷启动预选：如果当前未选择路线且存在已发现路段，自动预填频次最高的路线
+      setFromKey(prevFrom => {
+        if (!prevFrom && computedPaths.length > 0) {
+          const top = computedPaths.find(p => p.fromKey !== p.toKey);
+          if (top) {
+            setToKey(prevTo => prevTo || top.toKey);
+            return top.fromKey;
+          }
+        }
+        return prevFrom;
+      });
     })();
   }, []));
 
@@ -46,8 +66,13 @@ export default function InsightsScreen() {
   }, [fromKey, toKey, records]);
 
   const selectPlace = (key) => {
-    if (pickerFor === 'from') setFromKey(key);
-    else if (pickerFor === 'to') setToKey(key);
+    if (pickerFor === 'from') {
+      setFromKey(key);
+      if (key === toKey) setToKey(null); // 防呆互斥：若与终点冲突，清空终点
+    } else if (pickerFor === 'to') {
+      setToKey(key);
+      if (key === fromKey) setFromKey(null); // 防呆互斥：若与起点冲突，清空起点
+    }
     setPickerFor(null);
   };
 
@@ -58,7 +83,16 @@ export default function InsightsScreen() {
       { text: t('common.cancel'), style: 'cancel' },
       {
         text: t('common.delete'), style: 'destructive',
-        onPress: async () => { await clearAll(); setRecords([]); setPaths([]); setPlaceOptions([]); setResult(null); setFromKey(null); setToKey(null); }
+        onPress: async () => {
+          await clearAll();
+          lastFingerprintRef.current = null;
+          setRecords([]);
+          setPaths([]);
+          setPlaceOptions([]);
+          setResult(null);
+          setFromKey(null);
+          setToKey(null);
+        }
       },
     ]);
   };
@@ -185,11 +219,13 @@ export default function InsightsScreen() {
                     xLabels={[{ index: 0, text: t('insights.weekAgo') }, { index: 7, text: t('insights.thisWeek') }]} />
                 </View>
               </View>
-            ) : (
-              fromKey && toKey ? (
+            ) : fromKey && toKey ? (
+              fromKey === toKey ? (
+                <Text style={[styles.noData, { color: colors.danger }]}>{t('insights.samePlaceError')}</Text>
+              ) : (
                 <Text style={styles.noData}>{t('insights.noData')}。{t('insights.noDataHint')}</Text>
-              ) : null
-            )}
+              )
+            ) : null}
           </View>
 
           {/* 路段规律列表 */}
@@ -226,12 +262,47 @@ export default function InsightsScreen() {
           <View style={styles.dialog}>
             <Text style={styles.dialogTitle}>{pickerFor === 'from' ? t('insights.from') : t('insights.to')}</Text>
             <ScrollView style={styles.placeList} showsVerticalScrollIndicator={false}>
-              {placeOptions.map(o => (
-                <TouchableOpacity key={o.key} style={styles.placeOption} onPress={() => selectPlace(o.key)} activeOpacity={0.7}>
-                  <Text style={styles.placeOptionText} numberOfLines={1}>{o.name}</Text>
-                  <Text style={styles.placeOptionCount}>{t('insights.placeTimes', { n: o.count })}</Text>
-                </TouchableOpacity>
-              ))}
+              {placeOptions.map(o => {
+                const isSelected = (pickerFor === 'from' && o.key === fromKey) || (pickerFor === 'to' && o.key === toKey);
+                const isOpposing = (pickerFor === 'from' && o.key === toKey) || (pickerFor === 'to' && o.key === fromKey);
+                return (
+                  <TouchableOpacity
+                    key={o.key}
+                    style={[
+                      styles.placeOption,
+                      isSelected && styles.placeOptionActive,
+                      isOpposing && styles.placeOptionDisabled,
+                    ]}
+                    onPress={() => !isOpposing && selectPlace(o.key)}
+                    disabled={isOpposing}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.placeOptionLeft}>
+                      {isSelected && <Ionicons name="checkmark-circle" size={17} color={colors.primary} style={{ marginRight: 6 }} />}
+                      <Text
+                        style={[
+                          styles.placeOptionText,
+                          isSelected && styles.placeOptionTextActive,
+                          isOpposing && styles.placeOptionTextDisabled,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {o.name}
+                      </Text>
+                      {isOpposing && (
+                        <View style={styles.opposingTag}>
+                          <Text style={styles.opposingTagText}>
+                            {pickerFor === 'from' ? t('insights.to') : t('insights.from')}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.placeOptionCount, isOpposing && { opacity: 0.5 }]}>
+                      {t('insights.placeTimes', { n: o.count })}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
             <TouchableOpacity style={styles.dialogCancel} onPress={() => setPickerFor(null)}>
               <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
@@ -333,7 +404,35 @@ const makeStyles = (colors) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 13, paddingHorizontal: 12, borderRadius: 12,
   },
-  placeOptionText: { fontSize: 15, color: colors.ink, flex: 1, marginRight: 8 },
+  placeOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  placeOptionActive: {
+    backgroundColor: colors.primarySofter,
+  },
+  placeOptionText: { fontSize: 15, color: colors.ink, flex: 1 },
+  placeOptionTextActive: { color: colors.primaryStrong, fontWeight: '700' },
+  placeOptionDisabled: {
+    opacity: 0.42,
+  },
+  placeOptionTextDisabled: {
+    color: colors.ink3,
+  },
+  opposingTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: colors.line,
+    marginLeft: 6,
+  },
+  opposingTagText: {
+    fontSize: 10,
+    color: colors.ink3,
+    fontWeight: '600',
+  },
   placeOptionCount: { fontSize: 12, color: colors.ink3 },
   dialogCancel: {
     marginTop: 8, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center',

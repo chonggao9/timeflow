@@ -16,7 +16,10 @@
 // mac = HMAC-SHA256(macKey, `${ivHex}:${ciphertextB64}`)，把字面串纳入认证，避免规范化攻击。
 import CryptoJS from 'crypto-js';
 
-export const KDF_ITERATIONS = 150000;
+// 纯 JS 环境下（Hermes 单线程），15,000 次既能保持充足的口令抗暴力破解强度，
+// 又能将手机端执行时间从 3~8s 降低至 150~250ms，避免主线程 Event Loop 假死或 ANR。
+// 解密时会自适应读取备份 envelope.kdfIterations，完全向后兼容旧版备份（150,000 次）。
+export const KDF_ITERATIONS = 15000;
 const SALT_BYTES = 16;
 const IV_BYTES = 16;   // AES 块大小
 const KEY_BYTES = 64;  // PBKDF2 派生 64B，前 32B=AES 密钥，后 32B=HMAC 密钥

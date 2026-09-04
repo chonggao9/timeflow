@@ -69,6 +69,28 @@ export function queryJourney(records, fromKey, toKey) {
     }
   }
 
+  // 补充跨行程但时间连续（<=3小时内直接相邻打卡）的样本，避免误触结束行程导致通勤样本断裂
+  const allSorted = [...records].sort((a, b) => a.timestamp - b.timestamp);
+  for (let i = 0; i < allSorted.length - 1; i++) {
+    const s = allSorted[i], e = allSorted[i + 1];
+    if (placeKey(s) === fromKey && placeKey(e) === toKey) {
+      const duration = e.timestamp - s.timestamp;
+      if (duration > 0 && duration <= 3 * 3600 * 1000) {
+        const already = spans.some(sp => sp.startTs === s.timestamp && Math.abs(sp.duration - duration) < 1000);
+        if (!already) {
+          spans.push({
+            duration,
+            startTs: s.timestamp,
+            hour: new Date(s.timestamp).getHours(),
+            mode: s.mode || e.mode || 'walk',
+            keys: [fromKey, toKey],
+            segs: [{ fromKey, toKey, sec: duration / 1000 }],
+          });
+        }
+      }
+    }
+  }
+
   if (!spans.length) return null;
 
   const durations = spans.map(s => s.duration).sort((a, b) => a - b);

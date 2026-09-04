@@ -6,6 +6,8 @@ import * as SQLite from 'expo-sqlite';
 
 const RECORDS_KEY = 'timeflow_records';
 const TRIP_KEY = 'timeflow_current_trip';
+const LAST_CHECKIN_TS_KEY = 'timeflow_last_checkin_ts';
+const TRIP_TIMEOUT_MS = 3 * 60 * 60 * 1000; // 3小时无打卡自动断开行程
 const MODE_KEY = 'timeflow_mode';
 
 // 旧数据无 tripId，统一归为该值（一条历史行程）
@@ -73,22 +75,39 @@ function dayStart(ts) {
 }
 
 export async function getCurrentTripId() {
-  try { return await AsyncStorage.getItem(TRIP_KEY) || null; } catch (e) { return null; }
+  try {
+    const id = await AsyncStorage.getItem(TRIP_KEY);
+    if (!id) return null;
+    const raw = await AsyncStorage.getItem(LAST_CHECKIN_TS_KEY);
+    if (!raw) return id; // 兼容无时间戳旧数据
+    const lastTs = Number(raw);
+    const now = Date.now();
+    if (now - lastTs > TRIP_TIMEOUT_MS || dayStart(now) !== dayStart(lastTs)) {
+      // 已超时（>3小时）或跨越自然日，自动关闭旧行程
+      await AsyncStorage.multiRemove([TRIP_KEY, LAST_CHECKIN_TS_KEY]);
+      return null;
+    }
+    return id;
+  } catch (e) {
+    return null;
+  }
 }
 
-// 获取当前行程，没有则新建一个
+// 获取当前行程，超时（>3小时）或跨越自然日自动新建行程
 export async function ensureTrip() {
+  const now = Date.now();
   let id = await getCurrentTripId();
   if (!id) {
     id = makeTripId();
     await AsyncStorage.setItem(TRIP_KEY, id);
   }
+  await AsyncStorage.setItem(LAST_CHECKIN_TS_KEY, String(now));
   return id;
 }
 
-// 结束当前行程：清空标识，下次打卡自动新建行程
+// 结束当前行程：清空标识与时间戳，下次打卡自动新建行程
 export async function endTrip() {
-  await AsyncStorage.removeItem(TRIP_KEY);
+  await AsyncStorage.multiRemove([TRIP_KEY, LAST_CHECKIN_TS_KEY]);
 }
 
 // 记住/读取上次出行方式
@@ -128,6 +147,20 @@ export async function getTodayRecords() {
     `SELECT ${COLS} FROM records WHERE timestamp >= ? AND timestamp < ? ORDER BY timestamp ASC`,
     start, end.getTime()
   );
+}
+
+// 根据 ID 获取单条打卡记录（用于补位前校验状态或删除防护）
+export async function getRecordById(id) {
+  if (!id) return null;
+  const db = await getDb();
+  return db.getFirstAsync(`SELECT ${COLS} FROM records WHERE id = ?`, id);
+}
+
+// 获取数据指纹（总数 + 最新时间戳），极速用于缓存对比（<1ms）
+export async function getRecordsFingerprint() {
+  const db = await getDb();
+  const row = await db.getFirstAsync('SELECT COUNT(*) AS count, COALESCE(MAX(timestamp), 0) AS maxTs FROM records');
+  return `${row?.count || 0}:${row?.maxTs || 0}`;
 }
 
 // patch 驼峰键 → 表列名

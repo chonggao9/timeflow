@@ -28,15 +28,19 @@ async function checkInFromWidget() {
       tripId,
     });
 
-    // 后台补位：先取最近已知坐标（尽量秒级），失败则不阻塞打卡
+    // 后台补位：先取最近已知坐标（限定 5 分钟内时效，避免绑定数天前跨城陈旧坐标）
     try {
-      const cached = await Location.getLastKnownPositionAsync({});
+      const MAX_AGE_MS = 5 * 60 * 1000;
+      const cached = await Location.getLastKnownPositionAsync({ maxAge: MAX_AGE_MS });
       if (cached && cached.coords) {
-        const lat = cached.coords.latitude;
-        const lng = cached.coords.longitude;
-        let addr = cached.address;
-        if (!addr) addr = await reverseGeocodeWithTimeout(lat, lng);
-        await updateRecord(id, { lat, lng, ...(addr ? { locationName: addr } : {}) });
+        const isFresh = !cached.timestamp || (Date.now() - cached.timestamp < MAX_AGE_MS);
+        if (isFresh) {
+          const lat = cached.coords.latitude;
+          const lng = cached.coords.longitude;
+          let addr = cached.address;
+          if (!addr) addr = await reverseGeocodeWithTimeout(lat, lng);
+          await updateRecord(id, { lat, lng, ...(addr ? { locationName: addr } : {}) });
+        }
       }
     } catch (e) {
       /* 补位失败不阻塞：记录照常在，坐标地名留待 App 下次打开时补 */
@@ -52,6 +56,8 @@ async function renderWidget(props) {
   props.renderWidget(<TimeFlowWidget data={data} colors={colors} strings={strings} />);
 }
 
+let lastWidgetCheckInTime = 0;
+
 export const widgetTaskHandler = async (props) => {
   const { widgetAction, clickAction } = props;
   switch (widgetAction) {
@@ -63,6 +69,9 @@ export const widgetTaskHandler = async (props) => {
     case 'WIDGET_CLICK':
       // 只认「打卡」这个自定义 clickAction；其余（OPEN_APP/OPEN_URI）由原生处理，不进这里
       if (clickAction === 'checkIn') {
+        const now = Date.now();
+        if (now - lastWidgetCheckInTime < 2000) return; // 2 秒防抖，避免重复打卡
+        lastWidgetCheckInTime = now;
         await checkInFromWidget();
         await renderWidget(props); // 打卡后刷新，反映最新次数/时间
       }

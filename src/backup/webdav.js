@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import CryptoJS from 'crypto-js';
+import { withTimeout } from '../utils/withTimeout';
 
 const CONFIG_KEY = 'timeflow_webdav';
 const PASS_KEY = 'timeflow_webdav_password';
@@ -48,16 +49,22 @@ function resolveUrl(config) {
 
 // 底层请求：Basic Auth + JSON；按 HTTP 状态映射成 WebDavError.code。
 // 成功（res.ok）返回 Response；401/403=auth，404=notFound，412=conflict，5xx=server，其它=unknown，网络异常=network。
-async function fetchWebDav(method, url, body, config, pass) {
+async function fetchWebDav(method, url, body, config, pass, timeoutMs = 12000) {
   const authHeader = 'Basic ' + CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${config.username}:${pass}`));
   let res;
   try {
-    res = await fetch(url, {
-      method,
-      headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
-      body: method === 'PUT' ? body : undefined,
-    });
+    res = await withTimeout(
+      fetch(url, {
+        method,
+        headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+        body: method === 'PUT' ? body : undefined,
+      }),
+      timeoutMs
+    );
   } catch (e) {
+    if (e && e.message === 'timeout') {
+      throw new WebDavError('network', 'timeout');
+    }
     throw new WebDavError('network', (e && e.message) || String(e));
   }
   if (res.ok) return res;

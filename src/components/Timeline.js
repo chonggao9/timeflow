@@ -116,7 +116,7 @@ export default function Timeline({ records, estimate, onRename, onShowMap }) {
         {(showLabels || (onShowMap && hasCoords(g.records))) && (
           <View style={styles.tripLabelRow}>
             {showLabels ? (
-              <Text style={styles.tripLabel}>{g.tripId === LEGACY ? t('timeline.legacy') : `${t('timeline.trip')} ${gi + 1}`}</Text>
+              <Text style={styles.tripLabel}>{g.tripId === LEGACY ? t('timeline.legacy') : `${t('timeline.trip')} ${groups.length - gi}`}</Text>
             ) : null}
             <View style={styles.tripLabelFlex} />
             {onShowMap && hasCoords(g.records) ? (

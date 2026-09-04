@@ -87,6 +87,27 @@ export function computePathStats(allRecords) {
     }
   }
 
+  // 补充跨行程但时间紧邻（<=3小时内相邻打卡）的路段，避免误触结束行程导致通勤数据丢失
+  const allSorted = [...allRecords].sort((a, b) => a.timestamp - b.timestamp);
+  for (let i = 0; i < allSorted.length - 1; i++) {
+    const from = allSorted[i], to = allSorted[i + 1];
+    const tripFrom = from.tripId || LEGACY_TRIP;
+    const tripTo = to.tripId || LEGACY_TRIP;
+    if (tripFrom !== tripTo) {
+      const sec = (to.timestamp - from.timestamp) / 1000;
+      if (sec > 0 && sec <= 3 * 3600) {
+        const fromKey = placeKey(from), toKey = placeKey(to);
+        if (fromKey !== toKey) {
+          const key = `${fromKey}→${toKey}|${to.mode || 'unknown'}`;
+          if (!pathMap[key]) {
+            pathMap[key] = { fromKey, toKey, mode: to.mode, durations: [] };
+          }
+          pathMap[key].durations.push(sec);
+        }
+      }
+    }
+  }
+
   return Object.values(pathMap).map(p => {
     const clean = filterOutliers(p.durations);
     const sorted = [...clean].sort((a, b) => a - b);

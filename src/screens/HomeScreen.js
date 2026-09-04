@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity, Linking, ActivityIndicator, Vibration,
+  View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity, Linking, ActivityIndicator, Vibration, AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  saveRecord, getRecords, getTodayRecords, updateRecord, deleteRecord, ensureTrip, endTrip,
-  getCurrentTripId, getLastMode, setLastMode,
+  saveRecord, getRecords, getTodayRecords, getRecordById, updateRecord, deleteRecord, ensureTrip, endTrip,
+  getCurrentTripId, getLastMode, setLastMode, getRecordsFingerprint,
 } from '../storage/store';
-import { computePathStats, placeKey, UNNAMED } from '../utils/stats';
+import { computePathStats, placeKey, UNNAMED, isPlaceholderName } from '../utils/stats';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import { getPositionFast, reverseGeocodeWithTimeout } from '../utils/location';
@@ -37,6 +37,8 @@ export default function HomeScreen() {
   const [locStatus, setLocStatus] = useState(null); // null | 'pending' | 'denied' | 'services' | 'failed'
   const locTargetRef = useRef(null);
   const fillSeqRef = useRef(0); // 补位序号：状态条只反映最新一次补位
+  const checkingInRef = useRef(false); // 同步原子锁：防毫秒级极速快速双击造成重复打卡
+  const pathStatsCacheRef = useRef({ fp: null, stats: [] }); // 预估耗时计算缓存
 
   const [renameTarget, setRenameTarget] = useState(null);
   const [draftName, setDraftName] = useState('');
@@ -58,12 +60,35 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => { loadToday(); }, [loadToday]));
 
-  // 计算预估：从最后一个点出发的最常见路段（按坐标格点匹配）
+  // 前台唤醒：若10分钟内最新一次打卡仍处于无坐标状态（如地库打卡后走出室外），自动尝试静默补位一次
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      if (nextState === 'active') {
+        await loadToday();
+        const today = await getTodayRecords();
+        if (today && today.length) {
+          const latest = today[today.length - 1];
+          const age = Date.now() - latest.timestamp;
+          if ((latest.lat == null || latest.lng == null) && age < 10 * 60 * 1000) {
+            fillLocation(latest.id);
+          }
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [loadToday]);
+
+  // 计算预估：从最后一个点出发的最常见路段（带指纹缓存，避免每次打卡全量重算）
   useEffect(() => {
     if (records.length < 1) { setEstimate(null); return; }
     (async () => {
-      const all = await getRecords();
-      const stats = computePathStats(all);
+      const fp = await getRecordsFingerprint();
+      let stats = pathStatsCacheRef.current.stats;
+      if (pathStatsCacheRef.current.fp !== fp || !stats.length) {
+        const all = await getRecords();
+        stats = computePathStats(all);
+        pathStatsCacheRef.current = { fp, stats };
+      }
       if (!stats.length) { setEstimate(null); return; }
       const last = records[records.length - 1];
       const key = placeKey(last);
@@ -78,6 +103,8 @@ export default function HomeScreen() {
 
   // 一键打卡：加入当前行程。立即落库（秒完成），坐标 + 地名后台异步补。
   const handleCheckIn = async () => {
+    if (checkingInRef.current) return;
+    checkingInRef.current = true;
     setLoading(true);
     const tnow = Date.now();
     try {
@@ -99,6 +126,8 @@ export default function HomeScreen() {
       setLoading(false);
       Vibration.vibrate([0, 40, 30, 40]); // 双震：保存失败
       Alert.alert(t('home.failTitle'), t('home.failBody'));
+    } finally {
+      setTimeout(() => { checkingInRef.current = false; }, 1000); // 1秒冷却锁
     }
   };
 
@@ -137,8 +166,19 @@ export default function HomeScreen() {
       }
       log('step3b 地名 =', addr);
 
+      // 检查记录当前状态：若在定位反查期间已被删除或用户已手动重命名，则避免破坏
+      const current = await getRecordById(id);
+      if (!current) {
+        log('step4 记录已被删除，跳过写库');
+        if (!isStale()) setLocStatus(null);
+        return;
+      }
+
       const patch = { lat, lng };
-      if (addr) patch.locationName = addr;
+      // 仅在当前地名仍为占位名（未命名）时回写反查地名；若用户已手动重命名则保留用户自定义地名
+      if (addr && isPlaceholderName(current.locationName)) {
+        patch.locationName = addr;
+      }
       await updateRecord(id, patch);
       log('step4 写库完成');
       await loadToday(); // 旧补位也刷新，把已解析的地名补上
@@ -167,11 +207,24 @@ export default function HomeScreen() {
     }
   };
 
-  // 结束当前行程
-  const handleEndTrip = async () => {
-    await endTrip();
-    await loadToday();
-    Alert.alert(t('trip.endedTitle'), t('trip.ended'));
+  // 结束当前行程（二次确认防误触）
+  const handleEndTrip = () => {
+    Alert.alert(
+      t('trip.endConfirmTitle'),
+      t('trip.endConfirmBody'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('trip.end'),
+          style: 'destructive',
+          onPress: async () => {
+            await endTrip();
+            await loadToday();
+            Alert.alert(t('trip.endedTitle'), t('trip.ended'));
+          },
+        },
+      ]
+    );
   };
 
   // ---- 地名编辑 ----
