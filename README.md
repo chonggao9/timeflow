@@ -1,5 +1,10 @@
 # TimeFlow · 时光流
 
+[![GitHub Release](https://img.shields.io/github/v/release/chonggao9/timeflow?color=FF6B6B&style=flat-square)](https://github.com/chonggao9/timeflow/releases/latest)
+[![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square)](#平台支持)
+
+> [📥 **点击直接下载最新 Android 安装包 (v1.0.20 APK)**](https://github.com/chonggao9/timeflow/releases/download/v1.0.20/timeflow-v1.0.20.apk)
+
 极简时间打卡 App，基于 Expo (React Native) + SQLite，支持高德/系统（Google）双兼容定位，数据全本地存储。
 
 ## 功能特性
@@ -14,6 +19,11 @@
 - **深色模式 / 多语言**：跟随系统 / 浅色 / 深色，中文 / English 双语
 - **定位排查**：逐项自检高德与原生定位链路，显示具体失败原因与快速修复入口
 - **数据备份 + 云同步**：全部打卡记录与设备偏好加密成备份文件，可本地保存 / 分享，或配置自带的 WebDAV（坚果云 / Nextcloud）自动上传，换机也能安全恢复
+
+## 平台支持
+
+- **Android**：完整支持。集成高德定位原生模块、Google Maps 瓦片地图、Android 桌面小组件（Widget）。
+- **iOS**：暂不支持。项目依赖定制的 Kotlin 原生定位模块 `modules/amap-location`，目前尚未提供 iOS 原生桥接层，请勿直接在 iOS 环境下构建运行。
 
 ## 技术栈
 
@@ -134,3 +144,13 @@ npm run release -- --commit --push
 
 - 公开页：https://chonggao9.github.io/timeflow/privacy.html
 - 源码：`privacy.html`（与 app 内 `PrivacyAgreement.js` 内容一致）
+
+## 版本记录
+
+### v1.0.20 (2026-09-04)
+- **打卡交互重构**：打卡按钮全宽居中，轻按记录途经点，长按（>500ms）一步记录终点并完结行程；智能超时断程调整至 90 分钟。
+- **扩展 9 大出行方式**：新增打车、轮渡、地铁、飞机等，支持平滑水平滚动胶囊栏与自动居中聚焦记忆。
+- **时间轴与视觉优化**：线段化呈现位移与耗时标签，终点状态与活跃行程区分更清晰。
+- **合规升级**：同步更新《隐私政策》（包括内置协议与公开网页版），全面披露出行方式与 WebDAV 自主云同步。
+
+
