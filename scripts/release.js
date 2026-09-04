@@ -144,7 +144,7 @@ async function gh(url, opts = {}) {
       body: JSON.stringify({
         tag_name: `v${next}`,
         name: `v${next}`,
-        body: `TimeFlow v${next}\n\n安装：下载下方 APK。`,
+        body: `TimeFlow v${next}\n\n### 🚀 更新内容\n- **打卡交互重构**：移除常驻结束按钮，全宽居中主按钮；轻按打卡，长按一步结程（免二次弹窗确认）；\n- **智能超时兜底**：行程断开阈值优化为 90 分钟，自适应停留切分新行程；\n- **9 大出行方式扩展**：新增打车、地铁、高铁、飞机、轮渡，覆盖日常通勤与城际差旅全场景；\n- **水平滚动胶囊栏**：平滑手感、自动记忆居中聚焦，时间轴连线上呈现出行方式与耗时；\n- **隐私协议更新**：如实同步 9 种出行方式枚举与 WebDAV 自主云同步披露。\n\n安装：下载下方 APK 即可直接安装。`,
         draft: false,
         prerelease: false,
       }),
