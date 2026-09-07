@@ -3,7 +3,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/chonggao9/timeflow?color=FF6B6B&style=flat-square)](https://github.com/chonggao9/timeflow/releases/latest)
 [![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square)](#平台支持)
 
-> [📥 **点击直接下载最新 Android 安装包 (v1.0.21 APK)**](https://github.com/chonggao9/timeflow/releases/download/v1.0.21/timeflow-v1.0.21.apk)
+> [📥 **点击直接下载最新 Android 安装包 (v1.0.22 APK)**](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.apk)
 
 极简时间打卡 App，基于 Expo (React Native) + SQLite，支持高德/系统（Google）双兼容定位，数据全本地存储。
 
@@ -146,6 +146,19 @@ npm run release -- --commit --push
 - 源码：`privacy.html`（与 app 内 `PrivacyAgreement.js` 内容一致）
 
 ## 版本记录
+
+### v1.0.22 (2026-09-07)
+- **UI 全面焕新升级**：引入现代流体卡片设计、暖色双板质感、动态水波纹打卡主按钮与悬浮灵动定位胶囊状态条。
+- **补记打卡（方向 A）**：支持离线/遗漏场景下的快捷补记打卡，具备时间偏移选取、常用地点快选与出行方式指定能力。
+- **弱网与离线地点快选**：重命名与补卡模态框内自动提取历史高频地点 Chip，弱网环境下秒级一触即选。
+- **桌面小组件规范对齐**：全面同步上下内嵌流体卡片视觉体系，增加出行方式 Emoji 动态映射与最新地点实时时间同步。
+- **全方位代码审查与架构优化**：
+  - 修复补卡未刷新行程活跃时间戳 (BUG-1)；
+  - 消除切回前台双重 SQLite 查库，提速 App 唤醒渲染 (BUG-2)；
+  - 补全轨迹查看按钮国际化词条 (BUG-3)；
+  - 补卡保存增加原子防重锁与防抖冷却 (Q-4)；
+  - 时间轴脉冲动画抽离并按需挂载，消除历史节点冗余动效循环 (Q-3)；
+  - 统一小组件占位符规范为 `{n}`，强化模态框 Chip 键名唯一性 (Q-1, Q-2, Q-5)。
 
 ### v1.0.21 (2026-09-04)
 - **稳定性紧急修复**：修复时间轴组件缺失样式声明导致的冷启动空白崩溃异常。
