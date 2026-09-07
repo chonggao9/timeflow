@@ -26,16 +26,22 @@ function TabNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
+        tabBarActiveTintColor: colors.primaryStrong,
         tabBarInactiveTintColor: colors.ink3,
         tabBarStyle: {
-          backgroundColor: colors.bg,
+          backgroundColor: colors.surface,
           borderTopColor: colors.line,
-          height: 56 + insets.bottom,
-          paddingBottom: insets.bottom,
-          elevation: 0,
+          borderTopWidth: 1,
+          height: 58 + insets.bottom,
+          paddingTop: 6,
+          paddingBottom: Math.max(insets.bottom, 6),
+          elevation: 4,
+          shadowColor: colors.ink,
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.04,
+          shadowRadius: 6,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '700', marginTop: 2 },
         sceneStyle: { backgroundColor: colors.bg },
       }}
     >
@@ -45,7 +51,7 @@ function TabNavigator() {
         options={{
           tabBarLabel: t('tab.checkin'),
           tabBarIcon: ({ focused }) => (
-            <Ionicons name={focused ? 'time' : 'time-outline'} size={24} color={focused ? colors.primary : colors.ink3} />
+            <Ionicons name={focused ? 'time' : 'time-outline'} size={23} color={focused ? colors.primaryStrong : colors.ink3} />
           ),
         }}
       />
@@ -55,7 +61,7 @@ function TabNavigator() {
         options={{
           tabBarLabel: t('tab.insights'),
           tabBarIcon: ({ focused }) => (
-            <Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={24} color={focused ? colors.primary : colors.ink3} />
+            <Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={23} color={focused ? colors.primaryStrong : colors.ink3} />
           ),
         }}
       />
@@ -65,7 +71,7 @@ function TabNavigator() {
         options={{
           tabBarLabel: t('tab.profile'),
           tabBarIcon: ({ focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={focused ? colors.primary : colors.ink3} />
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={23} color={focused ? colors.primaryStrong : colors.ink3} />
           ),
         }}
       />

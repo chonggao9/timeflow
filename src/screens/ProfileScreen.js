@@ -1013,31 +1013,44 @@ export default function ProfileScreen() {
 
 const makeStyles = (colors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: 20, paddingBottom: 6 },
-  title: { fontSize: 26, fontWeight: '800', color: colors.ink, letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, color: colors.ink2, marginTop: 3 },
+  header: { paddingHorizontal: 20, paddingBottom: 8 },
+  title: { fontSize: 28, fontWeight: '800', color: colors.ink, letterSpacing: -0.6, lineHeight: 32 },
+  subtitle: { fontSize: 13, color: colors.ink2, marginTop: 4, fontWeight: '500' },
 
   content: { padding: 16, paddingBottom: 40 },
-  section: { fontSize: 13, color: colors.ink2, fontWeight: '700', letterSpacing: 0.4, marginBottom: 10, marginTop: 4, marginLeft: 4 },
+  section: { fontSize: 13, color: colors.ink2, fontWeight: '700', letterSpacing: 0.3, marginBottom: 8, marginTop: 6, marginLeft: 4 },
 
-  card: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: 12, marginBottom: 20, ...shadow.sm },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadow.card,
+  },
 
   nicknameRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 6 },
   avatar: {
-    width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.sm,
   },
   nicknameInputWrap: { flex: 1 },
-  nicknameLabel: { fontSize: 12, color: colors.ink3 },
-  nicknameInput: { fontSize: 16, color: colors.ink, paddingVertical: 4 },
+  nicknameLabel: { fontSize: 11, color: colors.ink3, fontWeight: '600' },
+  nicknameInput: { fontSize: 16, color: colors.ink, paddingVertical: 4, fontWeight: '600' },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 6 },
-  rowIcon: { width: 28, height: 28, borderRadius: 8, backgroundColor: colors.primarySofter, alignItems: 'center', justifyContent: 'center' },
-  rowLabel: { flex: 1, fontSize: 15, color: colors.ink, fontWeight: '600' },
-  rowValue: { fontSize: 13, color: colors.ink3, marginRight: 4 },
+  rowIcon: { width: 30, height: 30, borderRadius: 9, backgroundColor: colors.primarySofter, alignItems: 'center', justifyContent: 'center' },
+  rowLabel: { flex: 1, fontSize: 14.5, color: colors.ink, fontWeight: '600' },
+  rowValue: { fontSize: 13, color: colors.ink3, marginRight: 4, fontWeight: '500' },
   divider: { height: 1, backgroundColor: colors.line, marginHorizontal: 6 },
 
-  footer: { textAlign: 'center', fontSize: 12, color: colors.ink3, marginTop: 8 },
+  footer: { textAlign: 'center', fontSize: 12, color: colors.ink3, marginTop: 8, fontWeight: '500' },
 
   overlay: {
     flex: 1, backgroundColor: colors.scrim,

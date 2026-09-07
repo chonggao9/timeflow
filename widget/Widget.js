@@ -1,6 +1,7 @@
 // 桌面小组件的 JSX 视图（用 react-native-android-widget 的 RN 组件）。
 // 方案 2：上下内嵌卡片式（In-Card Flow，规整严密、层次清晰、单手盲操更佳）
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
+import { MODE_EMOJIS } from './widgetStrings';
 
 export function TimeFlowWidget({ data, colors, strings }) {
   const bg = colors.bg;
@@ -22,6 +23,7 @@ export function TimeFlowWidget({ data, colors, strings }) {
         : strings.placeEmpty)
     : null;
   const latestTime = maybeLatest ? data.fmt(maybeLatest.timestamp) : null;
+  const modeEmoji = maybeLatest?.mode ? (MODE_EMOJIS[maybeLatest.mode] || '📍') : '📍';
 
   return (
     <FlexWidget
@@ -29,9 +31,9 @@ export function TimeFlowWidget({ data, colors, strings }) {
         height: 'match_parent',
         width: 'match_parent',
         backgroundColor: bg,
-        borderRadius: 22,
+        borderRadius: 24,
         flexDirection: 'column',
-        padding: 14,
+        padding: 13,
         justifyContent: 'space-between',
       }}
     >
@@ -48,11 +50,11 @@ export function TimeFlowWidget({ data, colors, strings }) {
         <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
           <TextWidget
             text="✦ "
-            style={{ fontSize: 13, fontWeight: '700', color: primary }}
+            style={{ fontSize: 13, fontWeight: '800', color: primary }}
           />
           <TextWidget
             text={strings.title}
-            style={{ fontSize: 14, fontWeight: '700', color: ink }}
+            style={{ fontSize: 13.5, fontWeight: '800', color: ink }}
           />
         </FlexWidget>
 
@@ -64,66 +66,66 @@ export function TimeFlowWidget({ data, colors, strings }) {
             backgroundColor: surface,
             borderRadius: 12,
             paddingHorizontal: 8,
-            paddingVertical: 3,
+            paddingVertical: 3.5,
           }}
         >
           <TextWidget
             text={count > 0 ? '● ' : '○ '}
-            style={{ fontSize: 10, color: count > 0 ? success : ink3 }}
+            style={{ fontSize: 9.5, color: count > 0 ? success : ink3 }}
           />
           <TextWidget
             text={count > 0 ? strings.checkedIn : strings.notYet}
-            style={{ fontSize: 12, fontWeight: '700', color: ink }}
+            style={{ fontSize: 11.5, fontWeight: '700', color: ink }}
           />
           {count > 0 ? (
             <TextWidget
-              text={` · ${strings.count.replace('${n}', String(count))}`}
-              style={{ fontSize: 11, color: ink2 }}
+              text={` · ${(strings.count || '').replace('{n}', String(count)).replace('${n}', String(count))}`}
+              style={{ fontSize: 11, color: ink2, fontWeight: '500' }}
             />
           ) : null}
         </FlexWidget>
       </FlexWidget>
 
-      {/* 2. 中部：内嵌信息卡片（消除空间空洞的核心） */}
+      {/* 2. 中部：内嵌流体卡片（展示最近地点 + 交通方式 + 时间） */}
       <FlexWidget
         style={{
           width: 'match_parent',
           backgroundColor: surface,
-          borderRadius: 14,
+          borderRadius: 16,
           paddingHorizontal: 12,
-          paddingVertical: 8,
+          paddingVertical: 9,
           flexDirection: 'column',
           justifyContent: 'center',
-          marginVertical: 6,
+          marginVertical: 5,
           flex: 1,
         }}
       >
         {count > 0 ? (
           <FlexWidget style={{ flexDirection: 'column', width: 'match_parent' }}>
-            {/* 卡片内首行：最近地点标签 + 最新时间 */}
+            {/* 卡片内首行：出行方式 + 最近地点标签 + 最新时间 */}
             <FlexWidget
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 width: 'match_parent',
-                marginBottom: 2,
+                marginBottom: 3,
               }}
             >
               <TextWidget
-                text={`📍 ${strings.recentPlace}`}
+                text={`${modeEmoji} ${strings.recentPlace}`}
                 style={{ fontSize: 11, color: ink3, fontWeight: '600' }}
               />
               <TextWidget
                 text={latestTime || ''}
-                style={{ fontSize: 11, color: primary, fontWeight: '700' }}
+                style={{ fontSize: 11.5, color: primary, fontWeight: '700' }}
               />
             </FlexWidget>
 
             {/* 卡片内次行：具体地点名称 */}
             <TextWidget
               text={place || strings.placeEmpty}
-              style={{ fontSize: 13, fontWeight: '700', color: ink }}
+              style={{ fontSize: 13.5, fontWeight: '800', color: ink }}
               maxLines={1}
               truncate="END"
             />
@@ -132,7 +134,7 @@ export function TimeFlowWidget({ data, colors, strings }) {
           <FlexWidget style={{ flexDirection: 'column', width: 'match_parent', alignItems: 'center' }}>
             <TextWidget
               text={strings.emptyPrompt}
-              style={{ fontSize: 12, fontWeight: '600', color: ink2 }}
+              style={{ fontSize: 12, fontWeight: '700', color: ink2 }}
             />
             <TextWidget
               text={strings.emptySub}
@@ -157,7 +159,7 @@ export function TimeFlowWidget({ data, colors, strings }) {
         <TextWidget
           text={strings.checkinBtn}
           style={{
-            fontSize: 14,
+            fontSize: 13.5,
             fontWeight: '800',
             color: '#FFFFFF',
           }}

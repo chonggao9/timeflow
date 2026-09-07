@@ -137,6 +137,56 @@ export default function InsightsScreen() {
         </View>
       ) : (
         <>
+          {/* 出行总览指标看板 */}
+          <View style={styles.overviewGrid}>
+            <View style={styles.overviewCard}>
+              <Text style={styles.overviewNum}>{records.length}</Text>
+              <Text style={styles.overviewLabel}>{t('insights.totalRecords')}</Text>
+            </View>
+            <View style={styles.overviewCard}>
+              <Text style={styles.overviewNum}>{placeOptions.length}</Text>
+              <Text style={styles.overviewLabel}>{t('insights.totalPlaces')}</Text>
+            </View>
+            <View style={styles.overviewCard}>
+              <Text style={[styles.overviewNum, { color: colors.primary }]}>{paths.length}</Text>
+              <Text style={styles.overviewLabel}>{t('insights.totalPaths')}</Text>
+            </View>
+          </View>
+
+          {/* 高频通勤快捷查看标签 */}
+          {paths.length > 0 && (
+            <View style={styles.quickSection}>
+              <View style={styles.quickHeader}>
+                <Ionicons name="flash-outline" size={13} color={colors.primaryStrong} />
+                <Text style={styles.quickTitle}>{t('insights.quickRoutes')}</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickScroll}>
+                {paths.filter(p => p.fromKey !== p.toKey).slice(0, 5).map((p, idx) => {
+                  const isCur = fromKey === p.fromKey && toKey === p.toKey;
+                  return (
+                    <TouchableOpacity
+                      key={`top-${idx}`}
+                      style={[styles.quickChip, isCur && styles.quickChipActive]}
+                      onPress={() => {
+                        setFromKey(p.fromKey);
+                        setToKey(p.toKey);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <ModeIcon mode={p.mode} size={13} color={isCur ? colors.primaryStrong : colors.ink2} />
+                      <Text style={[styles.quickChipText, isCur && styles.quickChipTextActive]}>
+                        {p.fromName} → {p.toName}
+                      </Text>
+                      <Text style={[styles.quickChipDur, isCur && styles.quickChipDurActive]}>
+                        {Math.round(p.medianSec / 60)}{t('insights.min')}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+
           {/* A→B 定向查询（核心） */}
           <View style={styles.card}>
             <Text style={styles.queryTitle}>{t('insights.queryTitle')}</Text>
@@ -337,9 +387,93 @@ const makeStyles = (colors) => StyleSheet.create({
   emptyText: { fontSize: 16, color: colors.ink, fontWeight: '700' },
   emptyHint: { fontSize: 13, color: colors.ink3 },
 
+  overviewGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  overviewCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadow.card,
+  },
+  overviewNum: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.ink,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.5,
+  },
+  overviewLabel: {
+    fontSize: 11,
+    color: colors.ink3,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+
+  quickSection: {
+    marginBottom: 14,
+  },
+  quickHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  quickTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.ink2,
+  },
+  quickScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  quickChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.surface,
+    paddingVertical: 7,
+    paddingHorizontal: 11,
+    borderRadius: 999,
+    borderWidth: 1.2,
+    borderColor: colors.line,
+    ...shadow.sm,
+  },
+  quickChipActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  quickChipText: {
+    fontSize: 12,
+    color: colors.ink2,
+    fontWeight: '600',
+  },
+  quickChipTextActive: {
+    color: colors.primaryStrong,
+  },
+  quickChipDur: {
+    fontSize: 11,
+    color: colors.ink3,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  quickChipDurActive: {
+    color: colors.primaryStrong,
+  },
+
   card: {
     backgroundColor: colors.surface, borderRadius: radius.lg, padding: 16,
-    marginBottom: 16, ...shadow.sm,
+    marginBottom: 16, borderWidth: 1, borderColor: colors.line, ...shadow.card,
   },
   queryTitle: { fontSize: 13, color: colors.ink2, fontWeight: '700', marginBottom: 12 },
   queryRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

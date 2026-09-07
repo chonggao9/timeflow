@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity, Linking, ActivityIndicator, Vibration, AppState,
+  View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity, Linking, ActivityIndicator, Vibration, AppState, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -11,6 +11,8 @@ import {
   getCurrentTripId, getLastMode, setLastMode, getRecordsFingerprint,
 } from '../storage/store';
 import { computePathStats, placeKey, UNNAMED, isPlaceholderName } from '../utils/stats';
+import { getPlaceOptions } from '../utils/analytics';
+import { shadow } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import { getPositionFast, reverseGeocodeWithTimeout } from '../utils/location';
@@ -22,6 +24,14 @@ import TransportPicker, { MODE_KEYS } from '../components/TransportPicker';
 import ModeIcon from '../components/ModeIcon';
 import RouteMapScreen from './RouteMapScreen';
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+const BACKFILL_OFFSETS = [
+  { min: 0, labelKey: 'home.justNow' },
+  { min: 5, labelKey: 'home.m5Ago' },
+  { min: 15, labelKey: 'home.m15Ago' },
+  { min: 30, labelKey: 'home.m30Ago' },
+  { min: 60, labelKey: 'home.h1Ago' },
+];
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -35,14 +45,23 @@ export default function HomeScreen() {
   const [estimate, setEstimate] = useState(null);
   const [hasActiveTrip, setHasActiveTrip] = useState(false);
   const [locStatus, setLocStatus] = useState(null); // null | 'pending' | 'denied' | 'services' | 'failed'
+  const [activeLocStatus, setActiveLocStatus] = useState(null); // 用于胶囊渐退动画缓冲
+  const locAnim = useRef(new Animated.Value(0)).current;
   const locTargetRef = useRef(null);
   const fillSeqRef = useRef(0); // 补位序号：状态条只反映最新一次补位
   const checkingInRef = useRef(false); // 同步原子锁：防毫秒级极速快速双击造成重复打卡
   const pathStatsCacheRef = useRef({ fp: null, stats: [] }); // 预估耗时计算缓存
 
+  const [commonPlaces, setCommonPlaces] = useState([]);
   const [renameTarget, setRenameTarget] = useState(null);
   const [draftName, setDraftName] = useState('');
   const [draftMode, setDraftMode] = useState('walk');
+
+  // 补卡相关状态
+  const [backfillVisible, setBackfillVisible] = useState(false);
+  const [backfillOffset, setBackfillOffset] = useState(15);
+  const [backfillName, setBackfillName] = useState('');
+  const [backfillMode, setBackfillMode] = useState('walk');
 
   const [mapTrip, setMapTrip] = useState(null); // 当前查看地图的行程
 
@@ -52,6 +71,18 @@ export default function HomeScreen() {
     setRecords(sorted);
     const trip = await getCurrentTripId();
     setHasActiveTrip(!!trip);
+
+    // 弱网与补卡快选：提取历史常用地点（过滤占位符，前5个最高频）
+    try {
+      const all = await getRecords();
+      const options = getPlaceOptions(all);
+      const topPlaces = options
+        .map(o => o.name)
+        .filter(nm => nm && !isPlaceholderName(nm) && nm !== UNNAMED)
+        .slice(0, 5);
+      setCommonPlaces(topPlaces);
+    } catch (e) { /* 容错忽略 */ }
+    return sorted;
   }, []);
 
   // 初始化：记住上次出行方式
@@ -65,8 +96,7 @@ export default function HomeScreen() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (nextState) => {
       if (nextState === 'active') {
-        await loadToday();
-        const today = await getTodayRecords();
+        const today = await loadToday();
         if (today && today.length) {
           const latest = today[today.length - 1];
           const age = Date.now() - latest.timestamp;
@@ -78,6 +108,27 @@ export default function HomeScreen() {
     });
     return () => sub.remove();
   }, [loadToday]);
+
+  // 定位状态胶囊显隐动效（零布局推挤）
+  useEffect(() => {
+    if (locStatus) {
+      setActiveLocStatus(locStatus);
+      Animated.spring(locAnim, {
+        toValue: 1,
+        friction: 7,
+        tension: 110,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(locAnim, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }).start(() => {
+        setActiveLocStatus(null);
+      });
+    }
+  }, [locStatus, locAnim]);
 
   // 计算预估：从最后一个点出发的最常见路段（带指纹缓存，避免每次打卡全量重算）
   useEffect(() => {
@@ -257,6 +308,51 @@ export default function HomeScreen() {
     ]);
   };
 
+  // ---- 补记打卡（补卡） ----
+  const openBackfill = () => {
+    setBackfillOffset(15);
+    setBackfillName('');
+    setBackfillMode(mode || 'walk');
+    setBackfillVisible(true);
+  };
+  const closeBackfill = () => {
+    setBackfillVisible(false);
+    setBackfillName('');
+    setBackfillMode('walk');
+  };
+  const handleSaveBackfill = async () => {
+    if (checkingInRef.current) return;
+    const name = backfillName.trim();
+    if (!name) {
+      Alert.alert(t('home.backfillEmpty'));
+      return;
+    }
+    checkingInRef.current = true;
+    const tCheckin = Date.now() - backfillOffset * 60 * 1000;
+    try {
+      const tripId = await ensureTrip();
+      const id = makeId();
+      await saveRecord({
+        id,
+        timestamp: tCheckin,
+        locationName: name,
+        lat: null,
+        lng: null,
+        mode: backfillMode,
+        tripId,
+      });
+      Vibration.vibrate(25);
+      closeBackfill();
+      await loadToday();
+      refreshWidget();
+      runBackupIfDue().catch(() => {});
+    } catch (e) {
+      Alert.alert(t('home.failTitle'), t('home.failBody'));
+    } finally {
+      setTimeout(() => { checkingInRef.current = false; }, 800);
+    }
+  };
+
   const dateStr = formatDate(new Date());
 
   return (
@@ -271,27 +367,55 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* 定位状态条 */}
-      {locStatus && (
-        <TouchableOpacity
-          style={[styles.locBar, locStatus === 'pending' && styles.locBarPending]}
-          onPress={handleLocBarPress}
-          activeOpacity={locStatus === 'pending' ? 1 : 0.7}
-          disabled={locStatus === 'pending'}
+      {/* 悬浮灵动定位胶囊（绝对定位，彻底消除页面抖动与布局推挤） */}
+      {activeLocStatus && (
+        <Animated.View
+          style={[
+            styles.floatingCapsule,
+            { top: insets.top + 60 },
+            {
+              opacity: locAnim,
+              transform: [
+                {
+                  translateY: locAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-14, 0],
+                  }),
+                },
+                {
+                  scale: locAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.92, 1],
+                  }),
+                },
+              ],
+            },
+          ]}
+          pointerEvents={locStatus ? 'auto' : 'none'}
         >
-          {locStatus === 'pending' ? (
-            <View style={styles.locBarRow}>
-              <ActivityIndicator size="small" color={colors.ink3} />
-              <Text style={styles.locBarTextPending}>{t('home.locPending')}</Text>
-            </View>
-          ) : (
-            <Text style={styles.locBarText}>
-              {locStatus === 'denied' ? t('home.locDenied')
-                : locStatus === 'services' ? t('home.locServices')
-                : t('home.locFailed')}
-            </Text>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.capsuleInner}
+            onPress={handleLocBarPress}
+            activeOpacity={locStatus === 'pending' ? 1 : 0.7}
+            disabled={locStatus === 'pending'}
+          >
+            {activeLocStatus === 'pending' ? (
+              <View style={styles.capsuleRow}>
+                <ActivityIndicator size="small" color={colors.primary} style={{ transform: [{ scale: 0.78 }] }} />
+                <Text style={styles.capsuleTextPending}>{t('home.locPending')}</Text>
+              </View>
+            ) : (
+              <View style={styles.capsuleRow}>
+                <Ionicons name="warning-outline" size={14} color={colors.danger} />
+                <Text style={styles.capsuleTextDanger}>
+                  {activeLocStatus === 'denied' ? t('home.locDenied')
+                    : activeLocStatus === 'services' ? t('home.locServices')
+                    : t('home.locFailed')}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </Animated.View>
       )}
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -300,6 +424,7 @@ export default function HomeScreen() {
           estimate={estimate}
           onRename={openRename}
           onShowMap={setMapTrip}
+          onBackfill={openBackfill}
           hasActiveTrip={hasActiveTrip}
         />
       </ScrollView>
@@ -334,6 +459,34 @@ export default function HomeScreen() {
               returnKeyType="done"
               onSubmitEditing={confirmRename}
             />
+
+            {/* 弱网/离线地点快选 */}
+            {commonPlaces.length > 0 && (
+              <View style={styles.quickPlaceWrap}>
+                <View style={styles.chipRow}>
+                  {commonPlaces.map((place, pIdx) => {
+                    const isSelected = draftName === place;
+                    return (
+                      <TouchableOpacity
+                        key={'rename-place-' + pIdx}
+                        style={[styles.quickChip, isSelected && styles.quickChipActive]}
+                        onPress={() => setDraftName(place)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name="location-outline"
+                          size={12}
+                          color={isSelected ? colors.primaryStrong : colors.ink2}
+                        />
+                        <Text style={[styles.quickChipText, isSelected && styles.quickChipTextActive]}>
+                          {place}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
 
             {/* 切换出行方式 */}
             <Text style={styles.dialogSectionLabel}>{t('home.editMode')}</Text>
@@ -381,6 +534,101 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* 补记打卡弹窗（离线/遗漏打卡补录） */}
+      <Modal visible={backfillVisible} transparent animationType="fade" onRequestClose={closeBackfill}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('home.backfillTitle')}</Text>
+            <Text style={styles.dialogSub}>{t('home.backfillSub')}</Text>
+
+            {/* 1. 时间偏移选择器 */}
+            <Text style={styles.dialogSectionLabel}>{t('home.backfillTime')}</Text>
+            <View style={styles.timeOffsetRow}>
+              {BACKFILL_OFFSETS.map((item) => {
+                const on = backfillOffset === item.min;
+                return (
+                  <TouchableOpacity
+                    key={item.min}
+                    style={[styles.timeChip, on && styles.timeChipSelected]}
+                    onPress={() => setBackfillOffset(item.min)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.timeChipText, on && styles.timeChipTextSelected]}>
+                      {t(item.labelKey)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* 2. 地点输入与常用地点快选 */}
+            <Text style={styles.dialogSectionLabel}>{t('home.backfillLocation')}</Text>
+            <TextInput
+              style={styles.input}
+              value={backfillName}
+              onChangeText={setBackfillName}
+              placeholder={t('home.renamePlaceholder')}
+              placeholderTextColor={colors.ink3}
+              returnKeyType="done"
+            />
+            {commonPlaces.length > 0 && (
+              <View style={styles.quickPlaceWrap}>
+                <View style={styles.chipRow}>
+                  {commonPlaces.map((place, pIdx) => {
+                    const isSelected = backfillName === place;
+                    return (
+                      <TouchableOpacity
+                        key={'backfill-place-' + pIdx}
+                        style={[styles.quickChip, isSelected && styles.quickChipActive]}
+                        onPress={() => setBackfillName(place)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name="location-outline"
+                          size={12}
+                          color={isSelected ? colors.primaryStrong : colors.ink2}
+                        />
+                        <Text style={[styles.quickChipText, isSelected && styles.quickChipTextActive]}>
+                          {place}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* 3. 切换出行方式 */}
+            <Text style={styles.dialogSectionLabel}>{t('home.editMode')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dialogModeScroll}>
+              {MODE_KEYS.map((k) => {
+                const on = backfillMode === k;
+                return (
+                  <TouchableOpacity
+                    key={k}
+                    style={[styles.dialogModeItem, on && styles.dialogModeItemSelected]}
+                    onPress={() => setBackfillMode(k)}
+                    activeOpacity={0.7}
+                  >
+                    <ModeIcon mode={k} size={16} color={on ? colors.primaryStrong : colors.ink2} />
+                    <Text style={[styles.dialogModeLabel, on && styles.dialogModeLabelSelected]}>{t(`mode.${k}`)}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.dialogRow}>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeBackfill}>
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={handleSaveBackfill}>
+                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* 线路轨迹地图（全屏） */}
       <RouteMapScreen visible={mapTrip != null} tripRecords={mapTrip?.records || []} onClose={() => setMapTrip(null)} />
     </View>
@@ -391,27 +639,48 @@ const makeStyles = (colors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingBottom: 8,
+    paddingHorizontal: 20, paddingBottom: 10,
   },
   titleBlock: { flex: 1 },
-  title: { fontSize: 26, fontWeight: '800', color: colors.ink, letterSpacing: -0.5, lineHeight: 30 },
-  date: { fontSize: 13, color: colors.ink2, marginTop: 3 },
+  title: { fontSize: 28, fontWeight: '800', color: colors.ink, letterSpacing: -0.6, lineHeight: 32 },
+  date: { fontSize: 13, color: colors.ink2, marginTop: 4, fontWeight: '500' },
   badge: {
     backgroundColor: colors.primarySoft, borderRadius: 999,
-    paddingHorizontal: 12, paddingVertical: 7,
+    paddingHorizontal: 13, paddingVertical: 6,
+    borderWidth: 1, borderColor: colors.line,
   },
   badgeText: { fontSize: 12, color: colors.primaryStrong, fontWeight: '700' },
 
-  locBar: {
-    marginHorizontal: 16, marginBottom: 6,
-    paddingVertical: 9, paddingHorizontal: 14,
-    borderRadius: 12, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.primarySofter,
+  floatingCapsule: {
+    position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 999,
+    borderRadius: 999,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadow.float,
   },
-  locBarPending: { backgroundColor: colors.chip },
-  locBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  locBarTextPending: { fontSize: 12, color: colors.ink3 },
-  locBarText: { fontSize: 12, color: colors.danger, fontWeight: '600' },
+  capsuleInner: {
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+  },
+  capsuleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  capsuleTextPending: {
+    fontSize: 12,
+    color: colors.ink2,
+    fontWeight: '500',
+  },
+  capsuleTextDanger: {
+    fontSize: 12,
+    color: colors.danger,
+    fontWeight: '600',
+  },
 
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingBottom: 12 },
@@ -465,4 +734,64 @@ const makeStyles = (colors) => StyleSheet.create({
   dialogEndTripText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
   dialogDelete: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dialogDeleteText: { fontSize: 13, color: colors.danger, fontWeight: '600' },
+
+  timeOffsetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginTop: 2,
+  },
+  timeChip: {
+    paddingVertical: 7,
+    paddingHorizontal: 11,
+    borderRadius: 10,
+    backgroundColor: colors.chip,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+  },
+  timeChipSelected: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  timeChipText: {
+    fontSize: 12,
+    color: colors.ink2,
+    fontWeight: '600',
+  },
+  timeChipTextSelected: {
+    color: colors.primaryStrong,
+    fontWeight: '700',
+  },
+  quickPlaceWrap: {
+    marginTop: 8,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  quickChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: colors.chip,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  quickChipActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  quickChipText: {
+    fontSize: 12,
+    color: colors.ink2,
+    fontWeight: '500',
+  },
+  quickChipTextActive: {
+    color: colors.primaryStrong,
+    fontWeight: '700',
+  },
 });

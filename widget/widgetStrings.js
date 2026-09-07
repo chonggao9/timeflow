@@ -8,6 +8,18 @@ import { lightColors, darkColors } from '../src/theme';
 export const LANG_KEY = 'timeflow_lang';
 export const THEME_KEY = 'timeflow_theme';
 
+export const MODE_EMOJIS = {
+  walk: '🚶',
+  bike: '🚴',
+  drive: '🚗',
+  taxi: '🚕',
+  subway: '🚇',
+  transit: '🚌',
+  train: '🚄',
+  flight: '✈️',
+  boat: '⛴️',
+};
+
 // 最小字典：widget 用到的文案。system-infer 逻辑与 LanguageContext.systemLang() 一致。
 const STRINGS = {
   zh: {
@@ -18,8 +30,8 @@ const STRINGS = {
     at: '${t}',
     placeEmpty: '未知地点',
     unnamed: '未命名地点',
-    checkinBtn: '一 键 打 卡',
-    count: '今日 ${n} 次',
+    checkinBtn: '⚡ 一 键 打 卡',
+    count: '今日 {n} 次',
     emptyPrompt: '今日旅程尚未开启',
     emptySub: '轻触下方按钮，记录今日首次打卡',
     recentPlace: '最近地点',
@@ -32,8 +44,8 @@ const STRINGS = {
     at: '${t}',
     placeEmpty: 'Unknown place',
     unnamed: 'Unnamed place',
-    checkinBtn: 'Quick Check-In',
-    count: '${n} today',
+    checkinBtn: '⚡ Quick Check-In',
+    count: '{n} today',
     emptyPrompt: 'Journey not started yet',
     emptySub: 'Tap below to record your first stop',
     recentPlace: 'Recent place',

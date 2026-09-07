@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated } from 'react-native';
+import { radius, shadow } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import ModeIcon from './ModeIcon';
@@ -16,8 +17,50 @@ export const MODE_KEYS = [
   'boat',    // 轮渡
 ];
 
-const ITEM_WIDTH = 70;
-const ITEM_GAP = 8;
+const ITEM_WIDTH = 72;
+const ITEM_GAP = 9;
+
+function TransportItem({ modeKey, selected, onSelect, label }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (selected) {
+      Animated.sequence([
+        Animated.spring(scaleAnim, { toValue: 1.07, friction: 4, tension: 150, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, friction: 6, tension: 120, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [selected, scaleAnim]);
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        style={[
+          styles.item,
+          selected && styles.itemSelected,
+        ]}
+        onPress={() => onSelect(modeKey)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.iconWrap, selected && styles.iconWrapSelected]}>
+          <ModeIcon
+            mode={modeKey}
+            size={18}
+            color={selected ? colors.primaryStrong : colors.ink2}
+          />
+        </View>
+        <Text
+          style={[styles.label, selected && styles.labelSelected]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
 
 export default function TransportPicker({ selected, onSelect }) {
   const { t } = useI18n();
@@ -30,7 +73,6 @@ export default function TransportPicker({ selected, onSelect }) {
     if (!selected || !scrollRef.current) return;
     const index = MODE_KEYS.indexOf(selected);
     if (index >= 0) {
-      // 简单平滑滚动：使其尽量居中可见
       const targetX = Math.max(0, index * (ITEM_WIDTH + ITEM_GAP) - (ITEM_WIDTH + ITEM_GAP));
       scrollRef.current.scrollTo({ x: targetX, animated: true });
     }
@@ -44,24 +86,15 @@ export default function TransportPicker({ selected, onSelect }) {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {MODE_KEYS.map((key) => {
-          const on = selected === key;
-          return (
-            <TouchableOpacity
-              key={key}
-              style={[styles.item, on && styles.itemSelected]}
-              onPress={() => onSelect(key)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.iconWrap}>
-                <ModeIcon mode={key} size={20} color={on ? colors.primaryStrong : colors.ink2} />
-              </View>
-              <Text style={[styles.label, on && styles.labelSelected]} numberOfLines={1}>
-                {t(`mode.${key}`)}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+        {MODE_KEYS.map((key) => (
+          <TransportItem
+            key={key}
+            modeKey={key}
+            selected={selected === key}
+            onSelect={onSelect}
+            label={t(`mode.${key}`)}
+          />
+        ))}
       </ScrollView>
     </View>
   );
@@ -75,23 +108,43 @@ const makeStyles = (colors) => StyleSheet.create({
     flexDirection: 'row',
     gap: ITEM_GAP,
     paddingHorizontal: 16,
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
   item: {
     width: ITEM_WIDTH,
     alignItems: 'center',
-    paddingVertical: 9,
+    paddingVertical: 8,
     paddingHorizontal: 4,
-    borderRadius: 14,
-    backgroundColor: colors.chip,
-    borderWidth: 1.5,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1.2,
     borderColor: colors.line,
+    ...shadow.sm,
   },
   itemSelected: {
     backgroundColor: colors.primarySoft,
     borderColor: colors.primary,
+    ...shadow.card,
   },
-  iconWrap: { height: 24, justifyContent: 'center' },
-  label: { fontSize: 11, color: colors.ink2, fontWeight: '600', marginTop: 3 },
-  labelSelected: { color: colors.primaryStrong },
+  iconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.chip,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  iconWrapSelected: {
+    backgroundColor: colors.surface,
+  },
+  label: {
+    fontSize: 11,
+    color: colors.ink2,
+    fontWeight: '600',
+  },
+  labelSelected: {
+    color: colors.primaryStrong,
+    fontWeight: '700',
+  },
 });
