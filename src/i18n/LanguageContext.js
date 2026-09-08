@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Localization from 'expo-localization';
 import { translations } from './translations';
@@ -9,22 +10,32 @@ const STORAGE_KEY = 'timeflow_lang';
 // 从系统语言推断：主要支持 zh / en，其它回退 en
 function systemLang() {
   try {
-    const code = Localization.getLocales?.()?.[0]?.languageCode;
-    if (!code) return 'en';
-    return code.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+    const locales = Localization.getLocales?.();
+    if (Array.isArray(locales) && locales.length > 0 && locales[0]?.languageCode) {
+      const code = locales[0].languageCode.toLowerCase();
+      return code.startsWith('zh') ? 'zh' : 'en';
+    }
+    const legacyLocale = Localization.locale || (typeof globalThis !== 'undefined' && globalThis.navigator?.language) || '';
+    if (legacyLocale && typeof legacyLocale === 'string' && legacyLocale.toLowerCase().startsWith('zh')) {
+      return 'zh';
+    }
+    return 'en';
   } catch (e) {
     return 'en';
   }
 }
 
 export function LanguageProvider({ children }) {
-  const [lang, setLangState] = useState('zh');       // 实际生效语言：zh / en
-  const [isSystem, setIsSystem] = useState(true);     // 是否跟随系统
+  // 首次安装/启动时，首帧同步跟随系统语言，杜绝冷启动闪现默认语言
+  const [lang, setLangState] = useState(() => systemLang()); // 实际生效语言：zh / en
+  const [isSystem, setIsSystem] = useState(true);            // 是否跟随系统
 
   useEffect(() => {
+    let isMounted = true;
     (async () => {
       let saved = null;
       try { saved = await AsyncStorage.getItem(STORAGE_KEY); } catch (e) {}
+      if (!isMounted) return;
       if (saved === 'zh' || saved === 'en') {
         setLangState(saved);
         setIsSystem(false);
@@ -33,7 +44,18 @@ export function LanguageProvider({ children }) {
         setIsSystem(true);
       }
     })();
+    return () => { isMounted = false; };
   }, []);
+
+  // 当处于跟随系统模式时，切回前台自动与系统语言同步
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active' && isSystem) {
+        setLangState(systemLang());
+      }
+    });
+    return () => sub?.remove?.();
+  }, [isSystem]);
 
   // value: 'zh' | 'en' | 'system'
   const setLang = useCallback(async (value) => {

@@ -22,7 +22,7 @@ export const UNNAMED = '未命名';
 // 引用 store 里的 legacy 常量，避免循环依赖：这里直接用字符串标记
 const LEGACY_TRIP = 'legacy';
 export function isPlaceholderName(name) {
-  return !name || name === UNNAMED || name === '未知位置';
+  return !name || name === UNNAMED || name === '未知位置' || name === 'Unnamed' || name === 'Unknown';
 }
 
 // ---- 地点聚类 ----

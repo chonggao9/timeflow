@@ -143,7 +143,8 @@ export async function reverseGeocodeWithTimeout(lat, lng) {
 }
 
 // 「定位排查」逐项自检：并行竞速 + 各后端/反查实时结果
-export async function diagnoseLocation() {
+export async function diagnoseLocation(lang = 'zh') {
+  const isEn = lang === 'en';
   const lines = [];
   const hhmm = (ts) => {
     const d = new Date(ts);
@@ -152,28 +153,45 @@ export async function diagnoseLocation() {
   const amapLocKey = await getAmapLocKeyRaw(); // null=默认, ''=禁用, 其他=自定义
   const amapWebKey = await getAmapKey();
 
-  lines.push('• 定位策略：并行竞速（高德 + 系统，谁先成功用谁）');
-  lines.push(`• 高德定位key：${amapLocKey === '' ? '❌ 已禁用' : amapLocKey ? '✅ 已自定义' : '默认值（需绑包名+SHA1）'}`);
-  lines.push(`• 高德Web key：${amapWebKey ? '✅ 已配置' : '未配置（仅兜底反查需要）'}`);
+  lines.push(isEn ? '• Strategy: Parallel race (Amap + System, first wins)' : '• 定位策略：并行竞速（高德 + 系统，谁先成功用谁）');
+  lines.push(isEn
+    ? `• Amap Loc Key: ${amapLocKey === '' ? '❌ Disabled' : amapLocKey ? '✅ Custom' : 'Default'}`
+    : `• 高德定位key：${amapLocKey === '' ? '❌ 已禁用' : amapLocKey ? '✅ 已自定义' : '默认值（需绑包名+SHA1）'}`);
+  lines.push(isEn
+    ? `• Amap Web Key: ${amapWebKey ? '✅ Configured' : 'Not configured'}`
+    : `• 高德Web key：${amapWebKey ? '✅ 已配置' : '未配置（仅兜底反查需要）'}`);
 
   try {
-    lines.push(`• 系统位置服务：${await withTimeout(Location.hasServicesEnabledAsync(), 3000) ? '✅ 开启' : '❌ 关闭'}`);
-  } catch (e) { lines.push('• 系统位置服务：⚠️ 检测失败'); }
+    const enabled = await withTimeout(Location.hasServicesEnabledAsync(), 3000);
+    lines.push(isEn
+      ? `• Location Services: ${enabled ? '✅ On' : '❌ Off'}`
+      : `• 系统位置服务：${enabled ? '✅ 开启' : '❌ 关闭'}`);
+  } catch (e) {
+    lines.push(isEn ? '• Location Services: ⚠️ Check failed' : '• 系统位置服务：⚠️ 检测失败');
+  }
 
   try {
     const { status } = await withTimeout(Location.getForegroundPermissionsAsync(), 3000);
-    lines.push(`• 应用定位权限：${status === 'granted' ? '✅ 已授予' : '❌ ' + status}`);
-  } catch (e) { lines.push('• 应用定位权限：⚠️ 检测失败'); }
+    lines.push(isEn
+      ? `• App Permission: ${status === 'granted' ? '✅ Granted' : '❌ ' + status}`
+      : `• 应用定位权限：${status === 'granted' ? '✅ 已授予' : '❌ ' + status}`);
+  } catch (e) {
+    lines.push(isEn ? '• App Permission: ⚠️ Check failed' : '• 应用定位权限：⚠️ 检测失败');
+  }
 
   try {
     const c = await withTimeout(Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000 }), 3000);
-    lines.push(c
-      ? `• 最近位置(5分钟内)：✅ ${hhmm(c.timestamp)} 的坐标`
-      : '• 最近位置(5分钟内)：❌ 无缓存');
-  } catch (e) { lines.push('• 最近位置：⚠️ 检测失败'); }
+    if (isEn) {
+      lines.push(c ? `• Recent (within 5m): ✅ ${hhmm(c.timestamp)} cached` : '• Recent (within 5m): ❌ No cache');
+    } else {
+      lines.push(c ? `• 最近位置(5分钟内)：✅ ${hhmm(c.timestamp)} 的坐标` : '• 最近位置(5分钟内)：❌ 无缓存');
+    }
+  } catch (e) {
+    lines.push(isEn ? '• Recent Cache: ⚠️ Check failed' : '• 最近位置：⚠️ 检测失败');
+  }
 
   // 实时定位：并行竞速（与打卡同路径）
-  const reasonText = {
+  const reasonTextZh = {
     'services-off': '系统位置服务关闭',
     'timeout': '超时/无信号',
     'key-error': '高德key鉴权失败（未绑包名+SHA1）',
@@ -184,26 +202,48 @@ export async function diagnoseLocation() {
     'init-error': '高德初始化失败',
     'amap-error': '高德定位失败',
   };
+  const reasonTextEn = {
+    'services-off': 'Location services off',
+    'timeout': 'Timeout / No signal',
+    'key-error': 'Amap key auth failed',
+    'permission': 'Amap permission missing',
+    'quota': 'Amap quota exceeded',
+    'key-disabled': 'Amap loc key disabled',
+    'module-missing': 'Amap native module missing',
+    'init-error': 'Amap init error',
+    'amap-error': 'Amap locate error',
+  };
+  const reasonText = isEn ? reasonTextEn : reasonTextZh;
+
   let lat = null, lng = null;
   const { loc, reason, provider, detail } = await getPositionFast();
   if (loc) {
     lat = loc.coords.latitude;
     lng = loc.coords.longitude;
-    lines.push(`• 实时定位(${provider === 'amap' ? '高德' : '系统'})：✅ ${lat.toFixed(5)}, ${lng.toFixed(5)} · 精度 ${Math.round(loc.coords.accuracy || 0)}m`);
+    const provName = provider === 'amap' ? (isEn ? 'Amap' : '高德') : (isEn ? 'System' : '系统');
+    lines.push(isEn
+      ? `• Live Fix (${provName}): ✅ ${lat.toFixed(5)}, ${lng.toFixed(5)} · Accuracy ${Math.round(loc.coords.accuracy || 0)}m`
+      : `• 实时定位(${provName})：✅ ${lat.toFixed(5)}, ${lng.toFixed(5)} · 精度 ${Math.round(loc.coords.accuracy || 0)}m`);
   } else {
-    lines.push(`• 实时定位：❌ ${reasonText[reason] || '失败'}${detail ? `（${detail}）` : ''}`);
+    lines.push(isEn
+      ? `• Live Fix: ❌ ${reasonText[reason] || 'Failed'}${detail ? ` (${detail})` : ''}`
+      : `• 实时定位：❌ ${reasonText[reason] || '失败'}${detail ? `（${detail}）` : ''}`);
   }
 
   if (lat != null && lng != null) {
     const race = await reverseGeocode(lat, lng);
     const addr = loc.address || (race && race.name);
     if (addr) {
-      const from = loc.address ? '高德SDK自带' : (race.provider === 'amap' ? '高德' : '系统/Google');
-      lines.push(`• 地名反查：✅ ${addr}（${from}）`);
+      const from = loc.address
+        ? (isEn ? 'Amap SDK built-in' : '高德SDK自带')
+        : (race.provider === 'amap' ? (isEn ? 'Amap' : '高德') : (isEn ? 'System/Google' : '系统/Google'));
+      lines.push(isEn ? `• Reverse Geo: ✅ ${addr} (${from})` : `• 地名反查：✅ ${addr}（${from}）`);
     } else {
-      lines.push(amapWebKey
-        ? '• 地名反查：❌ 高德与系统都未反查到地名（可能确无地名，可手动改）'
-        : '• 地名反查：❌ 未配高德WebKey，系统(Google)反查也无效（可手动改地名）');
+      lines.push(isEn
+        ? '• Reverse Geo: ❌ No address resolved (name can be edited manually)'
+        : (amapWebKey
+          ? '• 地名反查：❌ 高德与系统都未反查到地名（可能确无地名，可手动改）'
+          : '• 地名反查：❌ 未配高德WebKey，系统(Google)反查也无效（可手动改地名）'));
     }
   }
 

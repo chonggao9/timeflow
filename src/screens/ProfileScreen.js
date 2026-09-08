@@ -130,7 +130,7 @@ function BackupStatusBanner({ cloudSet, autoEnabled, hasPassphrase, lastBackup, 
           <Text style={[styles.statusTitle, { color: colors.ink }]}>{title}</Text>
           {statusType === 'cloud' && (
             <View style={[styles.statusTag, { backgroundColor: '#10B98122' }]}>
-              <Text style={[styles.statusTagText, { color: '#10B981' }]}>安全</Text>
+              <Text style={[styles.statusTagText, { color: '#10B981' }]}>{t('backup.statusSafe')}</Text>
             </View>
           )}
         </View>
@@ -502,7 +502,7 @@ export default function ProfileScreen() {
     if (diagRunning) return;
     setDiagRunning(true);
     try {
-      const report = await diagnoseLocation();
+      const report = await diagnoseLocation(lang);
       Alert.alert(t('profile.locationDiagTitle'), report);
     } catch (e) {
       Alert.alert(t('profile.locationDiagTitle'), String((e && e.message) || '?'));
@@ -577,7 +577,7 @@ export default function ProfileScreen() {
 
           <View style={styles.profileTextWrap}>
             <Text style={styles.profileNickname} numberOfLines={1}>
-              {nickname || (lang === 'zh' ? '时空旅行者' : 'Time Traveler')}
+              {nickname || t('profile.defaultNickname')}
             </Text>
             <View style={styles.streakBadge}>
               <Text style={styles.streakBadgeText}>
