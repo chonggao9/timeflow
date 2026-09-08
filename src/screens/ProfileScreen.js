@@ -26,13 +26,48 @@ import { radius, shadow } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import PrivacyAgreement from './PrivacyAgreement';
 
-function Row({ icon, label, value, onPress, danger }) {
+// 计算连续打卡天数
+function calculateStreakDays(records) {
+  if (!records || records.length === 0) return 0;
+  const dateSet = new Set();
+  records.forEach(r => {
+    if (r.timestamp) {
+      const d = new Date(r.timestamp);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      dateSet.add(key);
+    }
+  });
+  if (dateSet.size === 0) return 0;
+
+  const now = new Date();
+  const formatDay = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  let current = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let todayKey = formatDay(current);
+
+  // 如果今天未打卡，检查昨天（允许昨天连续）
+  if (!dateSet.has(todayKey)) {
+    current.setDate(current.getDate() - 1);
+    const yesterdayKey = formatDay(current);
+    if (!dateSet.has(yesterdayKey)) return 0;
+  }
+
+  let streak = 0;
+  while (dateSet.has(formatDay(current))) {
+    streak++;
+    current.setDate(current.getDate() - 1);
+  }
+  return streak;
+}
+
+function Row({ icon, label, value, onPress, danger, iconColor, iconBg }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6}>
-      <View style={styles.rowIcon}>
-        <Ionicons name={icon} size={19} color={danger ? colors.danger : colors.primary} />
+      <View style={[styles.iconHolder, iconBg && { backgroundColor: iconBg }]}>
+        <Ionicons name={icon} size={17} color={danger ? colors.danger : (iconColor || colors.primary)} />
       </View>
       <Text style={[styles.rowLabel, danger && { color: colors.danger }]}>{label}</Text>
       {value != null && <Text style={styles.rowValue}>{value}</Text>}
@@ -55,18 +90,18 @@ function BackupStatusBanner({ cloudSet, autoEnabled, hasPassphrase, lastBackup, 
     statusType = 'local';
   }
 
-  let iconName = 'alert-circle';
+  let iconName = 'shield-checkmark';
   let badgeColor = colors.ink3;
   let bgTint = colors.chip;
   let title = t('backup.statusNone');
   let sub = t('backup.statusDescNone');
 
   if (statusType === 'cloud') {
-    iconName = 'cloud-done';
+    iconName = 'shield-checkmark';
     badgeColor = '#10B981';
     bgTint = 'rgba(16, 185, 129, 0.09)';
     title = t('backup.statusCloudActive');
-    sub = lastBackup > 0 ? `${t('backup.last')}: ${fmtTime(lastBackup)}` : t('backup.statusDescCloud');
+    sub = lastBackup > 0 ? `${t('backup.last')}: ${fmtTime(lastBackup)}` : t('profile.cloudSecurity');
   } else if (statusType === 'paused') {
     iconName = 'cloud-outline';
     badgeColor = '#F59E0B';
@@ -88,14 +123,14 @@ function BackupStatusBanner({ cloudSet, autoEnabled, hasPassphrase, lastBackup, 
       activeOpacity={0.7}
     >
       <View style={[styles.statusIconWrap, { backgroundColor: badgeColor + '1F' }]}>
-        <Ionicons name={iconName} size={22} color={badgeColor} />
+        <Ionicons name={iconName} size={20} color={badgeColor} />
       </View>
       <View style={styles.statusTextWrap}>
         <View style={styles.statusHeaderRow}>
           <Text style={[styles.statusTitle, { color: colors.ink }]}>{title}</Text>
           {statusType === 'cloud' && (
             <View style={[styles.statusTag, { backgroundColor: '#10B98122' }]}>
-              <Text style={[styles.statusTagText, { color: '#10B981' }]}>WebDAV</Text>
+              <Text style={[styles.statusTagText, { color: '#10B981' }]}>安全</Text>
             </View>
           )}
         </View>
@@ -167,11 +202,24 @@ export default function ProfileScreen() {
   const [restorePassDraft, setRestorePassDraft] = useState('');
   const [restoreBusy, setRestoreBusy] = useState(false);
 
+  // 连续打卡与个人信息
+  const [streakDays, setStreakDays] = useState(0);
+  const [showEditNickname, setShowEditNickname] = useState(false);
+  const [nicknameDraft, setNicknameDraft] = useState('');
+
   const loadProfile = useCallback(async () => {
-    const p = await getProfile();
-    setNickname(p.nickname || '');
+    const [p, recs] = await Promise.all([getProfile(), getRecords()]);
+    setNickname(p?.nickname || '');
+    setStreakDays(calculateStreakDays(recs));
   }, []);
   React.useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  const persistNickname = async () => {
+    const val = nicknameDraft.trim();
+    setNickname(val);
+    await saveProfile({ nickname: val });
+    setShowEditNickname(false);
+  };
 
   const loadAmapKey = useCallback(async () => {
     const k = await getAmapKey();
@@ -387,10 +435,6 @@ export default function ProfileScreen() {
     }
   };
 
-  const persistNickname = async () => {
-    await saveProfile({ nickname: nickname.trim() });
-  };
-
   const openAmapKey = async () => {
     setAmapKeyDraft(await getAmapKey());
     setAmapKeyInvalid(false);
@@ -520,37 +564,41 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 个人信息 */}
-        <Text style={styles.section}>{t('profile.sectionProfile')}</Text>
-        <View style={styles.card}>
-          <View style={styles.nicknameRow}>
-            <View style={styles.avatar}><Ionicons name="person" size={22} color="#fff" /></View>
-            <View style={styles.nicknameInputWrap}>
-              <Text style={styles.nicknameLabel}>{t('profile.nickname')}</Text>
-              <TextInput
-                style={styles.nicknameInput}
-                value={nickname}
-                onChangeText={setNickname}
-                placeholder={t('profile.nicknamePlaceholder')}
-                placeholderTextColor={colors.ink3}
-                returnKeyType="done"
-                onSubmitEditing={persistNickname}
-                onBlur={persistNickname}
-              />
+        {/* 1. 现代个人身份卡片 */}
+        <View style={styles.fancyProfileCard}>
+          <View style={styles.avatarFancyWrap}>
+            <View style={styles.avatarFancy}>
+              <Ionicons name="person" size={26} color="#FFFFFF" />
+            </View>
+            <View style={styles.badgeStar}>
+              <Text style={styles.badgeStarText}>★</Text>
             </View>
           </View>
+
+          <View style={styles.profileTextWrap}>
+            <Text style={styles.profileNickname} numberOfLines={1}>
+              {nickname || (lang === 'zh' ? '时空旅行者' : 'Time Traveler')}
+            </Text>
+            <View style={styles.streakBadge}>
+              <Text style={styles.streakBadgeText}>
+                {streakDays > 0 ? t('profile.streakDays', { n: streakDays }) : t('profile.streakToday')}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.editProfileBtn}
+            onPress={() => {
+              setNicknameDraft(nickname);
+              setShowEditNickname(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.editProfileBtnText}>{t('profile.editProfile')} ✎</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* 数据管理 */}
-        <Text style={styles.section}>{t('profile.sectionData')}</Text>
-        <View style={styles.card}>
-          <Row icon="download-outline" label={t('profile.export')} onPress={handleExport} />
-          <View style={styles.divider} />
-          <Row icon="trash-outline" label={t('profile.clear')} danger onPress={handleClear} />
-        </View>
-
-        {/* 数据备份 */}
-        <Text style={styles.section}>{t('backup.sectionData')}</Text>
+        {/* 2. 数据安全守护卡片 */}
         <BackupStatusBanner
           cloudSet={cloudSet}
           autoEnabled={autoEnabled}
@@ -559,52 +607,114 @@ export default function ProfileScreen() {
           fmtTime={fmtBackupTime}
           onPress={openBackupSettings}
         />
+
+        {/* 3. 分组一：数据管理与备份 */}
+        <Text style={styles.sectionHeader}>{t('profile.sectionDataManage')}</Text>
         <View style={styles.card}>
           <Row
             icon={cloudSet ? 'cloud-upload-outline' : 'save-outline'}
             label={t('backup.now')}
             value={backupBusy ? '…' : (cloudSet ? t('backup.typeCloudAndLocal') : t('backup.typeLocalOnly'))}
+            iconColor={colors.primary}
+            iconBg={colors.primarySoft}
             onPress={() => withPassphrase('backup')}
           />
           <View style={styles.divider} />
-          <Row icon="refresh-outline" label={t('backup.restore')} onPress={openRestore} />
+          <Row
+            icon="refresh-outline"
+            label={t('backup.restore')}
+            iconColor="#3B82F6"
+            iconBg="rgba(59, 130, 246, 0.12)"
+            onPress={openRestore}
+          />
           <View style={styles.divider} />
           <Row
-            icon="options-outline"
+            icon="key-outline"
             label={t('backup.settings')}
             value={cloudSet ? t('backup.cloudSet') : (hasPassphrase ? t('backup.passphraseConfigured') : t('backup.cloudEmpty'))}
+            iconColor="#F59E0B"
+            iconBg="rgba(245, 158, 11, 0.12)"
             onPress={openBackupSettings}
+          />
+          <View style={styles.divider} />
+          <Row
+            icon="download-outline"
+            label={t('profile.export')}
+            iconColor="#8B5CF6"
+            iconBg="rgba(139, 92, 246, 0.12)"
+            onPress={handleExport}
+          />
+          <View style={styles.divider} />
+          <Row
+            icon="trash-outline"
+            label={t('profile.clear')}
+            danger
+            iconBg="rgba(239, 68, 68, 0.12)"
+            onPress={handleClear}
           />
         </View>
 
-        {/* 位置服务 */}
-        <Text style={styles.section}>{t('profile.sectionLocation')}</Text>
+        {/* 4. 分组二：偏好与关于 */}
+        <Text style={styles.sectionHeader}>{t('profile.sectionPreferences')}</Text>
         <View style={styles.card}>
+          <Row
+            icon="language-outline"
+            label={t('profile.language')}
+            value={languageValue}
+            iconColor="#06B6D4"
+            iconBg="rgba(6, 182, 212, 0.12)"
+            onPress={() => setShowLang(true)}
+          />
+          <View style={styles.divider} />
+          <Row
+            icon="color-palette-outline"
+            label={t('profile.theme')}
+            value={themeValue}
+            iconColor="#EC4899"
+            iconBg="rgba(236, 72, 153, 0.12)"
+            onPress={() => setShowTheme(true)}
+          />
+          <View style={styles.divider} />
           <Row
             icon="locate-outline"
             label={t('profile.locationDebug')}
+            iconColor="#10B981"
+            iconBg="rgba(16, 185, 129, 0.12)"
             onPress={() => setShowLocationDebug(true)}
           />
-        </View>
-
-        {/* 桌面小组件 */}
-        <Text style={styles.section}>{t('profile.sectionWidget')}</Text>
-        <View style={styles.card}>
-          <Row icon="grid-outline" label={t('widget.desc')} onPress={() => { refreshWidget(); setShowWidgetGuide(true); }} />
-        </View>
-
-        {/* 关于 */}
-        <Text style={styles.section}>{t('profile.sectionAbout')}</Text>
-        <View style={styles.card}>
-          <Row icon="shield-checkmark-outline" label={t('profile.privacy')} onPress={() => setShowPrivacy(true)} />
           <View style={styles.divider} />
-          <Row icon="language-outline" label={t('profile.language')} value={languageValue} onPress={() => setShowLang(true)} />
+          <Row
+            icon="grid-outline"
+            label={t('widget.desc')}
+            iconColor="#6366F1"
+            iconBg="rgba(99, 102, 241, 0.12)"
+            onPress={() => { refreshWidget(); setShowWidgetGuide(true); }}
+          />
           <View style={styles.divider} />
-          <Row icon="contrast-outline" label={t('profile.theme')} value={themeValue} onPress={() => setShowTheme(true)} />
+          <Row
+            icon="sparkles-outline"
+            label={t('profile.checkUpdate')}
+            value={`v${version}`}
+            iconColor={colors.primary}
+            iconBg={colors.primarySoft}
+            onPress={handleCheckUpdate}
+          />
           <View style={styles.divider} />
-          <Row icon="refresh-circle-outline" label={t('profile.checkUpdate')} value={`v${version}`} onPress={handleCheckUpdate} />
+          <Row
+            icon="shield-checkmark-outline"
+            label={t('profile.privacy')}
+            iconColor="#64748B"
+            iconBg="rgba(100, 116, 139, 0.12)"
+            onPress={() => setShowPrivacy(true)}
+          />
           <View style={styles.divider} />
-          <Row icon="mail-outline" label={t('profile.contact')} value="chonggao9@gmail.com" />
+          <Row
+            icon="mail-outline"
+            label={t('profile.contact')}
+            value="chonggao9@gmail.com"
+            iconColor="#94A3B8"
+            iconBg="rgba(148, 163, 184, 0.12)"
+          />
         </View>
 
         <Text style={styles.footer}>{t('profile.version', { v: version })}</Text>
@@ -1007,6 +1117,34 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 修改昵称弹窗 */}
+      <Modal visible={showEditNickname} transparent animationType="fade" onRequestClose={() => setShowEditNickname(false)}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('profile.nickname')}</Text>
+            <Text style={styles.dialogSub}>{t('profile.nicknamePlaceholder')}</Text>
+            <TextInput
+              style={styles.input}
+              value={nicknameDraft}
+              onChangeText={setNicknameDraft}
+              placeholder={t('profile.nicknamePlaceholder')}
+              placeholderTextColor={colors.ink3}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={persistNickname}
+            />
+            <View style={styles.dialogRow}>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={() => setShowEditNickname(false)}>
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={persistNickname}>
+                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1030,24 +1168,108 @@ const makeStyles = (colors) => StyleSheet.create({
     ...shadow.card,
   },
 
-  nicknameRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 6 },
-  avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+  // 现代个人身份卡片
+  fancyProfileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadow.card,
+  },
+  avatarFancyWrap: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  avatarFancy: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadow.sm,
   },
-  nicknameInputWrap: { flex: 1 },
-  nicknameLabel: { fontSize: 11, color: colors.ink3, fontWeight: '600' },
-  nicknameInput: { fontSize: 16, color: colors.ink, paddingVertical: 4, fontWeight: '600' },
+  badgeStar: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 17,
+    height: 17,
+    borderRadius: 8.5,
+    backgroundColor: '#FFB300',
+    borderWidth: 2,
+    borderColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeStarText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  profileTextWrap: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  profileNickname: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.ink,
+    letterSpacing: -0.2,
+  },
+  streakBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    marginTop: 4,
+    borderWidth: 0.5,
+    borderColor: colors.line,
+  },
+  streakBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primaryStrong,
+  },
+  editProfileBtn: {
+    backgroundColor: colors.chip,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  editProfileBtnText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: colors.ink2,
+  },
 
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 6 },
-  rowIcon: { width: 30, height: 30, borderRadius: 9, backgroundColor: colors.primarySofter, alignItems: 'center', justifyContent: 'center' },
-  rowLabel: { flex: 1, fontSize: 14.5, color: colors.ink, fontWeight: '600' },
-  rowValue: { fontSize: 13, color: colors.ink3, marginRight: 4, fontWeight: '500' },
+  sectionHeader: {
+    fontSize: 12.5,
+    color: colors.ink2,
+    fontWeight: '700',
+    marginTop: 10,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 4 },
+  iconHolder: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: colors.chip,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowLabel: { flex: 1, fontSize: 14, color: colors.ink, fontWeight: '600' },
+  rowValue: { fontSize: 12.5, color: colors.ink3, marginRight: 4, fontWeight: '500' },
   divider: { height: 1, backgroundColor: colors.line, marginHorizontal: 6 },
 
   footer: { textAlign: 'center', fontSize: 12, color: colors.ink3, marginTop: 8, fontWeight: '500' },

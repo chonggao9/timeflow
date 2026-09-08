@@ -196,8 +196,13 @@ export default function InsightsScreen() {
                   {fromPlace ? fromPlace.name : t('insights.from')}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={swap} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="swap-horizontal" size={18} color={colors.ink3} />
+              <TouchableOpacity
+                style={styles.swapBtn}
+                onPress={swap}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="swap-horizontal" size={20} color={colors.primaryStrong} />
               </TouchableOpacity>
               <TouchableOpacity style={styles.queryPlace} onPress={() => setPickerFor('to')} activeOpacity={0.7}>
                 <Text style={[styles.queryPlaceText, !toPlace && styles.queryPlaceEmpty]} numberOfLines={1}>
@@ -478,11 +483,27 @@ const makeStyles = (colors) => StyleSheet.create({
   queryTitle: { fontSize: 13, color: colors.ink2, fontWeight: '700', marginBottom: 12 },
   queryRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   queryPlace: {
-    flex: 1, backgroundColor: colors.chip, borderRadius: radius.sm,
-    paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1.5, borderColor: colors.line,
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadow.sm,
   },
-  queryPlaceText: { fontSize: 15, color: colors.ink, fontWeight: '600' },
+  queryPlaceText: { fontSize: 14.5, color: colors.ink, fontWeight: '700' },
   queryPlaceEmpty: { color: colors.ink3, fontWeight: '500' },
+  swapBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.chip,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
 
   result: { marginTop: 16, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 14 },
   routeHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
@@ -493,7 +514,7 @@ const makeStyles = (colors) => StyleSheet.create({
   statMain: { flex: 1 },
   statSubCol: { alignItems: 'flex-end' },
   statLabel: { fontSize: 12, color: colors.ink3, marginBottom: 2 },
-  statBig: { fontSize: 26, fontWeight: '800', color: colors.primaryStrong, letterSpacing: -1 },
+  statBig: { fontSize: 28, fontWeight: '800', color: colors.primaryStrong, letterSpacing: -1 },
   statHint: { fontSize: 11, color: colors.ink3, marginTop: 2 },
   statSub: { fontSize: 13, color: colors.ink2, fontWeight: '600', marginTop: 2 },
 

@@ -262,6 +262,12 @@ export const translations = {
     'profile.language': '语言',
     'profile.languageTitle': '选择语言',
     'profile.upToDate': '已是最新版本',
+    'profile.streakDays': '已连续记录 {n} 天',
+    'profile.streakToday': '开启探索第一天',
+    'profile.editProfile': '编辑',
+    'profile.sectionPreferences': '偏好与关于',
+    'profile.sectionDataManage': '数据管理与备份',
+    'profile.cloudSecurity': '零泄露风险 · 加密保护',
 
     // 位置服务
     'profile.sectionLocation': '位置服务',
@@ -577,6 +583,12 @@ export const translations = {
     'profile.language': 'Language',
     'profile.languageTitle': 'Choose language',
     'profile.upToDate': "You're up to date",
+    'profile.streakDays': 'Logged {n} days in a row',
+    'profile.streakToday': 'Day 1 of exploration',
+    'profile.editProfile': 'Edit',
+    'profile.sectionPreferences': 'Preferences & About',
+    'profile.sectionDataManage': 'Data & Backup',
+    'profile.cloudSecurity': 'Zero-leak · Encrypted protection',
 
     // Location service
     'profile.sectionLocation': 'Location service',
