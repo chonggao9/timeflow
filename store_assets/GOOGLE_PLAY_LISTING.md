@@ -186,11 +186,11 @@ Make your time visible. Track your journey with grace. Download TimeFlow today!
 |---|---|---|---|
 | **应用图标 (App Icon)** | 512 x 512 px, 32位 PNG/JPEG, <1MB | [`store_assets/app_icon_512x512.jpg`](file:///d:/work/timeflow/store_assets/app_icon_512x512.jpg) | ✅ 已生成 |
 | **置顶大图 (Feature Graphic)** | 1024 x 500 px, JPEG / 24位 PNG, <15MB | [`store_assets/feature_graphic_1024x500.jpg`](file:///d:/work/timeflow/store_assets/feature_graphic_1024x500.jpg) | ✅ 已生成 |
-| **宣传截图 1 (打卡交互)** | 1080 x 1920 (9:16), PNG/JPEG | [`store_assets/screenshot_1_checkin.jpg`](file:///d:/work/timeflow/store_assets/screenshot_1_checkin.jpg) | ✅ 已生成 |
-| **宣传截图 2 (今日时间轴)** | 1080 x 1920 (9:16), PNG/JPEG | [`store_assets/screenshot_2_timeline.png`](file:///d:/work/timeflow/store_assets/screenshot_2_timeline.png) | ✅ 已生成 |
-| **宣传截图 3 (耗时洞察)** | 1080 x 1920 (9:16), PNG/JPEG | [`store_assets/screenshot_3_insights.png`](file:///d:/work/timeflow/store_assets/screenshot_3_insights.png) | ✅ 已生成 |
-| **宣传截图 4 (桌面小组件)** | 1080 x 1920 (9:16), PNG/JPEG | [`store_assets/screenshot_4_widget.png`](file:///d:/work/timeflow/store_assets/screenshot_4_widget.png) | ✅ 已生成 |
-| **宣传截图 5 (补记与快选)** | 1080 x 1920 (9:16), PNG/JPEG | [`store_assets/screenshot_5_backfill.png`](file:///d:/work/timeflow/store_assets/screenshot_5_backfill.png) | ✅ 已生成 |
+| **宣传截图 1 (秒级打卡交互)** | 1080 x 1920 (9:16), PNG/JPEG | [`store_assets/screenshot_1_checkin.jpg`](file:///d:/work/timeflow/store_assets/screenshot_1_checkin.jpg) | ✅ 已生成 (拟真立体海报) |
+| **宣传截图 2 (今日流体时间轴)** | 1080 x 1920 (9:16), PNG | [`store_assets/screenshot_2_timeline.png`](file:///d:/work/timeflow/store_assets/screenshot_2_timeline.png) | ✅ 已生成 (基于落地页面实景) |
+| **宣传截图 3 (探索拓扑与轨迹路线)** | 1080 x 1920 (9:16), PNG | [`store_assets/screenshot_3_route.png`](file:///d:/work/timeflow/store_assets/screenshot_3_route.png) | ✅ 已生成 (基于落地方案A工业点阵实景) |
+| **宣传截图 4 (高频通勤与耗时洞察)** | 1080 x 1920 (9:16), PNG | [`store_assets/screenshot_4_insights.png`](file:///d:/work/timeflow/store_assets/screenshot_4_insights.png) | ✅ 已生成 (基于落地页面实景) |
+| **宣传截图 5 (个人中心与云端守护)** | 1080 x 1920 (9:16), PNG | [`store_assets/screenshot_5_security.png`](file:///d:/work/timeflow/store_assets/screenshot_5_security.png) | ✅ 已生成 (基于落地页面实景) |
 
 ---
 

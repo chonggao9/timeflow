@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TimeFlow · Google Play Screenshots Renderer (1080x1920)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+
+  :root {
+    --bg-page: #0C0F15;
+    --card-bg: #151A22;
+    --text-main: #F0F6FC;
+    --text-muted: #8B949E;
+    --accent: #FF6B6B;
+    --accent-strong: #F24E4E;
+    --border: rgba(255, 255, 255, 0.08);
+
+    /* TimeFlow Theme Tokens */
+    --tf-bg: #FBF5EF;
+    --tf-surface: #FFFFFF;
+    --tf-primary: #FF6B6B;
+    --tf-primary-strong: #F24E4E;
+    --tf-primary-soft: #FFE9E4;
+    --tf-primary-softer: #FFF4F0;
+    --tf-ink: #2B231E;
+    --tf-ink2: #7A6F66;
+    --tf-ink3: #B6A99E;
+    --tf-line: #F1E7DD;
+    --tf-line2: #E9DCD0;
+    --tf-past: #E8D9CB;
+    --tf-chip: #FAF6F1;
+    --tf-success: #4CAE7F;
+    --tf-danger: #E08A7A;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg-page);
+    color: var(--text-main);
+    font-family: 'Plus Jakarta Sans', 'Noto Sans SC', -apple-system, sans-serif;
+    padding: 32px 20px 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.5;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 30px;
+    max-width: 900px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 107, 107, 0.15);
+    color: var(--accent);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    border: 1px solid rgba(255, 107, 107, 0.25);
+  }
+  .header h1 {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.6px;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #FFFFFF 0%, #FF9E94 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header p {
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  /* 4 屏全景网格 */
+  .screens-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 28px;
+    width: 100%;
+    max-width: 1520px;
+  }
+
+  .screen-card-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .col-title {
+    font-size: 14.5px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-main);
+  }
+  .col-pill {
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(76, 174, 127, 0.15);
+    color: #4CAE7F;
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(76, 174, 127, 0.3);
+  }
+
+  /* 手机画框 */
+  .phone-frame {
+    width: 330px;
+    height: 670px;
+    background: var(--tf-bg);
+    border-radius: 36px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.55), 0 0 0 8px #1A1F27, 0 0 0 10px #2A323D;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+  }
+
+  /* 手机通用状态栏 */
+  .statusbar {
+    height: 32px;
+    padding: 10px 18px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--tf-ink);
+    z-index: 10;
+  }
+
+  /* ---------------- SCREEN 1: 首页打卡 ---------------- */
+  .home-header {
+    padding: 10px 16px 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .home-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--tf-ink);
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+  }
+  .home-subtitle {
+    font-size: 11.5px;
+    color: var(--tf-ink2);
+    font-weight: 600;
+    margin-top: 3px;
+  }
+  .home-badge {
+    background: var(--tf-primary-soft);
+    color: var(--tf-primary-strong);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  .floating-capsule {
+    margin: 4px 14px 6px;
+    background: var(--tf-surface);
+    border: 1px solid var(--tf-line);
+    border-radius: 999px;
+    padding: 5px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-shadow: 0 2px 8px rgba(43,35,30,0.06);
+    font-size: 10.5px;
+    color: var(--tf-ink2);
+    font-weight: 600;
+  }
+  .capsule-spinner {
+    width: 10px; height: 10px;
+    border: 1.8px solid var(--tf-primary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .home-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 14px;
+  }
+  .home-scroll::-webkit-scrollbar { display: none; }
+
+  .trip-card {
+    background: var(--tf-surface);
+    border-radius: 16px;
+    border: 1px solid var(--tf-line);
+    padding: 10px 12px;
+    box-shadow: 0 2px 8px rgba(43,35,30,0.04);
+    margin-bottom: 10px;
+  }
+  .trip-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--tf-line);
+  }
+  .trip-badge-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--tf-primary-strong);
+  }
+  .trip-dot {
+    width: 6px; height: 6px; border-radius: 3px; background: var(--tf-primary);
+  }
+  .trip-time-badge {
+    font-size: 10.5px; color: var(--tf-ink3); background: var(--tf-chip); padding: 1px 5px; border-radius: 4px; font-weight: 500;
+  }
+  .map-tag-btn {
+    font-size: 10.5px; font-weight: 700; color: var(--tf-primary-strong); background: var(--tf-primary-soft); padding: 2px 7px; border-radius: 999px;
+  }
+
+  .node-row {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+  }
+  .node-left-col {
+    width: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .node-pulse-ring {
+    position: absolute;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--tf-primary);
+    opacity: 0.3;
+    animation: ripple 1.6s ease-out infinite;
+  }
+  @keyframes ripple {
+    0% { transform: scale(0.6); opacity: 0.45; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+  .node-core-current {
+    width: 11px; height: 11px; border-radius: 50%; background: var(--tf-primary); box-shadow: 0 0 5px var(--tf-primary); z-index: 2;
+  }
+  .node-core-past {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--tf-past); border: 2px solid var(--tf-surface);
+  }
+  .node-time {
+    font-size: 12px; color: var(--tf-ink2); width: 42px; margin-left: 2px; font-variant-numeric: tabular-nums;
+  }
+  .node-time.current {
+    color: var(--tf-primary-strong); font-weight: 800;
+  }
+  .name-pill {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--tf-chip);
+    padding: 5px 9px;
+    border-radius: 12px;
+    border: 1px solid var(--tf-line);
+    margin-left: 6px;
+  }
+  .name-pill.current {
+    background: var(--tf-primary-soft);
+    border-color: rgba(255, 107, 107, 0.35);
+  }
+  .name-pill-text {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--tf-ink);
+  }
+  .name-pill-text.current {
+    color: var(--tf-primary-strong);
+    font-weight: 800;
+  }
+  .edit-pencil-circle {
+    width: 17px; height: 17px;
+    border-radius: 50%;
+    background: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: var(--tf-primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 0.5px solid var(--tf-line);
+  }
+
+  .seg-row {
+    display: flex;
+    align-items: center;
+    height: 32px;
+  }
+  .seg-col {
+    width: 24px;
+    display: flex;
+    justify-content: center;
+    height: 100%;
+  }
+  .seg-line {
+    width: 2px; height: 100%; background: var(--tf-line2);
+  }
+  .seg-chip {
+    margin-left: 6px;
+    background: var(--tf-chip);
+    border: 1px solid var(--tf-line);
+    padding: 2px 8px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10.5px;
+    color: var(--tf-ink2);
+    font-weight: 600;
+  }
+  .seg-chip .dur {
+    font-weight: 800; color: var(--tf-ink);
+  }
+
+  /* 操作区 */
+  .composer {
+    padding: 6px 14px 8px;
+    background: var(--tf-bg);
+  }
+  .modes-scroll {
+    display: flex;
+    gap: 7px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+  .modes-scroll::-webkit-scrollbar { display: none; }
+  .mode-chip {
+    width: 58px;
+    padding: 6px 3px;
+    border-radius: 13px;
+    background: var(--tf-surface);
+    border: 1.2px solid var(--tf-line);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--tf-ink2);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  }
+  .mode-chip.on {
+    background: var(--tf-primary-soft);
+    border-color: var(--tf-primary);
+    color: var(--tf-primary-strong);
+    box-shadow: 0 3px 8px rgba(255, 107, 107, 0.16);
+  }
+  .btn-checkin-big {
+    position: relative;
+    width: 100%;
+    padding: 13px;
+    border-radius: 18px;
+    background: var(--tf-primary);
+    color: #FFF;
+    border: none;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    text-indent: 3px;
+    box-shadow: 0 8px 20px rgba(255, 107, 107, 0.36);
+    overflow: hidden;
+    margin-top: 4px;
+    text-align: center;
+  }
+  .charge-line {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: #FFFFFF;
+    width: 35%;
+  }
+  .btn-hint-text {
+    font-size: 10px;
+    color: var(--tf-ink3);
+    text-align: center;
+    margin-top: 4px;
+  }
+
+  /* ---------------- SCREEN 2: 探索拓扑 (Route Topology) ---------------- */
+  .topo-nav {
+    padding: 6px 12px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--tf-surface);
+    border-bottom: 1px solid var(--tf-line);
+  }
+  .topo-tabs {
+    display: flex;
+    background: var(--tf-chip);
+    padding: 3px;
+    border-radius: 8px;
+    gap: 4px;
+  }
+  .topo-tab-item {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+  .topo-tab-item.active {
+    background: var(--tf-surface);
+    color: var(--tf-primary-strong);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .topo-tab-item.inactive {
+    color: var(--tf-ink2);
+  }
+
+  .topo-canvas {
+    flex: 1.35;
+    background: var(--tf-bg);
+    position: relative;
+    overflow: hidden;
+    /* Blueprint 点阵底纹 */
+    background-image: radial-gradient(rgba(182, 169, 158, 0.35) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .topo-compass {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid var(--tf-line);
+    padding: 3px 7px;
+    border-radius: 7px;
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--tf-ink2);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  }
+  .topo-scale {
+    position: absolute;
+    bottom: 10px;
+    left: 12px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--tf-ink3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .topo-scale-bar {
+    width: 36px; height: 2px; background: var(--tf-ink3); border-left: 2px solid var(--tf-ink2); border-right: 2px solid var(--tf-ink2);
+  }
+
+  .bubble-card {
+    position: absolute;
+    background: var(--tf-surface);
+    border-radius: 11px;
+    padding: 5px 8px;
+    border: 1px solid var(--tf-line);
+    box-shadow: 0 4px 12px rgba(43,35,30,0.09);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 10;
+    max-width: 140px;
+  }
+  .bubble-card.start {
+    border-color: #4CAE7F;
+    background: #F2FAF6;
+  }
+  .bubble-card.end {
+    border-color: var(--tf-primary-strong);
+    background: #FFF5F2;
+  }
+  .bubble-title {
+    font-size: 11px; font-weight: 800; color: var(--tf-ink);
+  }
+  .bubble-sub {
+    font-size: 9px; color: var(--tf-ink3); font-weight: 600;
+  }
+  .leg-bubble {
+    position: absolute;
+    background: var(--tf-chip);
+    border: 1px solid var(--tf-line);
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--tf-primary-strong);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    z-index: 8;
+  }
+
+  /* 底部抽屉 */
+  .topo-bottom-sheet {
+    flex: 1;
+    background: var(--tf-surface);
+    border-top-left-radius: 22px;
+    border-top-right-radius: 22px;
+    border-top: 1px solid var(--tf-line);
+    padding: 8px 14px 12px;
+    box-shadow: 0 -6px 20px rgba(0,0,0,0.06);
+    display: flex;
+    flex-direction: column;
+    z-index: 20;
+  }
+  .drawer-handle {
+    width: 32px; height: 3.5px; border-radius: 2px; background: var(--tf-line2); align-self: center; margin-bottom: 8px;
+  }
+  .topo-dashboard-card {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    background: var(--tf-chip);
+    border-radius: 12px;
+    border: 1px solid var(--tf-line);
+    padding: 6px 4px;
+    margin-bottom: 8px;
+  }
+  .dash-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .dash-col:not(:last-child) {
+    border-right: 1px solid var(--tf-line);
+  }
+  .dash-val {
+    font-size: 13.5px; font-weight: 800; color: var(--tf-ink);
+  }
+  .dash-val.accent { color: var(--tf-primary-strong); }
+  .dash-lbl {
+    font-size: 9.5px; color: var(--tf-ink3); font-weight: 600; margin-top: 1px;
+  }
+  .topo-stop-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    border-radius: 8px;
+    background: var(--tf-bg);
+    border: 1px solid var(--tf-line);
+    margin-bottom: 5px;
+  }
+  .topo-stop-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .topo-badge-num {
+    width: 17px; height: 17px; border-radius: 8.5px; background: var(--tf-primary-soft); color: var(--tf-primary-strong); font-size: 9.5px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+  }
+  .topo-badge-num.start { background: #4CAE7F; color: #FFF; }
+  .topo-badge-num.end { background: var(--tf-primary-strong); color: #FFF; }
+
+  /* ---------------- SCREEN 3: 洞察分析 ---------------- */
+  .insights-header {
+    padding: 10px 16px 6px;
+  }
+  .insights-title {
+    font-size: 24px; font-weight: 800; color: var(--tf-ink);
+  }
+  .insights-sub {
+    font-size: 11.5px; color: var(--tf-ink2); font-weight: 600;
+  }
+  .seg-pill-bar {
+    display: flex;
+    background: var(--tf-chip);
+    border-radius: 10px;
+    padding: 3px;
+    margin: 6px 14px 8px;
+  }
+  .seg-pill-item {
+    flex: 1; text-align: center; padding: 5px; border-radius: 8px; font-size: 11.5px; font-weight: 600; color: var(--tf-ink2);
+  }
+  .seg-pill-item.on {
+    background: var(--tf-surface); color: var(--tf-primary-strong); font-weight: 800; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+  .overview-grid {
+    display: flex;
+    gap: 6px;
+    margin: 0 14px 8px;
+  }
+  .overview-box {
+    flex: 1;
+    background: var(--tf-surface);
+    border-radius: 12px;
+    border: 1px solid var(--tf-line);
+    padding: 8px 6px;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  }
+  .overview-num {
+    font-size: 17px; font-weight: 800; color: var(--tf-ink);
+  }
+  .overview-lbl {
+    font-size: 10px; color: var(--tf-ink3); font-weight: 600; margin-top: 1px;
+  }
+  .quick-chips-row {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 0 14px 6px;
+  }
+  .quick-chips-row::-webkit-scrollbar { display: none; }
+  .quick-commute-chip {
+    background: var(--tf-surface);
+    border: 1.2px solid var(--tf-line);
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    color: var(--tf-ink2);
+    font-weight: 600;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  }
+  .quick-commute-chip.on {
+    background: var(--tf-primary-soft);
+    border-color: var(--tf-primary);
+    color: var(--tf-primary-strong);
+  }
+
+  .route-card {
+    background: var(--tf-surface);
+    border-radius: 16px;
+    border: 1px solid var(--tf-line);
+    padding: 12px;
+    margin: 4px 14px 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .route-query-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .place-box {
+    flex: 1;
+    background: var(--tf-surface);
+    border-radius: 11px;
+    padding: 8px 10px;
+    border: 1px solid var(--tf-line);
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--tf-ink);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  }
+  .swap-btn-circle {
+    width: 28px; height: 28px;
+    border-radius: 14px;
+    background: var(--tf-chip);
+    border: 1px solid var(--tf-line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--tf-primary-strong);
+    font-weight: 800;
+    font-size: 13px;
+  }
+  .typical-time-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-top: 8px;
+    border-top: 1px solid var(--tf-line);
+  }
+  .typical-val {
+    font-size: 26px; font-weight: 800; color: var(--tf-primary-strong); letter-spacing: -1px;
+  }
+  .typical-sub {
+    font-size: 11px; color: var(--tf-ink2); text-align: right;
+  }
+
+  /* 柱状图 */
+  .chart-box {
+    background: var(--tf-surface);
+    border-radius: 14px;
+    border: 1px solid var(--tf-line);
+    padding: 10px 12px;
+    margin: 0 14px 10px;
+  }
+  .chart-header {
+    display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 700; color: var(--tf-ink2); margin-bottom: 8px;
+  }
+  .bar-chart-stage {
+    height: 68px;
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    border-bottom: 1px solid var(--tf-line);
+    padding-bottom: 4px;
+  }
+  .bar-pill {
+    width: 8.5px;
+    border-radius: 4.5px;
+    background: linear-gradient(180deg, var(--tf-ink3) 0%, rgba(182,169,158,0.3) 100%);
+  }
+  .bar-pill.hot {
+    background: linear-gradient(180deg, var(--tf-primary-strong) 0%, var(--tf-primary) 100%);
+    box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
+  }
+
+  /* ---------------- SCREEN 4: 我的设置 ---------------- */
+  .profile-header {
+    padding: 10px 16px 6px;
+  }
+  .profile-title {
+    font-size: 24px; font-weight: 800; color: var(--tf-ink);
+  }
+  .profile-sub {
+    font-size: 11.5px; color: var(--tf-ink2); font-weight: 600;
+  }
+  .fancy-profile-card {
+    background: var(--tf-surface);
+    border-radius: 16px;
+    border: 1px solid var(--tf-line);
+    padding: 12px;
+    margin: 4px 14px 10px;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 3px 10px rgba(43,35,30,0.05);
+  }
+  .avatar-fancy-wrap {
+    position: relative;
+    margin-right: 10px;
+  }
+  .avatar-fancy-box {
+    width: 46px; height: 46px;
+    border-radius: 23px;
+    background: linear-gradient(135deg, #FF8F84 0%, #FF6B6B 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFF;
+    font-size: 20px;
+    box-shadow: 0 3px 10px rgba(255, 107, 107, 0.35);
+  }
+  .star-badge-gold {
+    position: absolute;
+    bottom: -2px; right: -2px;
+    width: 15px; height: 15px;
+    border-radius: 7.5px;
+    background: #FFB300;
+    border: 1.8px solid #FFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    color: #FFF;
+  }
+  .profile-user-info {
+    flex: 1;
+  }
+  .profile-user-name {
+    font-size: 15px; font-weight: 800; color: var(--tf-ink);
+  }
+  .streak-pill-tag {
+    display: inline-flex;
+    align-items: center;
+    background: var(--tf-primary-soft);
+    color: var(--tf-primary-strong);
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 999px;
+    margin-top: 3px;
+    border: 0.5px solid rgba(255,107,107,0.25);
+  }
+  .btn-edit-pencil {
+    background: var(--tf-chip);
+    border: 1px solid var(--tf-line);
+    padding: 3px 8px;
+    border-radius: 8px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--tf-ink2);
+  }
+
+  .shield-banner-box {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.04) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 14px;
+    padding: 9px 12px;
+    margin: 0 14px 10px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    box-shadow: 0 2px 6px rgba(16,185,129,0.06);
+  }
+  .shield-icon-seat {
+    width: 32px; height: 32px;
+    border-radius: 10px;
+    background: rgba(16, 185, 129, 0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+  .shield-title-row {
+    display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 800; color: var(--tf-ink);
+  }
+  .shield-safe-tag {
+    font-size: 9px; background: rgba(16, 185, 129, 0.2); color: #10B981; padding: 1px 4px; border-radius: 4px; font-weight: 700;
+  }
+  .shield-sub {
+    font-size: 10px; color: var(--tf-ink2); margin-top: 1px;
+  }
+
+  .setting-group-box {
+    background: var(--tf-surface);
+    border-radius: 15px;
+    border: 1px solid var(--tf-line);
+    margin: 0 14px 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+  }
+  .setting-group-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--tf-ink2);
+    margin: 6px 16px 4px;
+  }
+  .setting-item-row {
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12.5px;
+    color: var(--tf-ink);
+  }
+  .setting-item-row:not(:last-child) {
+    border-bottom: 1px solid var(--tf-line);
+  }
+  .setting-left-block {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .icon-seat {
+    width: 26px; height: 26px;
+    border-radius: 8px;
+    background: var(--tf-chip);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+  }
+
+  /* 通用底部 TabBar */
+  .app-tabbar {
+    height: 48px;
+    background: var(--tf-surface);
+    border-top: 1px solid var(--tf-line);
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.03);
+    display: flex;
+    align-items: center;
+  }
+  .tab-item-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    font-size: 9.5px;
+    color: var(--tf-ink3);
+    font-weight: 600;
+  }
+  .tab-item-btn.active {
+    color: var(--tf-primary-strong);
+    font-weight: 800;
+  }
+
+
+/* Poster Reset & High-Res 1080x1920 Layout */
+body {
+  margin: 0;
+  padding: 0;
+  background: #06080B;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 60px;
+}
+
+.poster-stage {
+  width: 1080px;
+  height: 1920px;
+  background: #0B0E14;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 90px 60px 0;
+}
+
+/* Subtle modern mesh & glow background */
+.poster-stage::before {
+  content: '';
+  position: absolute;
+  top: -200px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 900px;
+  height: 900px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 107, 107, 0.14) 0%, rgba(255, 107, 107, 0.03) 45%, transparent 70%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.poster-header {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.poster-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 107, 107, 0.16);
+  color: #FF6B6B;
+  border: 1.5px solid rgba(255, 107, 107, 0.32);
+  padding: 8px 20px;
+  border-radius: 999px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  margin-bottom: 16px;
+}
+
+.poster-title {
+  font-size: 56px;
+  font-weight: 800;
+  color: #FFFFFF;
+  letter-spacing: -1px;
+  line-height: 1.15;
+  margin-bottom: 12px;
+  text-shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+
+.poster-sub {
+  font-size: 25px;
+  font-weight: 600;
+  color: #94A3B8;
+  letter-spacing: -0.2px;
+}
+
+/* 巨幅拟真旗舰机身容器 */
+.phone-chassis-outer {
+  position: relative;
+  z-index: 2;
+  width: 760px;
+  height: 1540px;
+  background: #14171E;
+  border-radius: 68px;
+  padding: 18px;
+  box-sizing: border-box;
+  box-shadow: 
+    0 40px 100px rgba(0, 0, 0, 0.8),
+    0 0 0 10px #1E232D,
+    0 0 0 14px #2E3644,
+    inset 0 0 0 3px rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+/* 机身屏幕内槽 */
+.phone-screen-viewport {
+  width: 724px;
+  height: 1504px;
+  border-radius: 54px;
+  overflow: hidden;
+  background: var(--tf-bg);
+  position: relative;
+}
+
+/* 2.19x 等比高清矢量放大 */
+.scaled-content-wrapper {
+  width: 330px;
+  height: 686px;
+  transform: scale(2.194);
+  transform-origin: top left;
+}
+
+/* 去除原 330px 模拟框的外框与阴影，由 .phone-chassis-outer 统一承载 */
+.scaled-content-wrapper .phone-frame {
+  width: 330px !important;
+  height: 686px !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+</style>
+</head>
+<body>
+
+
+  <!-- SCREENSHOT 02 · 行程记录 -->
+  <div class="poster-stage" id="poster-2">
+    <div class="poster-header">
+      <div class="poster-tag">SCREENSHOT 02 · 行程记录</div>
+      <div class="poster-title">今日流体时间轴</div>
+      <div class="poster-sub">途经点自动成链 · 耗时与位移智能追踪</div>
+    </div>
+    
+    <div class="phone-chassis-outer">
+      <div class="phone-screen-viewport">
+        <div class="scaled-content-wrapper">
+          <div class="phone-frame">
+      <div class="statusbar">
+        <span>09:41</span>
+        <span>📶 🔋</span>
+      </div>
+
+      <div class="home-header">
+        <div>
+          <div class="home-title">今天</div>
+          <div class="home-subtitle">9月8日 · 周二</div>
+        </div>
+        <div class="home-badge">3 次打卡</div>
+      </div>
+
+      <!-- 灵动悬浮胶囊 -->
+      <div class="floating-capsule">
+        <div class="capsule-spinner"></div>
+        <span>正在同步位置… · 零抖动</span>
+      </div>
+
+      <div class="home-scroll">
+        <!-- 流体行程卡片 -->
+        <div class="trip-card">
+          <div class="trip-card-head">
+            <div class="trip-badge-left">
+              <div class="trip-dot"></div>
+              <span>行程 1</span>
+              <span class="trip-time-badge">50分钟</span>
+            </div>
+            <span class="map-tag-btn">🗺 轨迹</span>
+          </div>
+
+          <!-- 打卡点 1 (当前活跃) -->
+          <div class="node-row">
+            <div class="node-left-col">
+              <div class="node-pulse-ring"></div>
+              <div class="node-core-current"></div>
+            </div>
+            <div class="node-time current">20:25</div>
+            <div class="name-pill current">
+              <span class="name-pill-text current">万象天地咖啡馆</span>
+              <div class="edit-pencil-circle">✎</div>
+            </div>
+          </div>
+
+          <!-- 连线路段 1 -->
+          <div class="seg-row">
+            <div class="seg-col"><div class="seg-line"></div></div>
+            <div class="seg-chip">
+              <span>🚇 地铁</span><span>·</span><span class="dur">16 分钟</span>
+            </div>
+          </div>
+
+          <!-- 打卡点 2 -->
+          <div class="node-row">
+            <div class="node-left-col">
+              <div class="node-core-past"></div>
+            </div>
+            <div class="node-time">19:47</div>
+            <div class="name-pill">
+              <span class="name-pill-text">科技园前海湾站</span>
+              <div class="edit-pencil-circle">✎</div>
+            </div>
+          </div>
+
+          <!-- 连线路段 2 -->
+          <div class="seg-row">
+            <div class="seg-col"><div class="seg-line"></div></div>
+            <div class="seg-chip">
+              <span>🚶 步行</span><span>·</span><span class="dur">12 分钟</span>
+            </div>
+          </div>
+
+          <!-- 打卡点 3 -->
+          <div class="node-row">
+            <div class="node-left-col">
+              <div class="node-core-past"></div>
+            </div>
+            <div class="node-time">19:35</div>
+            <div class="name-pill">
+              <span class="name-pill-text">阳光棕榈园</span>
+              <div class="edit-pencil-circle">✎</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部操作区 -->
+      <div class="composer">
+        <div class="modes-scroll">
+          <div class="mode-chip on">🚶<span>步行</span></div>
+          <div class="mode-chip">🚴<span>骑行</span></div>
+          <div class="mode-chip">🚗<span>自驾</span></div>
+          <div class="mode-chip">🚕<span>打车</span></div>
+          <div class="mode-chip">🚇<span>地铁</span></div>
+        </div>
+
+        <div class="btn-checkin-big">
+          <div class="charge-line"></div>
+          <span>打 卡</span>
+        </div>
+        <div class="btn-hint-text">● 轻按记录途经点 · 长按蓄力结程</div>
+      </div>
+
+      <!-- TabBar -->
+      <div class="app-tabbar">
+        <div class="tab-item-btn active">⏱<span>打卡</span></div>
+        <div class="tab-item-btn">📊<span>洞察</span></div>
+        <div class="tab-item-btn">👤<span>我的</span></div>
+      </div>
+    </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- SCREENSHOT 03 · 探索美学 -->
+  <div class="poster-stage" id="poster-3">
+    <div class="poster-header">
+      <div class="poster-tag">SCREENSHOT 03 · 探索美学</div>
+      <div class="poster-title">探索拓扑与轨迹路线</div>
+      <div class="poster-sub">方案A工业点阵蓝图 · 双层发光渐变动态轨迹</div>
+    </div>
+    
+    <div class="phone-chassis-outer">
+      <div class="phone-screen-viewport">
+        <div class="scaled-content-wrapper">
+          <div class="phone-frame">
+      <div class="statusbar" style="background: #FFF;">
+        <span>09:41</span>
+        <span>📶 🔋</span>
+      </div>
+
+      <!-- 顶栏双模切换 -->
+      <div class="topo-nav">
+        <div style="font-size: 16px; font-weight: 800; color: var(--tf-ink);">‹</div>
+        <div class="topo-tabs">
+          <span class="topo-tab-item active">探索拓扑</span>
+          <span class="topo-tab-item inactive">高精底图</span>
+        </div>
+        <div style="width: 16px;"></div>
+      </div>
+
+      <!-- 拓扑探索画布 (带 Blueprint 点阵底纹与双层发光轨道) -->
+      <div class="topo-canvas">
+        <div class="topo-compass">
+          <span style="color: var(--tf-primary);">▲</span>
+          <span>N 18°</span>
+        </div>
+        <div class="topo-scale">
+          <div class="topo-scale-bar"></div>
+          <span>500 m</span>
+        </div>
+
+        <!-- SVG 发光渐变轨道 -->
+        <svg style="position: absolute; width: 100%; height: 100%;" viewBox="0 0 330 330">
+          <defs>
+            <linearGradient id="liveTrackGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#4CAE7F" />
+              <stop offset="50%" stop-color="#FF6B6B" />
+              <stop offset="100%" stop-color="#F24E4E" />
+            </linearGradient>
+          </defs>
+          <!-- 14px 半透明柔光轨道 -->
+          <path d="M 165,65 Q 120,140 165,190 T 165,280" fill="none" stroke="rgba(255,107,107,0.22)" stroke-width="14" stroke-linecap="round" />
+          <!-- 4.5px 核心流体渐变线 -->
+          <path d="M 165,65 Q 120,140 165,190 T 165,280" fill="none" stroke="url(#liveTrackGrad)" stroke-width="4.5" stroke-linecap="round" />
+          <!-- 沿途前进方向指示 -->
+          <circle cx="140" cy="120" r="2.2" fill="#FFF" />
+          <circle cx="165" cy="235" r="2.2" fill="#FFF" />
+        </svg>
+
+        <!-- 站点 1：起点立体气泡 -->
+        <div class="bubble-card start" style="left: 145px; top: 52px;">
+          <span style="font-size: 12px;">🚩</span>
+          <div>
+            <div class="bubble-title">阳光棕榈园 (起点)</div>
+            <div class="bubble-sub">11:12 · 出发</div>
+          </div>
+        </div>
+
+        <!-- 耗时胶囊 1 -->
+        <div class="leg-bubble" style="left: 120px; top: 135px;">
+          <span>🚶 步行</span><span>+12m</span>
+        </div>
+
+        <!-- 站点 2：中途换乘气泡 -->
+        <div class="bubble-card" style="left: 145px; top: 178px;">
+          <span style="font-size: 12px;">🚇</span>
+          <div>
+            <div class="bubble-title">科技园前海湾站</div>
+            <div class="bubble-sub">11:24 · 换乘</div>
+          </div>
+        </div>
+
+        <!-- 耗时胶囊 2 -->
+        <div class="leg-bubble" style="left: 175px; top: 230px;">
+          <span>🚇 地铁</span><span>+16m</span>
+        </div>
+
+        <!-- 站点 3：终点气泡 -->
+        <div class="bubble-card end" style="left: 145px; top: 265px;">
+          <span style="font-size: 12px;">🏁</span>
+          <div>
+            <div class="bubble-title">万象天地 (终点)</div>
+            <div class="bubble-sub">11:40 · 到达</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部 6:4 黄金分割半展开抽屉 -->
+      <div class="topo-bottom-sheet">
+        <div class="drawer-handle"></div>
+
+        <!-- 3 列指标仪表盘 -->
+        <div class="topo-dashboard-card">
+          <div class="dash-col">
+            <span class="dash-val accent">28 <small style="font-size: 9.5px;">分钟</small></span>
+            <span class="dash-lbl">总耗时</span>
+          </div>
+          <div class="dash-col">
+            <span class="dash-val">3.6 <small style="font-size: 9.5px;">km</small></span>
+            <span class="dash-lbl">预估路程</span>
+          </div>
+          <div class="dash-col">
+            <span class="dash-val">3 <small style="font-size: 9.5px;">站</small></span>
+            <span class="dash-lbl">途径站数</span>
+          </div>
+        </div>
+
+        <!-- 站点精简列表 -->
+        <div style="flex: 1; overflow-y: auto;">
+          <div class="topo-stop-row">
+            <div class="topo-stop-left">
+              <span class="topo-badge-num start">1</span>
+              <span style="font-size: 11.5px; font-weight: 700; color: var(--tf-ink);">阳光棕榈园</span>
+            </div>
+            <span style="font-size: 10.5px; color: var(--tf-ink3);">11:12</span>
+          </div>
+          <div class="topo-stop-row">
+            <div class="topo-stop-left">
+              <span class="topo-badge-num">2</span>
+              <span style="font-size: 11.5px; font-weight: 600; color: var(--tf-ink);">科技园前海湾站</span>
+            </div>
+            <span style="font-size: 10.5px; color: var(--tf-ink3);">+12m · 🚇</span>
+          </div>
+          <div class="topo-stop-row">
+            <div class="topo-stop-left">
+              <span class="topo-badge-num end">3</span>
+              <span style="font-size: 11.5px; font-weight: 700; color: var(--tf-ink);">万象天地咖啡馆</span>
+            </div>
+            <span style="font-size: 10.5px; color: var(--tf-ink3);">+16m · 🏁</span>
+          </div>
+        </div>
+      </div>
+    </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- SCREENSHOT 04 · 深度分析 -->
+  <div class="poster-stage" id="poster-4">
+    <div class="poster-header">
+      <div class="poster-tag">SCREENSHOT 04 · 深度分析</div>
+      <div class="poster-title">高频通勤与耗时洞察</div>
+      <div class="poster-sub">A→B定向路段耗时分析 · 24小时出行规律图谱</div>
+    </div>
+    
+    <div class="phone-chassis-outer">
+      <div class="phone-screen-viewport">
+        <div class="scaled-content-wrapper">
+          <div class="phone-frame">
+      <div class="statusbar">
+        <span>09:41</span>
+        <span>📶 🔋</span>
+      </div>
+
+      <div class="insights-header">
+        <div class="insights-title">洞察</div>
+        <div class="insights-sub">你的出行路线与耗时规律</div>
+      </div>
+
+      <div class="seg-pill-bar">
+        <div class="seg-pill-item on">统计</div>
+        <div class="seg-pill-item">历史</div>
+      </div>
+
+      <!-- 3 列指标看板 -->
+      <div class="overview-grid">
+        <div class="overview-box"><div class="overview-num">38</div><div class="overview-lbl">打卡总数</div></div>
+        <div class="overview-box"><div class="overview-num">7</div><div class="overview-lbl">常去地点</div></div>
+        <div class="overview-box"><div class="overview-num" style="color: var(--tf-primary);">12</div><div class="overview-lbl">发现路线</div></div>
+      </div>
+
+      <!-- 高频通勤快捷选择横向 Chips -->
+      <div style="font-size: 11px; font-weight: 700; color: var(--tf-ink2); margin: 2px 16px 4px;">⚡ 高频通勤快捷查看</div>
+      <div class="quick-chips-row">
+        <div class="quick-commute-chip on">🚇 家 → 公司 <b>38分</b></div>
+        <div class="quick-commute-chip">🚶 公司 → 咖啡店 <b>12分</b></div>
+        <div class="quick-commute-chip">🚗 公司 → 家 <b>30分</b></div>
+      </div>
+
+      <!-- A→B 路线微卡片投影查询卡 -->
+      <div class="route-card">
+        <div style="font-size: 11.5px; font-weight: 800; color: var(--tf-ink); margin-bottom: 6px;">A→B 路线定向分析</div>
+        <div class="route-query-row">
+          <div class="place-box">家</div>
+          <div class="swap-btn-circle">⇄</div>
+          <div class="place-box">公司</div>
+        </div>
+
+        <div class="typical-time-row">
+          <div>
+            <div style="font-size: 10px; color: var(--tf-ink3);">典型耗时</div>
+            <div class="typical-val">38 <small style="font-size: 12px; font-weight: 700;">分钟</small></div>
+          </div>
+          <div class="typical-sub">
+            <div>波动 30 – 45 分钟</div>
+            <div style="color: var(--tf-ink3); font-size: 10px; margin-top: 1px;">样本 28 次 · 含停留</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 渐变胶囊柱状图 -->
+      <div class="chart-box">
+        <div class="chart-header">
+          <span>耗时分布 (渐变胶囊柱)</span>
+          <span style="color: var(--tf-primary-strong); background: var(--tf-primary-soft); padding: 1px 5px; border-radius: 4px; font-size: 9.5px;">通常 38分</span>
+        </div>
+        <div class="bar-chart-stage">
+          <div class="bar-pill" style="height: 20px;"></div>
+          <div class="bar-pill" style="height: 36px;"></div>
+          <div class="bar-pill hot" style="height: 60px;"></div>
+          <div class="bar-pill" style="height: 46px;"></div>
+          <div class="bar-pill" style="height: 26px;"></div>
+          <div class="bar-pill" style="height: 12px;"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 9.5px; color: var(--tf-ink2); margin-top: 4px; font-weight: 600;">
+          <span>30分</span><span>38分 (高频)</span><span>45分</span>
+        </div>
+      </div>
+
+      <!-- TabBar -->
+      <div class="app-tabbar">
+        <div class="tab-item-btn">⏱<span>打卡</span></div>
+        <div class="tab-item-btn active">📊<span>洞察</span></div>
+        <div class="tab-item-btn">👤<span>我的</span></div>
+      </div>
+    </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- SCREENSHOT 05 · 数据隐私 -->
+  <div class="poster-stage" id="poster-5">
+    <div class="poster-header">
+      <div class="poster-tag">SCREENSHOT 05 · 数据隐私</div>
+      <div class="poster-title">个人中心与云端守护</div>
+      <div class="poster-sub">WebDAV强加密零知识备份 · 连续记录成就勋章</div>
+    </div>
+    
+    <div class="phone-chassis-outer">
+      <div class="phone-screen-viewport">
+        <div class="scaled-content-wrapper">
+          <div class="phone-frame">
+      <div class="statusbar">
+        <span>09:41</span>
+        <span>📶 🔋</span>
+      </div>
+
+      <div class="profile-header">
+        <div class="profile-title">我的</div>
+        <div class="profile-sub">偏好与数据设置</div>
+      </div>
+
+      <!-- 现代个人身份卡片 (50px渐变头像 + 金色星星 + 连续打卡徽章 + 编辑按钮) -->
+      <div class="fancy-profile-card">
+        <div class="avatar-fancy-wrap">
+          <div class="avatar-fancy-box">👤</div>
+          <div class="star-badge-gold">★</div>
+        </div>
+        <div class="profile-user-info">
+          <div class="profile-user-name">时空旅行者</div>
+          <div class="streak-pill-tag">🔥 已连续记录 18 天</div>
+        </div>
+        <div class="btn-edit-pencil">编辑 ✎</div>
+      </div>
+
+      <!-- 安全护盾发光卡片 -->
+      <div class="shield-banner-box">
+        <div class="shield-icon-seat">🛡️</div>
+        <div style="flex: 1;">
+          <div class="shield-title-row">
+            <span>WebDAV 云端加密守护中</span>
+            <span class="shield-safe-tag">安全</span>
+          </div>
+          <div class="shield-sub">上次自动备份：今日 18:30 · 零泄露风险</div>
+        </div>
+        <div style="font-size: 11px; color: var(--tf-ink3);">›</div>
+      </div>
+
+      <!-- 分组一：数据管理与备份 -->
+      <div class="setting-group-title">数据管理与备份</div>
+      <div class="setting-group-box">
+        <div class="setting-item-row">
+          <div class="setting-left-block">
+            <div class="icon-seat" style="background: var(--tf-primary-soft); color: var(--tf-primary);">☁️</div>
+            <span>立即同步备份</span>
+          </div>
+          <span style="font-size: 11px; color: var(--tf-primary-strong); font-weight: 600;">云端 + 本地 ›</span>
+        </div>
+        <div class="setting-item-row">
+          <div class="setting-left-block">
+            <div class="icon-seat" style="background: rgba(59,130,246,0.12); color: #3B82F6;">🔄</div>
+            <span>从备份恢复</span>
+          </div>
+          <span style="color: var(--tf-ink3);">›</span>
+        </div>
+        <div class="setting-item-row">
+          <div class="setting-left-block">
+            <div class="icon-seat" style="background: rgba(245,158,11,0.12); color: #F59E0B;">⚙️</div>
+            <span>加密口令与云设置</span>
+          </div>
+          <span style="font-size: 11px; color: var(--tf-ink2);">PBKDF2 加密 ›</span>
+        </div>
+      </div>
+
+      <!-- 分组二：偏好与关于 -->
+      <div class="setting-group-title">偏好与关于</div>
+      <div class="setting-group-box">
+        <div class="setting-item-row">
+          <div class="setting-left-block">
+            <div class="icon-seat" style="background: rgba(6,182,212,0.12); color: #06B6D4;">🌐</div>
+            <span>语言设置</span>
+          </div>
+          <span style="font-size: 11px; color: var(--tf-ink2);">简体中文 ›</span>
+        </div>
+        <div class="setting-item-row">
+          <div class="setting-left-block">
+            <div class="icon-seat" style="background: rgba(236,72,153,0.12); color: #EC4899;">🎨</div>
+            <span>外观色彩</span>
+          </div>
+          <span style="font-size: 11px; color: var(--tf-ink2);">跟随系统 ›</span>
+        </div>
+        <div class="setting-item-row">
+          <div class="setting-left-block">
+            <div class="icon-seat" style="background: rgba(16,185,129,0.12); color: #10B981;">📍</div>
+            <span>位置排查与调试</span>
+          </div>
+          <span style="font-size: 11px; color: #10B981; font-weight: 600;">双定位正常 ›</span>
+        </div>
+        <div class="setting-item-row">
+          <div class="setting-left-block">
+            <div class="icon-seat" style="background: var(--tf-primary-soft); color: var(--tf-primary);">✨</div>
+            <span>检查更新</span>
+          </div>
+          <span style="font-size: 11px; color: var(--tf-ink3);">v1.0.22 (最新) ›</span>
+        </div>
+      </div>
+
+      <!-- TabBar -->
+      <div class="app-tabbar">
+        <div class="tab-item-btn">⏱<span>打卡</span></div>
+        <div class="tab-item-btn">📊<span>洞察</span></div>
+        <div class="tab-item-btn active">👤<span>我的</span></div>
+      </div>
+    </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+</body>
+</html>
