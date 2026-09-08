@@ -149,32 +149,44 @@ Make your time visible. Track your journey with grace. Download TimeFlow today!
 
 ## 🛡️ 三、Google Play 政策声明问卷指南 (Policy Questionnaire)
 
-在 Google Play Console 的「应用内容 (App content)」环节填写时，严格按照以下答案勾选：
+在 Google Play Console 的「政策和程序 → 应用内容 (App content)」环节填写时，请严格按照以下标准勾选，确保一次性快速过审：
 
-### 1. 目标受众与内容 (Target Audience and Content)
-- **目标年龄段**：勾选 `18 岁以上`（避免被纳入 Designed for Families 家庭计划的严苛限制）。
-- **是否无意吸引儿童**：选择 `否 (No)`。
+### 1. 隐私政策 (Privacy Policy)
+- **公开网址 (Privacy Policy URL)**：
+  ```text
+  https://chonggao9.github.io/timeflow/privacy.html
+  ```
+  *(已全局部署于 GitHub Pages，支持中英双语自适应，满足 Google Play 长期在线可访问要求)*
 
-### 2. 隐私政策 (Privacy Policy)
-- **网址**：`https://chonggao9.github.io/timeflow/privacy.html`
+### 2. 账号与数据删除 (Account & Data Deletion)
+- **您的应用是否允许用户创建账号？**：选择 **否 (No)** *(TimeFlow 无需登录，本地 SQLite 存储)*。
+- **您是否提供可让用户请求删除其数据的方式？**：选择 **是 (Yes)**。
+- **数据删除请求网址 (Data Deletion URL)**：
+  ```text
+  https://chonggao9.github.io/timeflow/privacy.html#delete
+  ```
+- **删除机制说明**：用户可在 App 内「我的 → 数据管理与备份 → 清空所有打卡记录」一键彻底清除本地数据，卸载应用自动擦除本地数据库，亦可邮件联系开发者协助。
 
-### 3. 数据安全问卷 (Data Safety Section)
-- **是否收集或共享任何用户数据？**：勾选 `是 (Yes)`。
-- **收集的数据类型**：
-  - **位置信息 (Location)**：
-    - 确切位置 (Precise Location) 与 大概位置 (Coarse Location)：
-    - 是否共享：`否 (No)`，不与任何第三方共享。
-    - 是否收集：`是 (Yes)`（用于在本地记录打卡点坐标及反查地名）。
-    - 是否临时处理 (Ephemeral)：`否 (No)`（保存在用户手机本地 SQLite 中）。
-    - 收集目的：`应用功能 (App functionality)`。
-    - 用户是否能删除该数据：`是 (Yes)`（用户可在 App 内一键单条删除或清空全部数据）。
-- **安全性做法**：
-  - 数据在传输过程中是否加密：`是 (Yes)`（高德与系统定位接口走 HTTPS 加密通道）。
-  - 用户是否可以申请删除数据：`是 (Yes)`。
+### 3. 目标受众与内容 (Target Audience and Content)
+- **目标年龄段 (Target Age)**：勾选 **`18 岁以上`** *(必须避免勾选未成年人，否则会被强制纳入极为繁琐的 Designed for Families 审核)*。
+- **是否无意吸引儿童 (Unintentionally Appeal to Children)**：选择 **否 (No)**。
 
-### 4. 敏感权限 (Permissions)
-- **后台位置权限 (ACCESS_BACKGROUND_LOCATION)**：❌ **未声明 / 不使用**。TimeFlow 仅在前台单次打卡时获取位置，因此无须提交复杂的后台位置审核视频与合规申报，审核通过率极高！
-- **通知权限 (POST_NOTIFICATIONS)**：若有自动备份通知可按需声明。
+### 4. 数据安全问卷 (Data Safety Section)
+- **您的应用是否会收集或共享任何用户数据？**：选择 **是 (Yes)**。
+- **您的应用收集的所有用户数据在传输过程中是否均会加密？**：选择 **是 (Yes)** *(全走 HTTPS 强加密链路)*。
+- **您是否为用户提供了申请删除其数据的途径？**：选择 **是 (Yes)**。
+- **具体收集的数据类型**：
+  - 展开 **位置信息 (Location)**：
+    - 勾选 **确切位置 (Precise Location)** 与 **大概位置 (Coarse Location)**；
+    - **该数据是否会与任何第三方共享？**：选择 **否 (No)** *(SDK 仅作为提供定位的技术处理组件，非商业转售共享)*；
+    - **该数据是否为临时处理 (Ephemeral)？**：选择 **否 (No)** *(保存于用户本地数据库)*；
+    - **该数据收集是必须还是可选？**：选择 **可选 (Users can choose whether this data is collected)** *(未授权依然可手动打卡)*；
+    - **收集此数据的目的？**：勾选 **应用功能 (App functionality)**。
+- **其他数据类别 (个人信息/财务/健康等)**：全部选择 **未收集 (Not Collected)**。
+
+### 5. 敏感权限 (Permissions)
+- **后台位置权限 (ACCESS_BACKGROUND_LOCATION)**：❌ **未声明 / 不使用**。TimeFlow 仅在前台单次打卡时获取位置，因此无须提交后台定位声明与录屏审核，审核通过率极高！
+- **广告 ID (Advertising ID)**：选择 **否 (No)** *(无任何广告 SDK)*。
 
 ---
 

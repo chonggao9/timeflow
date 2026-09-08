@@ -44,126 +44,158 @@
 
     <div id="zh-content" class="card">
       <h1>TimeFlow 隐私政策</h1>
-      <p class="date">更新日期：2026 年 9 月 4 日</p>
-      <p>TimeFlow（时光流）尊重并保护你的个人信息。本政策依据适用的法律法规制定，请在使用前仔细阅读、充分理解。</p>
+      <p class="date">更新日期：2026 年 9 月 8 日 · 生效日期：2026 年 9 月 8 日</p>
+      <p>TimeFlow（时光流）高度重视用户隐私与个人数据安全。本隐私政策依据《中华人民共和国个人信息保护法》以及 Google Play 开发者政策核心原则制定，详细说明我们在您使用 TimeFlow 时的个人信息处理实践。请在使用本应用前仔细阅读并充分理解。</p>
 
-      <h2>一、我们收集的信息</h2>
-      <p>我们仅处理实现功能所必需的最少信息（最小必要原则）：</p>
+      <h2>一、我们处理的信息（最小必要原则）</h2>
+      <p>TimeFlow 坚持「数据本地优先与最小必要」原则，仅在实现核心行程打卡功能时处理极简信息：</p>
       <ul>
-        <li><b>位置信息（敏感个人信息）</b>：仅在你主动打卡时，读取当前位置的经纬度坐标，用于记录打卡地点。</li>
-        <li><b>时间信息</b>：打卡发生的具体时间。</li>
-        <li><b>出行方式</b>：你选择的出行方式（步行 / 骑行 / 自驾 / 打车 / 地铁 / 公交 / 高铁 / 飞机 / 轮渡）。</li>
-        <li><b>你主动填写的内容</b>：地点名（如「家」「公司」）、昵称等。</li>
+        <li><b>位置信息（敏感个人信息，ACCESS_FINE_LOCATION / ACCESS_COARSE_LOCATION）</b>：仅在您主动点击「打卡」按钮时，在<b>前台（Foreground）</b>瞬时读取一次当前设备的经纬度坐标与大致地名，用于生成打卡行程点。<b>TimeFlow 绝不在后台静默追踪您的实时位置，不使用后台定位权限（ACCESS_BACKGROUND_LOCATION）。</b>若您拒绝授予位置权限，您仍可正常使用本应用进行无坐标的手动打卡。</li>
+        <li><b>时间信息</b>：打卡操作发生的时间戳。</li>
+        <li><b>出行方式与标签</b>：您自主选择的出行方式（步行、骑行、自驾、打车、地铁、公交、高铁、飞机、轮渡）及您填写的地点别名（如「家」「公司」）或打卡备注。</li>
+        <li><b>应用偏好与配置</b>：您自设的应用语言、外观色彩模式、打卡偏好及 WebDAV 备份配置参数（如有）。</li>
       </ul>
-      <p>我们不收集与上述功能无关的信息。</p>
+      <p>除上述功能必需项外，本应用不收集通讯录、短信、相册、通话记录、设备唯一识别码（IMEI/IMSI）等任何与打卡无关的个人信息。</p>
 
-      <h2>二、第三方 SDK 及信息共享</h2>
-      <p>为实现定位功能，本应用集成了高德开放平台定位 SDK，相关信息披露如下：</p>
+      <h2>二、第三方 SDK 及系统服务披露</h2>
+      <p>为向您提供快速、稳定的定位与逆地理编码解析能力，本应用集成了以下技术支持组件：</p>
       <ul>
-        <li><b>使用 SDK 名称</b>：高德开放平台定位 SDK</li>
-        <li><b>第三方名称</b>：北京高德图强科技有限公司</li>
-        <li><b>使用目的</b>：为了向你提供定位服务</li>
-        <li><b>收集个人信息</b>：经纬度、设备信息（如 IP 地址、GNSS 信息、网络类型、WiFi 状态、WiFi 参数、WiFi 列表、WiFi 信号强度、WiFi 网关地址、SSID、BSSID、基站信息、传感器信息、设备信号强度信息）、OAID、当前应用信息（应用名、应用版本号）、设备参数及系统信息（设备品牌及型号、操作系统、运营商信息、屏幕分辨率）</li>
-        <li><b>信息收集方式</b>：SDK 本机采集</li>
-        <li><b>第三方隐私政策</b>：<a href="https://lbs.amap.com/pages/privacy/">https://lbs.amap.com/pages/privacy/</a></li>
+        <li>
+          <b>高德开放平台定位 SDK</b>
+          <ul>
+            <li>服务提供商：北京高德图强科技有限公司</li>
+            <li>使用目的：在中国大陆地区为您提供高精度定位与逆地理位置名称反查</li>
+            <li>收集个人信息类型：经纬度、设备信息（IP 地址、GNSS 信息、WiFi 状态/参数/列表/信号强度、基站信息、传感器信息、设备型号、操作系统、屏幕分辨率）</li>
+            <li>信息收集方式：SDK 在打卡时本机调用采集</li>
+            <li>第三方隐私政策链接：<a href="https://lbs.amap.com/pages/privacy/" target="_blank" rel="noopener">https://lbs.amap.com/pages/privacy/</a></li>
+          </ul>
+        </li>
+        <li>
+          <b>Android 系统 / Google Play 服务定位接口（Google Play Services Location / Expo Location）</b>
+          <ul>
+            <li>服务提供商：Google LLC</li>
+            <li>使用目的：在海外或具备 Google 服务的安卓设备上，调用系统原生融合定位（Fused Location Provider）与地理反查地名</li>
+            <li>第三方隐私政策链接：<a href="https://policies.google.com/privacy" target="_blank" rel="noopener">https://policies.google.com/privacy</a></li>
+          </ul>
+        </li>
       </ul>
-      <p>除上述高德 SDK 外，本应用没有服务器，不会将你的个人信息上传、分享或提供给任何其他第三方。若你在「我的 → 位置服务」配置了高德 Web 服务 Key，打卡坐标会发送给高德地图用于反查附近地名，同样受高德隐私政策约束。</p>
+      <p><b>特别声明：</b>除上述定位与逆地理必要组件外，TimeFlow <b>没有自建业务服务器</b>，不会将您的个人信息上传至任何集中式数据库；本应用<b>未集成任何第三方商业广告 SDK、未集成任何用户行为追踪/画像 SDK（如 Google Analytics、Firebase、Facebook SDK 等）</b>，绝不售卖或向第三方共享您的个人隐私。</p>
 
-      <h2>三、信息的存储与安全</h2>
+      <h2>三、信息的存储、加密与安全</h2>
       <ul>
-        <li><b>存储位置</b>：所有个人信息均默认仅存储在你自己手机的本机沙盒存储中，本应用不设中心化业务服务器。</li>
-        <li><b>加密传输</b>：打卡坐标在通过高德 SDK 定位及反查地名时，均使用 HTTPS 加密传输；本地数据存储于应用沙盒内。</li>
-        <li><b>存储期限</b>：自你保存起保留，直至你主动清空数据或卸载本应用时删除。</li>
-        <li><b>安全措施</b>：依赖系统提供的沙盒隔离与访问控制机制保护数据，无中心化账号体系。若你主动配置第三方 WebDAV 云同步，加密备份文件（经口令高强度 AES 加密）将仅同步至你指定的云存储，完全由你自主掌控。</li>
-      </ul>
-
-      <h2>四、信息的使用</h2>
-      <p>你的信息仅用于向你展示：今日行程、历史行程、路段耗时统计、打卡记录。我们不会将你的信息用于任何其他用途，也不会进行自动化决策或用户画像。</p>
-
-      <h2>五、设备权限</h2>
-      <p>定位权限：仅在你打卡时请求，用于获取坐标。即使拒绝授权，其他功能仍可正常使用，届时打卡地点显示为「未命名」。你可以随时在系统设置中关闭该权限。</p>
-
-      <h2>六、你的权利与撤回同意</h2>
-      <p>依据法律，你对自己的个人信息享有以下权利：</p>
-      <ul>
-        <li><b>查阅、复制、更正</b>：可在应用内直接查看和修改地点名、昵称等。</li>
-        <li><b>删除</b>：可在「我的 → 数据管理」中随时删除或清空全部数据。</li>
-        <li><b>导出</b>：可在「我的 → 数据管理」中导出全部数据。</li>
-        <li><b>撤回同意</b>：可随时在系统设置中关闭定位权限，或清空数据。撤回同意不影响撤回前已进行的处理。</li>
+        <li><b>全本地存储（Local-First）</b>：您的所有打卡记录、时间、轨迹点与通勤数据均默认且仅存储在您手机本机的沙盒存储（SQLite 数据库）中，数据所有权 100% 归您所有。</li>
+        <li><b>加密传输</b>：获取坐标及地名解析均通过 HTTPS 强加密传输链路进行，杜绝中间人嗅探。</li>
+        <li><b>WebDAV 私有云同步与军工级加密</b>：若您主动启用第三方 WebDAV 云同步功能，备份数据在离开手机前将基于您的私有口令进行 PBKDF2 密钥派生及 AES-256-CBC 强加密，并直接上传至您指定的个人私有云盘（如坚果云、Nextcloud）。开发者与任何第三方均无密钥，绝对无法解密或窥视备份内容。</li>
       </ul>
 
-      <h2>七、未成年人保护</h2>
-      <p>本应用不面向未满 13 周岁的儿童收集个人信息。如你未满 13 周岁，请在监护人指导下使用，并由监护人阅读本政策。</p>
+      <h2>四、信息的使用目的</h2>
+      <p>收集的信息仅用于在本地向您提供核心服务：呈现今日流体时间轴、历史行程回顾、A→B 定向通勤耗时分析与图谱洞察。我们不会将您的信息用于广告推送、营销推广或自动化信用评估等任何商业化决策。</p>
 
-      <h2>八、政策更新</h2>
-      <p>如本政策发生变更，我们会在应用内展示最新版本，重大变更将以显著方式提示你。继续使用即视为你接受更新后的政策。</p>
+      <h2>五、设备权限说明</h2>
+      <ul>
+        <li><b>前台位置权限（ACCESS_FINE_LOCATION / ACCESS_COARSE_LOCATION）</b>：仅在主动打卡瞬时调用。您可随时在手机系统设置中撤回该授权，撤回后打卡功能依然可用，地名将默认显示为「未命名」。</li>
+        <li><b>后台位置权限（ACCESS_BACKGROUND_LOCATION）</b>：本应用<b>不申请、不使用</b>任何后台静默位置追踪权限。</li>
+      </ul>
+
+      <h2 id="delete">六、您的权利与数据删除机制（Data Deletion）</h2>
+      <p>依据法律法规及 Google Play 用户数据政策，您对自己的数据拥有完整的控制权：</p>
+      <ul>
+        <li><b>单条记录删除</b>：在首页时间轴中可就地左滑或点击删除任意误触打卡点。</li>
+        <li><b>应用内一键清空全部数据</b>：可在「我的 → 数据管理与备份 → 清空所有打卡记录」或「洞察 → 历史 → 清空所有打卡记录」中随时一键抹除本地 SQLite 数据库中的全部历史数据，该操作不可逆。</li>
+        <li><b>设备卸载物理清除</b>：直接在手机桌面卸载 TimeFlow 应用，操作系统将物理擦除本应用沙盒内的全部数据库文件与配置文件。</li>
+        <li><b>云端备份删除</b>：您可随时在您绑定的 WebDAV 网盘目录中直接删除 <code>.tfbak</code> 备份文件，或在 App 内点击「清除 WebDAV 配置 / 清除口令」。</li>
+        <li><b>数据导出与权利请求</b>：您可在设置中导出全部打卡明细。若有任何数据处理疑问或权利行使需求，可通过官方邮箱与开发者联系。</li>
+      </ul>
+
+      <h2>七、未成年人隐私保护</h2>
+      <p>TimeFlow 专为职场通勤与日常生活效率记录打造，主要面向成年人群体。我们不会明知而收集未满 13 周岁（或您所在司法辖区规定的未成年人年龄）儿童的个人信息。如发现误收，我们将在核实后立即协助清除。</p>
+
+      <h2>八、政策更新与通知</h2>
+      <p>若隐私政策发生重大变更，我们将在应用内版本更新说明或设置页面中显著提示。继续使用本应用即表示您知悉并同意受更新后政策的约束。</p>
 
       <h2>九、联系我们</h2>
-      <p>如对本隐私政策有任何疑问、意见或建议，欢迎通过邮件联系我们：<a href="mailto:chonggao9@gmail.com">chonggao9@gmail.com</a></p>
+      <p>如果您对本隐私政策或个人数据安全有任何疑问、意见、建议或申诉，欢迎通过以下方式与开发者联系：</p>
+      <p>• 开发者联系邮箱：<a href="mailto:chonggao9@gmail.com">chonggao9@gmail.com</a><br>• 开源与反馈主页：<a href="https://github.com/chonggao9/timeflow" target="_blank" rel="noopener">https://github.com/chonggao9/timeflow</a></p>
 
-      <p class="footer">感谢你使用 TimeFlow。</p>
+      <p class="footer">感谢你对 TimeFlow 的信任与支持。</p>
     </div>
 
     <div id="en-content" class="card hidden">
       <h1>TimeFlow Privacy Policy</h1>
-      <p class="date">Last updated: September 4, 2026</p>
-      <p>TimeFlow respects and protects your personal information. This policy is drafted in accordance with applicable laws and regulations. Please read and fully understand it before use.</p>
+      <p class="date">Last Updated: September 8, 2026 · Effective Date: September 8, 2026</p>
+      <p>TimeFlow ("we", "us", or "our") deeply respects and protects your privacy and personal data. This Privacy Policy is formulated in compliance with applicable data protection laws and Google Play Developer Policies. It describes how your personal data is collected, used, stored, and protected when you use TimeFlow. Please read this policy carefully before using the app.</p>
 
-      <h2>1. Information we collect</h2>
-      <p>We process only the minimum information necessary to provide the functions (data minimization):</p>
+      <h2>1. Information We Process (Data Minimization)</h2>
+      <p>TimeFlow strictly adheres to the "local-first" and data minimization principles. We only process minimal data strictly necessary for milestone tracking:</p>
       <ul>
-        <li><b>Location (sensitive personal information)</b>: only when you check in, we read your current coordinates to record the place.</li>
-        <li><b>Time</b>: the exact time of each check-in.</li>
-        <li><b>Transport mode</b>: your chosen mode (walk / bike / drive / taxi / subway / transit / train / flight / boat).</li>
-        <li><b>Information you enter</b>: place names (e.g. "Home", "Office"), nickname, etc.</li>
+        <li><b>Location Data (Sensitive Personal Information, ACCESS_FINE_LOCATION / ACCESS_COARSE_LOCATION)</b>: Only when you actively tap the "Check In" button, we read your coordinates in the <b>foreground</b> once to log your milestone and look up the place name. <b>TimeFlow NEVER tracks your location silently in the background, and does NOT request or use background location permission (ACCESS_BACKGROUND_LOCATION).</b> If you deny location permission, you can still use the app with manual place names.</li>
+        <li><b>Timestamp</b>: The exact date and time of each check-in event.</li>
+        <li><b>Transport Mode &amp; Custom Labels</b>: Your selected transport mode (Walk, Bike, Drive, Taxi, Subway, Transit, Train, Flight, Boat), place aliases (such as "Home" or "Office"), and custom notes.</li>
+        <li><b>Preferences &amp; Configuration</b>: Language selection, theme appearance, and optional WebDAV sync settings.</li>
       </ul>
-      <p>We do not collect any information unrelated to the above functions.</p>
+      <p>We do not collect contacts, SMS, photos, phone status, hardware IDs (IMEI/IMSI), or any sensitive data unrelated to milestone tracking.</p>
 
-      <h2>2. Third-party SDK &amp; sharing</h2>
-      <p>To provide location services, this app integrates the Amap Open Platform Location SDK, disclosed as follows:</p>
+      <h2>2. Third-Party SDKs &amp; Service Providers</h2>
+      <p>To provide reliable location retrieval and reverse geocoding across regions, TimeFlow integrates the following components:</p>
       <ul>
-        <li><b>SDK name</b>: Amap Open Platform Location SDK</li>
-        <li><b>Third party</b>: Beijing Amap Tuqiang Technology Co., Ltd.</li>
-        <li><b>Purpose</b>: to provide you with location services</li>
-        <li><b>Information collected</b>: latitude/longitude, device information (such as IP address, GNSS info, network type, Wi-Fi status/parameters/list/signal strength, Wi-Fi gateway address, SSID, BSSID, base station info, sensor info, device signal strength), OAID, current app info (app name, app version), device parameters and system info (device brand/model, OS, carrier, screen resolution)</li>
-        <li><b>Collection method</b>: collected locally by the SDK</li>
-        <li><b>Third-party privacy policy</b>: <a href="https://lbs.amap.com/pages/privacy/">https://lbs.amap.com/pages/privacy/</a></li>
+        <li>
+          <b>Amap Open Platform Location SDK</b>
+          <ul>
+            <li>Provider: Beijing Amap Tuqiang Technology Co., Ltd.</li>
+            <li>Purpose: High-precision location and reverse geocoding primarily in mainland China.</li>
+            <li>Data Collected: Coordinates, device information (IP address, GNSS info, Wi-Fi parameters/list/signal, base station info, sensor data, device model, OS, screen resolution).</li>
+            <li>Method: Collected locally on-device upon check-in.</li>
+            <li>Privacy Policy: <a href="https://lbs.amap.com/pages/privacy/" target="_blank" rel="noopener">https://lbs.amap.com/pages/privacy/</a></li>
+          </ul>
+        </li>
+        <li>
+          <b>Android System &amp; Google Play Services Location (Google Play Services / Expo Location)</b>
+          <ul>
+            <li>Provider: Google LLC</li>
+            <li>Purpose: Native fused location and geocoding on devices equipped with Google Play services globally.</li>
+            <li>Privacy Policy: <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">https://policies.google.com/privacy</a></li>
+          </ul>
+        </li>
       </ul>
-      <p>Except for the Amap SDK above, this app has no server and never uploads, shares, or provides your personal information to any other third party. If you configure an Amap Web Service key under Profile → Location service, check-in coordinates are sent to Amap to look up a nearby place name, also subject to Amap's privacy policy.</p>
+      <p><b>Important Disclosure:</b> Other than the technical location components listed above, TimeFlow <b>operates with NO centralized backend servers</b> and stores no user data on remote databases. Furthermore, TimeFlow contains <b>ZERO advertising SDKs, and ZERO behavioral analytics or tracking SDKs (such as Google Analytics, Firebase, Facebook SDK, etc.)</b>. We never sell, rent, or trade your personal data.</p>
 
-      <h2>3. Data storage &amp; security</h2>
+      <h2>3. Data Storage, Encryption &amp; Security</h2>
       <ul>
-        <li><b>Storage</b>: all personal information is stored locally within the application sandbox by default; this app operates without central backend servers.</li>
-        <li><b>Encryption in transit</b>: check-in coordinates are transmitted over HTTPS when using the Amap SDK for location and reverse geocoding; local data is stored in the app sandbox.</li>
-        <li><b>Retention</b>: kept from the time you save it until you clear the data or uninstall the app.</li>
-        <li><b>Security</b>: protected by the system's sandbox isolation and access controls; no centralized account system. If you voluntarily configure third-party WebDAV cloud sync, strongly AES-encrypted backup packages will be synced only to your chosen cloud storage under your full control.</li>
-      </ul>
-
-      <h2>4. Data usage</h2>
-      <p>Your data is used solely to show you: today's trips, history, route duration statistics, and check-in records. We do not use it for any other purpose, nor for automated decision-making or profiling.</p>
-
-      <h2>5. Permissions</h2>
-      <p>Location permission is requested only when you check in, to get coordinates. Even if denied, other features still work; the place will then show as "Unnamed". You can revoke this permission anytime in system settings.</p>
-
-      <h2>6. Your rights &amp; withdrawing consent</h2>
-      <p>Under the law, you have the following rights over your personal information:</p>
-      <ul>
-        <li><b>Access, copy, correct</b>: you can view and edit place names, nickname, etc. in the app.</li>
-        <li><b>Delete</b>: you can delete or clear all data anytime under Profile → Data.</li>
-        <li><b>Export</b>: you can export all data under Profile → Data.</li>
-        <li><b>Withdraw consent</b>: you can turn off location permission in system settings or clear your data at any time. Withdrawal does not affect processing already carried out before the withdrawal.</li>
+        <li><b>100% Local-First Storage</b>: All your check-in logs, timestamps, routes, and statistics are stored exclusively in your device's local application sandbox (SQLite database). You own 100% of your data.</li>
+        <li><b>Encryption in Transit</b>: Location coordinate lookups and geocoding queries are transmitted over encrypted HTTPS channels.</li>
+        <li><b>WebDAV Private Cloud Sync &amp; AES-256 Encryption</b>: If you choose to enable WebDAV cloud backup, backup packages are strongly encrypted locally with AES-256-CBC (derived via PBKDF2 from your private passphrase) before being sent directly to your self-hosted or chosen WebDAV cloud server (e.g. Nextcloud). Neither the developer nor any third party possesses the decryption key.</li>
       </ul>
 
-      <h2>7. Minors</h2>
-      <p>This app does not collect personal information from children under 13. If you are under 13, please use it under the guidance of a guardian, who should read this policy.</p>
+      <h2>4. Purpose of Data Use</h2>
+      <p>Data processed by TimeFlow is used solely on your local device to generate your daily fluid timeline, trip duration insights, and commuting patterns. We do not use your data for advertising, profiling, or automated credit assessment.</p>
 
-      <h2>8. Policy changes</h2>
-      <p>If this policy is updated, the latest version will be shown in the app, and significant changes will be highlighted. Continued use means you accept the updated policy.</p>
+      <h2>5. Device Permissions</h2>
+      <ul>
+        <li><b>Foreground Location Permission (ACCESS_FINE_LOCATION / ACCESS_COARSE_LOCATION)</b>: Requested only at the moment of check-in. You can revoke this permission at any time in system settings without breaking core manual logging functionality.</li>
+        <li><b>Background Location (ACCESS_BACKGROUND_LOCATION)</b>: TimeFlow <b>neither declares nor uses</b> background location tracking.</li>
+      </ul>
 
-      <h2>9. Contact</h2>
-      <p>For any questions, comments, or suggestions about this policy, email us at: <a href="mailto:chonggao9@gmail.com">chonggao9@gmail.com</a></p>
+      <h2 id="delete-en">6. Your Rights &amp; Data Deletion Policy</h2>
+      <p>In full compliance with Google Play User Data Policies and global privacy regulations, you have comprehensive control over your data:</p>
+      <ul>
+        <li><b>Granular In-App Deletion</b>: Swipe or tap to delete any single milestone or trip directly from the timeline.</li>
+        <li><b>Complete In-App Data Wipe</b>: Navigate to "Profile → Data &amp; Cloud Backup → Clear All Check-In Records" or "Insights → History → Clear All Check-In Records" to permanently erase your local SQLite database with one tap. This action is irreversible.</li>
+        <li><b>App Uninstallation</b>: Uninstalling TimeFlow from your device permanently purges all local sandbox database files, cache, and configurations via the operating system.</li>
+        <li><b>Cloud Backup Deletion</b>: You can delete `.tfbak` files directly on your WebDAV cloud server, or tap "Clear WebDAV Config" within the app.</li>
+        <li><b>Developer Contact for Data Inquiries</b>: Although we hold no server copies of your data, you can email us at <code>chonggao9@gmail.com</code> for any data deletion assistance or privacy inquiries.</li>
+      </ul>
 
-      <p class="footer">Thank you for using TimeFlow.</p>
+      <h2>7. Children's Privacy</h2>
+      <p>TimeFlow is intended for general audiences and adult commuters/professionals. We do not knowingly collect personal information from children under 13 (or under 16 in the EEA). If you believe a child has provided data, please contact us to have it purged.</p>
+
+      <h2>8. Changes to this Policy</h2>
+      <p>If we update this Privacy Policy, the revised version will be published here with an updated effective date. Material changes will be highlighted within the app.</p>
+
+      <h2>9. Contact Us</h2>
+      <p>If you have any questions, feedback, or requests regarding this Privacy Policy, please reach out to us:</p>
+      <p>• Developer Email: <a href="mailto:chonggao9@gmail.com">chonggao9@gmail.com</a><br>• GitHub Repository: <a href="https://github.com/chonggao9/timeflow" target="_blank" rel="noopener">https://github.com/chonggao9/timeflow</a></p>
+
+      <p class="footer">Thank you for choosing TimeFlow.</p>
     </div>
 
   </div>
@@ -179,10 +211,17 @@
       bz.classList.toggle('active', lang === 'zh');
       be.classList.toggle('active', lang === 'en');
     }
-    // 自动识别浏览器语言：默认中文，英文浏览器切英文
+    // 自动识别浏览器语言与 hash 锚点定位
     (function () {
       var lang = (navigator.language || navigator.userLanguage || 'zh');
-      setLang(lang.toLowerCase().indexOf('zh') === 0 ? 'zh' : (lang.toLowerCase().indexOf('en') === 0 ? 'en' : 'zh'));
+      var targetLang = lang.toLowerCase().indexOf('zh') === 0 ? 'zh' : (lang.toLowerCase().indexOf('en') === 0 ? 'en' : 'zh');
+      setLang(targetLang);
+      if (window.location.hash.indexOf('delete') !== -1) {
+        setTimeout(function () {
+          var targetEl = targetLang === 'en' ? (document.getElementById('delete-en') || document.getElementById('delete')) : document.getElementById('delete');
+          if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      }
     })();
   </script>
 
