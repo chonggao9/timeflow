@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TimeFlow · 线路轨迹拓扑重构前后对比 (Route Map Redesign Preview)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-page: #0D1017;
+    --card-bg: #161B22;
+    --card-card: #212631;
+    --text-main: #F0F6FC;
+    --text-muted: #8B949E;
+    --accent: #FF6B6B;
+    --accent-strong: #F24E4E;
+    --border: rgba(255, 255, 255, 0.08);
+
+    /* TimeFlow 暖色主题 */
+    --tf-bg: #FBF5EF;
+    --tf-surface: #FFFFFF;
+    --tf-primary: #FF6B6B;
+    --tf-primary-strong: #F24E4E;
+    --tf-primary-soft: #FFE9E4;
+    --tf-primary-softer: #FFF4F0;
+    --tf-ink: #2B231E;
+    --tf-ink2: #7A6F66;
+    --tf-ink3: #B6A99E;
+    --tf-line: #F1E7DD;
+    --tf-line2: #E9DCD0;
+    --tf-chip: #FAF6F1;
+    --tf-success: #4CAE7F;
+  }
+
+  [data-theme="dark"] {
+    --tf-bg: #1B1511;
+    --tf-surface: #262019;
+    --tf-primary: #FF7A6E;
+    --tf-primary-strong: #FF8F84;
+    --tf-primary-soft: #3A2721;
+    --tf-primary-softer: #31201B;
+    --tf-ink: #F3EDE7;
+    --tf-ink2: #C7BCB2;
+    --tf-ink3: #8F8276;
+    --tf-line: #342B23;
+    --tf-line2: #3F352C;
+    --tf-chip: #2B241D;
+    --tf-success: #5CC08F;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg-page);
+    color: var(--text-main);
+    font-family: 'Plus Jakarta Sans', 'Noto Sans SC', -apple-system, sans-serif;
+    padding: 32px 20px 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.5;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 28px;
+    max-width: 900px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 107, 107, 0.15);
+    color: var(--accent);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .header h1 {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.6px;
+    margin-bottom: 10px;
+    background: linear-gradient(135deg, #FFFFFF 0%, #FF9E94 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header p {
+    color: var(--text-muted);
+    font-size: 14.5px;
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  /* 控制栏 */
+  .control-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: 999px;
+    margin-bottom: 36px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .toggle-group {
+    display: flex;
+    background: #0D1017;
+    padding: 4px;
+    border-radius: 999px;
+    gap: 4px;
+  }
+  .toggle-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .toggle-btn.active {
+    background: var(--accent);
+    color: #FFF;
+  }
+  .theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+
+  /* 对比双屏容器 */
+  .preview-stage {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    width: 100%;
+    max-width: 1100px;
+    margin-bottom: 50px;
+    flex-wrap: wrap;
+  }
+
+  .screen-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 380px;
+  }
+  .screen-label-bar {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding: 0 4px;
+  }
+  .screen-title {
+    font-size: 15px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .screen-status-pill {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+  .pill-bad { background: rgba(224, 138, 122, 0.2); color: #E08A7A; border: 1px solid rgba(224, 138, 122, 0.3); }
+  .pill-good { background: rgba(76, 174, 127, 0.2); color: #4CAE7F; border: 1px solid rgba(76, 174, 127, 0.3); }
+
+  /* 旗舰手机机身外壳 */
+  .phone-mockup {
+    width: 380px;
+    height: 740px;
+    background: #0B0D12;
+    border-radius: 46px;
+    padding: 10px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.6), inset 0 0 0 2px #2D333F;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .phone-screen {
+    width: 100%;
+    height: 100%;
+    background: var(--tf-bg);
+    border-radius: 38px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    color: var(--tf-ink);
+    transition: background 0.3s, color 0.3s;
+  }
+
+  /* 顶部状态栏与胶囊导航 */
+  .app-statusbar {
+    height: 38px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11.5px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  .app-nav {
+    height: 46px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--tf-surface);
+    border-bottom: 1px solid var(--tf-line);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  .nav-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .nav-tabs {
+    display: flex;
+    background: var(--tf-chip);
+    padding: 3px;
+    border-radius: 12px;
+    gap: 4px;
+  }
+  .nav-tab-item {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 9px;
+  }
+  .nav-tab-item.active {
+    background: var(--tf-surface);
+    color: var(--tf-primary-strong);
+    box-shadow: 0 2px 6px rgba(43,35,30,0.06);
+  }
+  .nav-tab-item.inactive {
+    color: var(--tf-ink2);
+  }
+
+  /* ====== 方案 A：现代探索拓扑图（Metro / Transit 风格） ====== */
+  .canvas-stage-redesign {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    /* 微网格与微点阵空间底纹 */
+    background-color: var(--tf-bg);
+    background-image: 
+      radial-gradient(circle, var(--tf-line2) 1.2px, transparent 1.2px),
+      linear-gradient(to right, rgba(241,231,221,0.25) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(241,231,221,0.25) 1px, transparent 1px);
+    background-size: 24px 24px, 72px 72px, 72px 72px;
+  }
+
+  /* 顶部科技罗盘与比例尺 */
+  .tech-compass {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--tf-surface);
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--tf-line);
+    box-shadow: 0 2px 8px rgba(43,35,30,0.06);
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--tf-ink);
+    z-index: 5;
+  }
+  .scale-bar {
+    position: absolute;
+    bottom: 220px;
+    left: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 5;
+  }
+  .scale-line {
+    width: 48px;
+    height: 3px;
+    background: var(--tf-ink2);
+    border-left: 2px solid var(--tf-ink2);
+    border-right: 2px solid var(--tf-ink2);
+  }
+  .scale-text {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--tf-ink3);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* SVG 轨迹容器 */
+  .svg-overlay {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  /* 悬浮气泡卡片 (HTML/CSS 浮动在坐标点旁，生动立体) */
+  .stop-bubble {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--tf-surface);
+    padding: 6px 12px;
+    border-radius: 12px;
+    border: 1.5px solid var(--tf-line);
+    box-shadow: 0 6px 16px rgba(43,35,30,0.1);
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    transition: all 0.2s;
+    z-index: 6;
+  }
+  .stop-bubble:hover {
+    transform: translate(-50%, -54%) scale(1.04);
+    border-color: var(--tf-primary);
+  }
+  .stop-bubble.start {
+    border-color: #4CAE7F;
+    background: linear-gradient(135deg, var(--tf-surface) 0%, rgba(76,174,127,0.08) 100%);
+  }
+  .stop-bubble.end {
+    border-color: var(--tf-primary-strong);
+    background: linear-gradient(135deg, var(--tf-surface) 0%, rgba(242,78,78,0.08) 100%);
+  }
+  .bubble-icon {
+    font-size: 14px;
+  }
+  .bubble-text {
+    display: flex;
+    flex-direction: column;
+  }
+  .bubble-name {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--tf-ink);
+  }
+  .bubble-time {
+    font-size: 10px;
+    color: var(--tf-ink3);
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* 线上路段耗时小胶囊 */
+  .leg-capsule {
+    position: absolute;
+    background: var(--tf-chip);
+    border: 1px solid var(--tf-line);
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--tf-ink2);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 2px 6px rgba(43,35,30,0.08);
+    z-index: 4;
+  }
+
+  /* 底部现代化流体抽屉 (BottomSheet 6:4黄金分割) */
+  .bottom-sheet {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 200px;
+    background: var(--tf-surface);
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+    border-top: 1px solid var(--tf-line);
+    box-shadow: 0 -8px 24px rgba(43,35,30,0.08);
+    display: flex;
+    flex-direction: column;
+    padding: 12px 18px;
+    z-index: 20;
+  }
+  .drag-handle {
+    width: 36px;
+    height: 4px;
+    background: var(--tf-line2);
+    border-radius: 2px;
+    align-self: center;
+    margin-bottom: 10px;
+  }
+
+  /* 行程概览仪表卡片 */
+  .trip-summary-card {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    background: var(--tf-chip);
+    border: 1px solid var(--tf-line);
+    border-radius: 14px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+  }
+  .summary-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .summary-col:not(:last-child) {
+    border-right: 1px solid var(--tf-line);
+  }
+  .sum-val {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--tf-ink);
+  }
+  .sum-val.accent {
+    color: var(--tf-primary-strong);
+  }
+  .sum-label {
+    font-size: 9.5px;
+    color: var(--tf-ink3);
+    font-weight: 600;
+  }
+
+  /* 站点列表精简滑动预览 */
+  .stops-compact-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .stop-row-mini {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: var(--tf-bg);
+    border-radius: 10px;
+    border: 1px solid var(--tf-line);
+    cursor: pointer;
+  }
+  .stop-row-mini:hover {
+    border-color: var(--tf-primary);
+  }
+  .stop-mini-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .stop-num-badge {
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    background: var(--tf-primary-soft);
+    color: var(--tf-primary-strong);
+    font-size: 10px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .stop-mini-name {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--tf-ink);
+  }
+  .stop-mini-time {
+    font-size: 10.5px;
+    color: var(--tf-ink3);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ====== 方案现状（Before / 简陋原版） ====== */
+  .canvas-stage-before {
+    flex: 1;
+    position: relative;
+    background: #FFFFFF;
+  }
+  .before-bottom-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #FBF5EF;
+    border-top: 1px solid #E9DCD0;
+    padding: 8px 16px;
+    font-size: 11px;
+    color: #7A6F66;
+  }
+
+  /* 详细剖析对比区域 */
+  .critique-section {
+    max-width: 1000px;
+    width: 100%;
+    margin-top: 20px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 28px;
+  }
+  .critique-section h2 {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 768px) {
+    .compare-grid { grid-template-columns: 1fr; }
+  }
+  .compare-box {
+    background: var(--card-card);
+    border-radius: 14px;
+    padding: 18px;
+    border: 1px solid var(--border);
+  }
+  .compare-box.bad { border-left: 4px solid #E08A7A; }
+  .compare-box.good { border-left: 4px solid #4CAE7F; }
+  .compare-box h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .compare-box ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .compare-box li {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+  .compare-box li strong {
+    color: var(--text-main);
+  }
+</style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="badge">🚀 UI/UX 重设计方案论证</div>
+    <h1>线路轨迹地图 · 交互与视觉重构对比</h1>
+    <p>针对当前「轨迹拓扑」页面存在的留白空洞、连线单薄、站点信息被严重遮挡等痛点，提供高质感现代探索拓扑图（Metro/Transit 美学）全套重构方案。</p>
+  </header>
+
+  <!-- 顶部控制条 -->
+  <div class="control-bar">
+    <div class="toggle-group">
+      <button class="toggle-btn active" onclick="switchRoute('daily')">今日典型通勤（3站）</button>
+      <button class="toggle-btn" onclick="switchRoute('long')">长距离多站换乘（6站）</button>
+    </div>
+
+    <div class="theme-toggle" onclick="toggleTheme()">
+      <span id="themeIcon">☀️</span>
+      <span id="themeLabel">浅色模式</span>
+    </div>
+  </div>
+
+  <!-- 双屏对比舞台 -->
+  <div class="preview-stage">
+
+    <!-- 1. 当前版本 (Before) -->
+    <div class="screen-card">
+      <div class="screen-label-bar">
+        <span class="screen-title">旧版现状 (Current)</span>
+        <span class="screen-status-pill pill-bad">⚠️ 单调空洞</span>
+      </div>
+
+      <div class="phone-mockup">
+        <div class="phone-screen" style="background: #FFFFFF;">
+          <!-- 状态栏 -->
+          <div class="app-statusbar" style="color: #000;">
+            <span>11:12</span>
+            <span>📶 🔋</span>
+          </div>
+          <!-- 导航栏 -->
+          <div class="app-nav" style="background: #FFF; border-bottom: 1px solid #EEE;">
+            <div class="nav-btn">‹</div>
+            <div class="nav-tabs" style="background: #F4EFEB;">
+              <span class="nav-tab-item active" style="background: #FFF; color: #F24E4E;">轨迹拓扑</span>
+              <span class="nav-tab-item inactive" style="color: #7A6F66;">卫星/底图</span>
+            </div>
+            <div style="font-size: 11px; font-weight: 800; color: #FF6B6B; background: #FFF4F0; padding: 2px 6px; border-radius: 6px;">🧭 N</div>
+          </div>
+
+          <!-- 原版大空白画布 -->
+          <div class="canvas-stage-before">
+            <svg width="100%" height="100%" viewBox="0 0 360 480">
+              <!-- 单薄红线 -->
+              <polyline points="180,180 180,240 180,300" stroke="#FF6B6B" stroke-width="4" stroke-linecap="round" />
+              <!-- 节点 A1 -->
+              <circle cx="180" cy="180" r="9" fill="#F24E4E" />
+              <circle cx="180" cy="180" r="3.5" fill="#FFF" />
+              <text x="195" y="176" font-size="12" font-weight="700" fill="#F24E4E">A1</text>
+              <text x="195" y="190" font-size="10" fill="#B6A99E">11:12</text>
+
+              <!-- 节点 B1 -->
+              <circle cx="180" cy="240" r="6" fill="#FFF" stroke="#FF6B6B" stroke-width="2.5" />
+              <text x="165" y="236" font-size="12" font-weight="700" fill="#2B231E" text-anchor="end">B1</text>
+              <text x="165" y="250" font-size="10" fill="#B6A99E" text-anchor="end">11:12</text>
+
+              <!-- 节点 C1 -->
+              <circle cx="180" cy="300" r="9" fill="#FF6B6B" />
+              <circle cx="180" cy="300" r="3" fill="#FFF" />
+              <text x="195" y="296" font-size="12" font-weight="700" fill="#FF6B6B">C1</text>
+              <text x="195" y="310" font-size="10" fill="#B6A99E">11:13</text>
+            </svg>
+
+            <!-- 被挤压到底部的抽屉头 -->
+            <div class="before-bottom-bar">
+              今日行程 · 3 站
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. 方案 A：现代探索拓扑图 (After - Recommended) -->
+    <div class="screen-card">
+      <div class="screen-label-bar">
+        <span class="screen-title">方案 A：现代探索拓扑图 (Recommended)</span>
+        <span class="screen-status-pill pill-good">✨ 工业美学 / 信息生动</span>
+      </div>
+
+      <div class="phone-mockup">
+        <div class="phone-screen" id="phoneScreenNew">
+          <!-- 状态栏 -->
+          <div class="app-statusbar">
+            <span>11:12</span>
+            <span>📶 5G · 100%</span>
+          </div>
+
+          <!-- 导航栏 -->
+          <div class="app-nav">
+            <div class="nav-btn" style="color: var(--tf-ink);">‹</div>
+            <div class="nav-tabs">
+              <span class="nav-tab-item active">探索拓扑</span>
+              <span class="nav-tab-item inactive">高精底图</span>
+            </div>
+            <div style="width: 32px;"></div>
+          </div>
+
+          <!-- 主体拓扑舞台 -->
+          <div class="canvas-stage-redesign" id="canvasRedesign">
+            <!-- 罗盘与标尺 -->
+            <div class="tech-compass">
+              <span style="color: var(--tf-primary);">▲</span>
+              <span>N 18°</span>
+            </div>
+            <div class="scale-bar">
+              <div class="scale-line"></div>
+              <span class="scale-text">500 m</span>
+            </div>
+
+            <!-- SVG 渐变轨道与发光层 -->
+            <svg class="svg-overlay" viewBox="0 0 360 480">
+              <defs>
+                <linearGradient id="trackGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#4CAE7F" />
+                  <stop offset="50%" stop-color="#FF6B6B" />
+                  <stop offset="100%" stop-color="#F24E4E" />
+                </linearGradient>
+                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="5" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
+
+              <!-- 外层半透明呼吸轨道光晕 -->
+              <path d="M 180,120 Q 140,210 180,260 T 180,380" fill="none" stroke="rgba(255,107,107,0.18)" stroke-width="14" stroke-linecap="round" />
+
+              <!-- 主轨道线 -->
+              <path id="mainPath" d="M 180,120 Q 140,210 180,260 T 180,380" fill="none" stroke="url(#trackGrad)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+
+              <!-- 行进方向微箭头装饰 -->
+              <circle cx="163" cy="180" r="2.5" fill="#FFF" />
+              <circle cx="178" cy="320" r="2.5" fill="#FFF" />
+            </svg>
+
+            <!-- 浮动立体气泡卡片：起点 -->
+            <div class="stop-bubble start" style="left: 180px; top: 110px;">
+              <span class="bubble-icon">🚩</span>
+              <div class="bubble-text">
+                <span class="bubble-name">阳光棕榈园 (起点)</span>
+                <span class="bubble-time">11:12 · 出发</span>
+              </div>
+            </div>
+
+            <!-- 路段中点耗时胶囊 1 -->
+            <div class="leg-capsule" style="left: 150px; top: 195px;">
+              <span>🚶 步行</span>
+              <span style="color: var(--tf-primary-strong);">+12m</span>
+            </div>
+
+            <!-- 浮动立体气泡卡片：中途站 -->
+            <div class="stop-bubble" style="left: 180px; top: 260px;">
+              <span class="bubble-icon">🚇</span>
+              <div class="bubble-text">
+                <span class="bubble-name">科技园前海湾站</span>
+                <span class="bubble-time">11:24 · 换乘</span>
+              </div>
+            </div>
+
+            <!-- 路段中点耗时胶囊 2 -->
+            <div class="leg-capsule" style="left: 190px; top: 320px;">
+              <span>🚇 地铁</span>
+              <span style="color: var(--tf-primary-strong);">+16m</span>
+            </div>
+
+            <!-- 浮动立体气泡卡片：终点 -->
+            <div class="stop-bubble end" style="left: 180px; top: 380px;">
+              <span class="bubble-icon">🏁</span>
+              <div class="bubble-text">
+                <span class="bubble-name">万象天地咖啡馆 (终点)</span>
+                <span class="bubble-time">11:40 · 到达</span>
+              </div>
+            </div>
+
+            <!-- 底部 6:4 黄金分割半展开流体抽屉 -->
+            <div class="bottom-sheet">
+              <div class="drag-handle"></div>
+
+              <!-- 本次行程核心指标仪表盘卡片 -->
+              <div class="trip-summary-card">
+                <div class="summary-col">
+                  <span class="sum-val accent">28 <span style="font-size: 11px;">分钟</span></span>
+                  <span class="sum-label">总耗时</span>
+                </div>
+                <div class="summary-col">
+                  <span class="sum-val">3.6 <span style="font-size: 11px;">km</span></span>
+                  <span class="sum-label">预估路程</span>
+                </div>
+                <div class="summary-col">
+                  <span class="sum-val">3 <span style="font-size: 11px;">站</span></span>
+                  <span class="sum-label">途径点</span>
+                </div>
+              </div>
+
+              <!-- 紧凑沿途站点明细列表 -->
+              <div class="stops-compact-list">
+                <div class="stop-row-mini">
+                  <div class="stop-mini-left">
+                    <span class="stop-num-badge">1</span>
+                    <span class="stop-mini-name">阳光棕榈园 (起点)</span>
+                  </div>
+                  <span class="stop-mini-time">11:12</span>
+                </div>
+                <div class="stop-row-mini">
+                  <div class="stop-mini-left">
+                    <span class="stop-num-badge">2</span>
+                    <span class="stop-mini-name">科技园前海湾站</span>
+                  </div>
+                  <span class="stop-mini-time">+12m · 🚇</span>
+                </div>
+                <div class="stop-row-mini">
+                  <div class="stop-mini-left">
+                    <span class="stop-num-badge" style="background: var(--tf-primary); color: #fff;">3</span>
+                    <span class="stop-mini-name">万象天地咖啡馆 (终点)</span>
+                  </div>
+                  <span class="stop-mini-time">+16m · 🏁</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 详细改进说明 -->
+  <div class="critique-section">
+    <h2>🎯 核心维度对比与改进细节</h2>
+    <div class="compare-grid">
+      <div class="compare-box bad">
+        <h3 style="color: #E08A7A;">旧版设计的主要缺陷</h3>
+        <ul>
+          <li><strong>空间空洞</strong>：纯白无纹理背景，3 个圆圈一条竖线，毫无出行与空间位移的沉浸感；</li>
+          <li><strong>信息零碎</strong>：站点名称（A1/B1/C1）紧贴在线条边缘，字号极小，无法快速辨别起点与终点；</li>
+          <li><strong>缺乏位移感知</strong>：各站之间完全不知道耗时多久、使用了何种交通方式；</li>
+          <li><strong>底部严重遮挡</strong>：画布写死高度，导致站点详细列表被挤压至视窗外，抽屉无法自适应。</li>
+        </ul>
+      </div>
+
+      <div class="compare-box good">
+        <h3 style="color: #4CAE7F;">方案 A 的关键提升</h3>
+        <ul>
+          <li><strong>空间底纹与罗盘</strong>：加入 Blueprint 科技微网格与点阵，右上角搭配偏角罗盘与 500m 标尺，质感直接拉满；</li>
+          <li><strong>立体气泡与路段胶囊</strong>：每个站点升级为专属浮动卡片（起终点异形徽章），线上直接悬浮 <code>+12m 🚶</code> 耗时胶囊；</li>
+          <li><strong>双层流体发光轨道</strong>：渐变主轨道 + 柔和光晕底垫 + 前进微箭头，生动呈现出行流动性；</li>
+          <li><strong>6:4 黄金分割抽屉</strong>：内置总用时、里程预估、站数指标卡，上下滚动联动高亮，单手操作极佳。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let isDark = false;
+    function toggleTheme() {
+      isDark = !isDark;
+      document.body.setAttribute('data-theme', isDark ? 'dark' : 'light');
+      document.getElementById('themeIcon').innerText = isDark ? '🌙' : '☀️';
+      document.getElementById('themeLabel').innerText = isDark ? '深色模式' : '浅色模式';
+    }
+
+    function switchRoute(type) {
+      document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      // 可在此拓展更多测试用例
+    }
+  </script>
+</body>
+</html>

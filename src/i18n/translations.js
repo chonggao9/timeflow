@@ -306,6 +306,23 @@ export const translations = {
     'theme.system': '跟随系统',
     'theme.light': '浅色',
     'theme.dark': '深色',
+
+    // 线路轨迹 / 地图
+    'map.trajectory': '探索拓扑',
+    'map.satellite': '高精底图',
+    'map.noData': '暂无有效坐标点\n完成多次打卡即可生成空间拓扑轨迹',
+    'map.gmsNotice': '底图模式需要 Google Play 服务支持',
+    'map.start': '起点',
+    'map.end': '终点',
+    'map.depart': '出发',
+    'map.arrive': '到达',
+    'map.transfer': '换乘',
+    'map.totalDuration': '总耗时',
+    'map.estDistance': '预估路程',
+    'map.stopCount': '途径站数',
+    'map.scale': '500 m',
+    'map.minute': '分钟',
+    'map.stopsUnit': '站',
   },
 
   en: {
@@ -602,5 +619,22 @@ export const translations = {
     'theme.system': 'System',
     'theme.light': 'Light',
     'theme.dark': 'Dark',
+
+    // Route Map
+    'map.trajectory': 'Topology',
+    'map.satellite': 'Satellite',
+    'map.noData': 'No valid coordinates yet.\nCheck in at multiple spots to generate route topology.',
+    'map.gmsNotice': 'Map view requires Google Play services',
+    'map.start': 'Start',
+    'map.end': 'End',
+    'map.depart': 'Depart',
+    'map.arrive': 'Arrive',
+    'map.transfer': 'Transfer',
+    'map.totalDuration': 'Duration',
+    'map.estDistance': 'Est. Dist',
+    'map.stopCount': 'Stops',
+    'map.scale': '500 m',
+    'map.minute': 'min',
+    'map.stopsUnit': 'stops',
   },
 };
