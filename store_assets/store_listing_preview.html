@@ -407,94 +407,16 @@
     <!-- 二、手机屏幕截图 -->
     <div class="section-title">
       <h2>2. 手机宣传截图 (Phone Screenshots)</h2>
-      <span class="spec-tag">1080 × 1920 (9:16) · 至少4张</span>
+      <span class="spec-tag">1080 × 1920 (9:16) · 5张超清海报</span>
     </div>
 
-    <div class="screenshots-scroll">
-      <!-- Shot 1 -->
-      <div class="shot-card">
-        <span class="shot-tag">SCREENSHOT 01</span>
-        <div class="shot-title">极简秒级打卡</div>
-        <div class="shot-sub">居中水波纹交互 · 9大出行方式平滑随心切</div>
-        <div class="phone-frame">
-          <div class="phone-screen">
-            <img src="screenshot_1_checkin.jpg" alt="Shot 1" />
-          </div>
-        </div>
-        <div class="btn-row" style="width: 100%;">
-          <a href="screenshot_1_checkin.jpg" download="01_checkin_1080x1920.jpg" class="btn" style="width: 100%;">
-            📥 下载图 1
-          </a>
-        </div>
-      </div>
+    <div class="copy-tabs" style="margin-bottom: 18px;">
+      <button class="copy-tab-btn shot-tab-btn active" id="shotTabZh" onclick="switchShotLang('zh')">🇨🇳 中文宣传海报 (5张 1080x1920)</button>
+      <button class="copy-tab-btn shot-tab-btn" id="shotTabEn" onclick="switchShotLang('en')">🇺🇸 English Screenshots (5 items 1080x1920)</button>
+    </div>
 
-      <!-- Shot 2 -->
-      <div class="shot-card">
-        <span class="shot-tag">SCREENSHOT 02</span>
-        <div class="shot-title">今日流体时间轴</div>
-        <div class="shot-sub">途经点自动成链 · 耗时与位移智能追踪</div>
-        <div class="phone-frame">
-          <div class="phone-screen">
-            <img src="screenshot_2_timeline.png" alt="Shot 2" />
-          </div>
-        </div>
-        <div class="btn-row" style="width: 100%;">
-          <a href="screenshot_2_timeline.png" download="02_timeline_1080x1920.png" class="btn" style="width: 100%;">
-            📥 下载图 2
-          </a>
-        </div>
-      </div>
-
-      <!-- Shot 3 -->
-      <div class="shot-card">
-        <span class="shot-tag">SCREENSHOT 03</span>
-        <div class="shot-title">探索拓扑与轨迹路线</div>
-        <div class="shot-sub">方案A工业点阵蓝图 · 双层发光渐变动态轨迹</div>
-        <div class="phone-frame">
-          <div class="phone-screen">
-            <img src="screenshot_3_route.png" alt="Shot 3" />
-          </div>
-        </div>
-        <div class="btn-row" style="width: 100%;">
-          <a href="screenshot_3_route.png" download="03_route_1080x1920.png" class="btn" style="width: 100%;">
-            📥 下载图 3
-          </a>
-        </div>
-      </div>
-
-      <!-- Shot 4 -->
-      <div class="shot-card">
-        <span class="shot-tag">SCREENSHOT 04</span>
-        <div class="shot-title">高频通勤与耗时洞察</div>
-        <div class="shot-sub">A→B定向路段耗时分析 · 24小时出行规律图谱</div>
-        <div class="phone-frame">
-          <div class="phone-screen">
-            <img src="screenshot_4_insights.png" alt="Shot 4" />
-          </div>
-        </div>
-        <div class="btn-row" style="width: 100%;">
-          <a href="screenshot_4_insights.png" download="04_insights_1080x1920.png" class="btn" style="width: 100%;">
-            📥 下载图 4
-          </a>
-        </div>
-      </div>
-
-      <!-- Shot 5 -->
-      <div class="shot-card">
-        <span class="shot-tag">SCREENSHOT 05</span>
-        <div class="shot-title">个人中心与云端守护</div>
-        <div class="shot-sub">WebDAV强加密零知识备份 · 连续记录成就勋章</div>
-        <div class="phone-frame">
-          <div class="phone-screen">
-            <img src="screenshot_5_security.png" alt="Shot 5" />
-          </div>
-        </div>
-        <div class="btn-row" style="width: 100%;">
-          <a href="screenshot_5_security.png" download="05_security_1080x1920.png" class="btn" style="width: 100%;">
-            📥 下载图 5
-          </a>
-        </div>
-      </div>
+    <div class="screenshots-scroll" id="screenshotsContainer">
+      <!-- 动态根据当前选中的语言渲染 -->
     </div>
 
     <!-- 三、商店文案与数据安全声明 -->
@@ -530,6 +452,125 @@
   <canvas id="exportCanvas" width="1080" height="1920" style="display: none;"></canvas>
 
   <script>
+    const SHOTS_DATA = {
+      zh: [
+        {
+          tag: "SCREENSHOT 01 · 极简记录",
+          title: "极简秒级打卡",
+          sub: "居中水波纹交互 · 9大出行方式平滑随心切",
+          src: "screenshot_1_checkin.jpg",
+          download: "01_checkin_zh_1080x1920.jpg",
+          btnText: "📥 下载图 1 (中文)"
+        },
+        {
+          tag: "SCREENSHOT 02 · 行程记录",
+          title: "今日流体时间轴",
+          sub: "途经点自动成链 · 耗时与位移智能追踪",
+          src: "screenshot_2_timeline.png",
+          download: "02_timeline_zh_1080x1920.png",
+          btnText: "📥 下载图 2 (中文)"
+        },
+        {
+          tag: "SCREENSHOT 03 · 探索美学",
+          title: "探索拓扑与轨迹路线",
+          sub: "方案A工业点阵蓝图 · 双层发光渐变动态轨迹",
+          src: "screenshot_3_route.png",
+          download: "03_route_zh_1080x1920.png",
+          btnText: "📥 下载图 3 (中文)"
+        },
+        {
+          tag: "SCREENSHOT 04 · 深度分析",
+          title: "高频通勤与耗时洞察",
+          sub: "A→B定向路段耗时分析 · 24小时出行规律图谱",
+          src: "screenshot_4_insights.png",
+          download: "04_insights_zh_1080x1920.png",
+          btnText: "📥 下载图 4 (中文)"
+        },
+        {
+          tag: "SCREENSHOT 05 · 数据隐私",
+          title: "个人中心与云端守护",
+          sub: "WebDAV强加密零知识备份 · 连续记录成就勋章",
+          src: "screenshot_5_security.png",
+          download: "05_security_zh_1080x1920.png",
+          btnText: "📥 下载图 5 (中文)"
+        }
+      ],
+      en: [
+        {
+          tag: "SCREENSHOT 01 · ONE-TAP",
+          title: "Instant One-Tap Check-In",
+          sub: "Dynamic ripple action · 9 travel modes with memory carousel",
+          src: "screenshot_1_checkin.jpg",
+          download: "01_checkin_en_1080x1920.jpg",
+          btnText: "📥 Download Shot 1 (EN)"
+        },
+        {
+          tag: "SCREENSHOT 02 · TIMELINE",
+          title: "Daily Fluid Timeline",
+          sub: "Auto-linked milestones · Smart duration & distance tracking",
+          src: "screenshot_2_timeline_en.png",
+          download: "02_timeline_en_1080x1920.png",
+          btnText: "📥 Download Shot 2 (EN)"
+        },
+        {
+          tag: "SCREENSHOT 03 · TOPOLOGY",
+          title: "Route Topology & Trail",
+          sub: "Industrial blueprint grid · Dual-layer luminous trajectory",
+          src: "screenshot_3_route_en.png",
+          download: "03_route_en_1080x1920.png",
+          btnText: "📥 Download Shot 3 (EN)"
+        },
+        {
+          tag: "SCREENSHOT 04 · INSIGHTS",
+          title: "Commute Trends & Insights",
+          sub: "Point A → B route duration analysis · 24h travel patterns",
+          src: "screenshot_4_insights_en.png",
+          download: "04_insights_en_1080x1920.png",
+          btnText: "📥 Download Shot 4 (EN)"
+        },
+        {
+          tag: "SCREENSHOT 05 · PRIVACY & SYNC",
+          title: "Privacy & WebDAV Cloud Sync",
+          sub: "Zero-knowledge encryption · Streak achievements & local ownership",
+          src: "screenshot_5_security_en.png",
+          download: "05_security_en_1080x1920.png",
+          btnText: "📥 Download Shot 5 (EN)"
+        }
+      ]
+    };
+
+    let currentShotLang = 'zh';
+
+    function renderScreenshots() {
+      const list = SHOTS_DATA[currentShotLang];
+      const container = document.getElementById('screenshotsContainer');
+      container.innerHTML = list.map((s, idx) => `
+        <div class="shot-card">
+          <span class="shot-tag">${s.tag}</span>
+          <div class="shot-title">${s.title}</div>
+          <div class="shot-sub">${s.sub}</div>
+          <div class="phone-frame">
+            <div class="phone-screen">
+              <img src="${s.src}" alt="${s.title}" />
+            </div>
+          </div>
+          <div class="btn-row" style="width: 100%;">
+            <a href="${s.src}" download="${s.download}" class="btn" style="width: 100%;">
+              ${s.btnText}
+            </a>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function switchShotLang(lang) {
+      currentShotLang = lang;
+      document.querySelectorAll('.shot-tab-btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = lang === 'zh' ? document.getElementById('shotTabZh') : document.getElementById('shotTabEn');
+      if (activeBtn) activeBtn.classList.add('active');
+      renderScreenshots();
+    }
+
     const COPY_DATA = {
       zh: {
         title: "TimeFlow - 时间打卡与行程记录",
@@ -673,7 +714,7 @@ With zero ads, zero accounts, and 100% local-first data storage, TimeFlow turns 
 
     function switchLang(lang) {
       currentLang = lang;
-      document.querySelectorAll('.copy-tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.copy-tab-btn:not(.shot-tab-btn)').forEach(btn => btn.classList.remove('active'));
       event.target.classList.add('active');
       renderCopy();
     }
@@ -908,6 +949,7 @@ With zero ads, zero accounts, and 100% local-first data storage, TimeFlow turns 
     }
 
     // 初始渲染
+    renderScreenshots();
     renderCopy();
   </script>
 </body>

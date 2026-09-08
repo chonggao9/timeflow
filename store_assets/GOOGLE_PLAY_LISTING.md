@@ -180,17 +180,31 @@ Make your time visible. Track your journey with grace. Download TimeFlow today!
 
 ## 🖼️ 四、Google Play 视觉资产规格与路径
 
-已为您生成并准备好的视觉资产位于项目的 [`store_assets/`](file:///d:/work/timeflow/store_assets) 目录中：
+已为您生成并准备好的高分辨率视觉资产位于项目的 [`store_assets/`](file:///d:/work/timeflow/store_assets) 目录中，支持在 [`store_listing_preview.html`](file:///d:/work/timeflow/store_assets/store_listing_preview.html) 中一键预览与下载：
 
+### 1. 通用品牌资产 (Brand Assets)
 | 资产类型 | 规格要求 | 对应文件路径 | 状态 |
 |---|---|---|---|
 | **应用图标 (App Icon)** | 512 x 512 px, 32位 PNG/JPEG, <1MB | [`store_assets/app_icon_512x512.jpg`](file:///d:/work/timeflow/store_assets/app_icon_512x512.jpg) | ✅ 已生成 |
 | **置顶大图 (Feature Graphic)** | 1024 x 500 px, JPEG / 24位 PNG, <15MB | [`store_assets/feature_graphic_1024x500.jpg`](file:///d:/work/timeflow/store_assets/feature_graphic_1024x500.jpg) | ✅ 已生成 |
-| **宣传截图 1 (秒级打卡交互)** | 1080 x 1920 (9:16), PNG/JPEG | [`store_assets/screenshot_1_checkin.jpg`](file:///d:/work/timeflow/store_assets/screenshot_1_checkin.jpg) | ✅ 已生成 (拟真立体海报) |
-| **宣传截图 2 (今日流体时间轴)** | 1080 x 1920 (9:16), PNG | [`store_assets/screenshot_2_timeline.png`](file:///d:/work/timeflow/store_assets/screenshot_2_timeline.png) | ✅ 已生成 (基于落地页面实景) |
-| **宣传截图 3 (探索拓扑与轨迹路线)** | 1080 x 1920 (9:16), PNG | [`store_assets/screenshot_3_route.png`](file:///d:/work/timeflow/store_assets/screenshot_3_route.png) | ✅ 已生成 (基于落地方案A工业点阵实景) |
-| **宣传截图 4 (高频通勤与耗时洞察)** | 1080 x 1920 (9:16), PNG | [`store_assets/screenshot_4_insights.png`](file:///d:/work/timeflow/store_assets/screenshot_4_insights.png) | ✅ 已生成 (基于落地页面实景) |
-| **宣传截图 5 (个人中心与云端守护)** | 1080 x 1920 (9:16), PNG | [`store_assets/screenshot_5_security.png`](file:///d:/work/timeflow/store_assets/screenshot_5_security.png) | ✅ 已生成 (基于落地页面实景) |
+
+### 2. 中文版宣传截图 (Chinese Screenshots - zh-CN)
+| 截图序号 | 主题 / 对应实际界面 | 规格 | 对应文件路径 | 状态 |
+|---|---|---|---|---|
+| **Shot 01** | 极简秒级打卡 (居中水波纹微动效) | 1080 x 1920, JPG | [`store_assets/screenshot_1_checkin.jpg`](file:///d:/work/timeflow/store_assets/screenshot_1_checkin.jpg) | ✅ 已生成 |
+| **Shot 02** | 今日流体时间轴 (自动组链与耗时位移) | 1080 x 1920, PNG | [`store_assets/screenshot_2_timeline.png`](file:///d:/work/timeflow/store_assets/screenshot_2_timeline.png) | ✅ 已生成 (落地实景) |
+| **Shot 03** | 探索拓扑与轨迹路线 (方案A工业点阵) | 1080 x 1920, PNG | [`store_assets/screenshot_3_route.png`](file:///d:/work/timeflow/store_assets/screenshot_3_route.png) | ✅ 已生成 (落地实景) |
+| **Shot 04** | 高频通勤与耗时洞察 (A→B分析与分布柱图) | 1080 x 1920, PNG | [`store_assets/screenshot_4_insights.png`](file:///d:/work/timeflow/store_assets/screenshot_4_insights.png) | ✅ 已生成 (落地实景) |
+| **Shot 05** | 个人中心与云端守护 (WebDAV加密零泄露) | 1080 x 1920, PNG | [`store_assets/screenshot_5_security.png`](file:///d:/work/timeflow/store_assets/screenshot_5_security.png) | ✅ 已生成 (落地实景) |
+
+### 3. 英文版宣传截图 (English Screenshots - en-US)
+| 截图序号 | 主题 (English Title & Subtitle) | 规格 | 对应文件路径 | 状态 |
+|---|---|---|---|---|
+| **Shot 01** | Instant One-Tap Check-In (Dynamic Ripple Action) | 1080 x 1920, JPG | [`store_assets/screenshot_1_checkin.jpg`](file:///d:/work/timeflow/store_assets/screenshot_1_checkin.jpg) | ✅ 国际通用海报 |
+| **Shot 02** | Daily Fluid Timeline (Auto-linked Milestones) | 1080 x 1920, PNG | [`store_assets/screenshot_2_timeline_en.png`](file:///d:/work/timeflow/store_assets/screenshot_2_timeline_en.png) | ✅ 纯英文原生页面 |
+| **Shot 03** | Route Topology & Trail (Industrial Blueprint Grid) | 1080 x 1920, PNG | [`store_assets/screenshot_3_route_en.png`](file:///d:/work/timeflow/store_assets/screenshot_3_route_en.png) | ✅ 纯英文原生页面 |
+| **Shot 04** | Commute Trends & Insights (Point A → B Route Analysis) | 1080 x 1920, PNG | [`store_assets/screenshot_4_insights_en.png`](file:///d:/work/timeflow/store_assets/screenshot_4_insights_en.png) | ✅ 纯英文原生页面 |
+| **Shot 05** | Privacy & WebDAV Cloud Sync (Zero-Knowledge Encryption) | 1080 x 1920, PNG | [`store_assets/screenshot_5_security_en.png`](file:///d:/work/timeflow/store_assets/screenshot_5_security_en.png) | ✅ 纯英文原生页面 |
 
 ---
 
