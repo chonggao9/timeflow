@@ -35,7 +35,7 @@
           "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_KEY"
         }
       },
-      "versionCode": 3
+      "versionCode": 4
     },
     "plugins": [
       [
@@ -59,6 +59,7 @@
         }
       ],
       "./plugins/withAbiFilter",
+      "./plugins/withApi36Fix",
       [
         "react-native-android-widget",
         {
