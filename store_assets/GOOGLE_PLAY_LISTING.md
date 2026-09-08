@@ -221,16 +221,27 @@ Make your time visible. Track your journey with grace. Download TimeFlow today!
 
 ---
 
-## 📦 五、Google Play 打包上传关键注意项 (AAB 格式)
+## 📦 五、Google Play 安装包与发布产物 (AAB & APK)
 
 > [!CAUTION]
 > **切勿将 `.apk` 安装包直接上传至 Google Play Console！**  
-> 自 2021 年 8 月起，Google Play 要求所有新发布的应用必须使用 **Android App Bundle (.aab)** 格式。
-> 刚才一键发布的 `timeflow-v1.0.22.apk` 是用于外部侧载/内测的 APK 包。
+> 自 2021 年 8 月起，Google Play 要求所有新发布的应用必须使用 **Android App Bundle (.aab)** 格式。  
+> 外部侧载/真机测试请使用 `.apk`，Google Play Console 上架请务必使用 `.aab`。
 
-### 生成上传用 AAB 命令
-在终端运行：
+### 🚀 最新就绪的发布产物 (v1.0.22)
+- **Google Play 专供 (AAB)**：[`timeflow-v1.0.22.aab`](file:///d:/work/timeflow/timeflow-v1.0.22.aab) (32.9 MB, `versionCode: 2`, production profile)
+  * GitHub Release 下载：[timeflow-v1.0.22.aab](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.aab)
+  * EAS 构建产物：[Expo EAS AAB Artifact](https://expo.dev/artifacts/eas/GbapSdppfctX0X41CHH-lYWQsxNaT22FkoZ37Z-Q14s.aab)
+- **真机测试包 (APK)**：[`timeflow-v1.0.22.apk`](file:///d:/work/timeflow/timeflow-v1.0.22.apk) (65.0 MB, `versionCode: 1`, preview profile)
+  * GitHub Release 下载：[timeflow-v1.0.22.apk](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.apk)
+  * EAS 构建产物：[Expo EAS APK Artifact](https://expo.dev/artifacts/eas/B94B3CL_wW3IiDEoMykFIm7XU6qD7UOFjv9kIOwglnY.apk)
+
+### 后续版本生成命令
+若未来升级新版本打包：
 ```bash
+# 构建真机安装测试 APK
+eas build --platform android --profile preview
+
+# 构建 Google Play 上传专用 AAB
 eas build --platform android --profile production
 ```
-该命令将使用 `eas.json` 中的 `production` 配置打包出带自增版本的 `.aab` 安装包，构建完成后直接下载并在 Google Play Console 的「生产版本」或「公开测试」中上传 `.aab` 即可！

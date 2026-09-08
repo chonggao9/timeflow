@@ -3,7 +3,8 @@
 [![GitHub Release](https://img.shields.io/github/v/release/chonggao9/timeflow?color=FF6B6B&style=flat-square)](https://github.com/chonggao9/timeflow/releases/latest)
 [![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square)](#平台支持)
 
-> [📥 **点击直接下载最新 Android 安装包 (v1.0.22 APK)**](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.apk)
+> [📥 **点击直接下载最新 Android 安装包 (v1.0.22 APK)**](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.apk)  
+> [📦 **Google Play 上架专供包 (v1.0.22 AAB)**](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.aab)
 
 极简时间打卡 App，基于 Expo (React Native) + SQLite，支持高德/系统（Google）双兼容定位，数据全本地存储。
 
