@@ -3,6 +3,7 @@
 > 整理日期：2026-09-08  
 > 适用平台：Google Play Console (Google Play 管理中心)  
 > 对应版本：v1.0.22 (AAB 格式)  
+> 软件包名称 (Package Name)：`com.chonggao.timeflow`  
 > 隐私政策网址：`https://chonggao9.github.io/timeflow/privacy.html`
 
 ---

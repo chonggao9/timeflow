@@ -11,7 +11,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.timeflow.app",
+      "bundleIdentifier": "com.chonggao.timeflow",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "打卡时记录您的位置"
       }
@@ -21,7 +21,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FF6B6B"
       },
-      "package": "com.timeflow.app",
+      "package": "com.chonggao.timeflow",
       "navigationBar": {
         "backgroundColor": "#FBF5EF",
         "barStyle": "dark-content"
