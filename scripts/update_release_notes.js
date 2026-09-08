@@ -15,7 +15,7 @@ const env = {
 const body = `TimeFlow v1.0.22 (Google Play Release Build)
 
 ### 📦 资产下载与说明
-- **Google Play 上传专供 (AAB)**：[\`timeflow-v1.0.22.aab\`](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.aab) (32.9 MB, versionCode: 2, 生产发布包，直接上传 Google Play Console)
+- **Google Play 上传专供 (AAB)**：[\`timeflow-v1.0.22.aab\`](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.aab) (32.9 MB, versionCode: 5, targetSdkVersion: 36, 生产发布包，直接上传 Google Play Console)
 - **真机安装测试包 (APK)**：[\`timeflow-v1.0.22.apk\`](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.apk) (65.0 MB, versionCode: 1, 适用于直接在手机上侧载安装体验)
 - **软件包名称 (Package Name)**：\`com.chonggao.timeflow\`
 
