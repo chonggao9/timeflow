@@ -34,7 +34,8 @@
         "googleMaps": {
           "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_KEY"
         }
-      }
+      },
+      "versionCode": 2
     },
     "plugins": [
       [
