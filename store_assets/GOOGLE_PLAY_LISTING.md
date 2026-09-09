@@ -229,9 +229,9 @@ Make your time visible. Track your journey with grace. Download TimeFlow today!
 > 外部侧载/真机测试请使用 `.apk`，Google Play Console 上架请务必使用 `.aab`。
 
 ### 🚀 最新就绪的发布产物 (v1.0.22)
-- **Google Play 专供 (AAB)**：[`timeflow-v1.0.22.aab`](file:///d:/work/timeflow/timeflow-v1.0.22.aab) (32.9 MB, `versionCode: 5`, `targetSdkVersion: 36`, production profile)
+- **Google Play 专供 (AAB)**：[`timeflow-v1.0.22.aab`](file:///d:/work/timeflow/timeflow-v1.0.22.aab) (32.9 MB, `versionCode: 6`, `targetSdkVersion: 36`, production profile)
   * GitHub Release 下载：[timeflow-v1.0.22.aab](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.aab)
-  * EAS 构建产物：[Expo EAS AAB Artifact](https://expo.dev/artifacts/eas/9d17qpsbTAiDp7OMyS7YXCS1TwuLveVz96dJkypGitg.aab)
+  * EAS 构建产物：[Expo EAS AAB Artifact](https://expo.dev/artifacts/eas/acm6tUXfwO0ZOwbKPuyZjH9lIZgL5SLzNTdPawHitLk.aab)
 - **真机测试包 (APK)**：[`timeflow-v1.0.22.apk`](file:///d:/work/timeflow/timeflow-v1.0.22.apk) (65.0 MB, `versionCode: 1`, preview profile)
   * GitHub Release 下载：[timeflow-v1.0.22.apk](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.apk)
   * EAS 构建产物：[Expo EAS APK Artifact](https://expo.dev/artifacts/eas/B94B3CL_wW3IiDEoMykFIm7XU6qD7UOFjv9kIOwglnY.apk)

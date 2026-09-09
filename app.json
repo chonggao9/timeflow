@@ -35,7 +35,7 @@
           "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_KEY"
         }
       },
-      "versionCode": 5
+      "versionCode": 6
     },
     "plugins": [
       [
