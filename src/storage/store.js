@@ -5,10 +5,34 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SQLite from 'expo-sqlite';
 
 const RECORDS_KEY = 'timeflow_records';
+const RECORDS_REV_KEY = 'timeflow_data_rev';
 const TRIP_KEY = 'timeflow_current_trip';
 const LAST_CHECKIN_TS_KEY = 'timeflow_last_checkin_ts';
-const TRIP_TIMEOUT_MS = 90 * 60 * 1000; // 90分钟无打卡自动断开行程
+export const TRIP_TIMEOUT_MS = 90 * 60 * 1000; // 90分钟无打卡自动断开行程
 const MODE_KEY = 'timeflow_mode';
+
+// 内存修订版本号缓存：与 AsyncStorage 双写，保证每次修改产生不同指纹
+let currentRev = null;
+async function getRevision() {
+  if (currentRev === null) {
+    try {
+      const v = await AsyncStorage.getItem(RECORDS_REV_KEY);
+      currentRev = v ? Number(v) : 0;
+    } catch (e) {
+      currentRev = 0;
+    }
+  }
+  return currentRev;
+}
+
+async function bumpRevision() {
+  const next = (await getRevision()) + 1;
+  currentRev = next;
+  try {
+    await AsyncStorage.setItem(RECORDS_REV_KEY, String(next));
+  } catch (e) {}
+  return next;
+}
 
 // 旧数据无 tripId，统一归为该值（一条历史行程）
 export const LEGACY_TRIP = 'legacy';
@@ -83,7 +107,7 @@ export async function getCurrentTripId() {
     const lastTs = Number(raw);
     const now = Date.now();
     if (now - lastTs > TRIP_TIMEOUT_MS || dayStart(now) !== dayStart(lastTs)) {
-      // 已超时（>3小时）或跨越自然日，自动关闭旧行程
+      // 已超时（>90分钟）或跨越自然日，自动关闭旧行程
       await AsyncStorage.multiRemove([TRIP_KEY, LAST_CHECKIN_TS_KEY]);
       return null;
     }
@@ -93,7 +117,7 @@ export async function getCurrentTripId() {
   }
 }
 
-// 获取当前行程，超时（>3小时）或跨越自然日自动新建行程
+// 获取当前行程，超时（>90分钟）或跨越自然日自动新建行程
 export async function ensureTrip() {
   const now = Date.now();
   let id = await getCurrentTripId();
@@ -128,6 +152,7 @@ export function saveRecord(record) {
       'INSERT INTO records (id, timestamp, location_name, lat, lng, mode, trip_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
       record.id, record.timestamp, record.locationName ?? null, record.lat ?? null, record.lng ?? null, record.mode ?? null, record.tripId ?? null
     );
+    await bumpRevision();
   })();
 }
 
@@ -156,11 +181,14 @@ export async function getRecordById(id) {
   return db.getFirstAsync(`SELECT ${COLS} FROM records WHERE id = ?`, id);
 }
 
-// 获取数据指纹（总数 + 最新时间戳），极速用于缓存对比（<1ms）
+// 获取数据指纹（总数 + 最新时间戳 + 修订版本号），确保改名/补位/删除均能触发缓存失效
 export async function getRecordsFingerprint() {
   const db = await getDb();
-  const row = await db.getFirstAsync('SELECT COUNT(*) AS count, COALESCE(MAX(timestamp), 0) AS maxTs FROM records');
-  return `${row?.count || 0}:${row?.maxTs || 0}`;
+  const [row, rev] = await Promise.all([
+    db.getFirstAsync('SELECT COUNT(*) AS count, COALESCE(MAX(timestamp), 0) AS maxTs FROM records'),
+    getRevision(),
+  ]);
+  return `${row?.count || 0}:${row?.maxTs || 0}:${rev}`;
 }
 
 // patch 驼峰键 → 表列名
@@ -177,6 +205,7 @@ export function updateRecord(id, patch) {
       `UPDATE records SET ${sets} WHERE id = ?`,
       ...keys.map(k => patch[k] ?? null), id
     );
+    await bumpRevision();
   })();
 }
 
@@ -185,6 +214,7 @@ export function deleteRecord(id) {
   return (async () => {
     const db = await getDb();
     await db.runAsync('DELETE FROM records WHERE id = ?', id);
+    await bumpRevision();
   })();
 }
 
@@ -192,7 +222,8 @@ export function deleteRecord(id) {
 export async function clearAll() {
   const db = await getDb();
   await db.runAsync('DELETE FROM records');
-  await AsyncStorage.multiRemove([TRIP_KEY, RECORDS_KEY]);
+  await AsyncStorage.multiRemove([TRIP_KEY, RECORDS_KEY, LAST_CHECKIN_TS_KEY]);
+  await bumpRevision();
 }
 
 // 记录总数（用于导入结果 / 数据量展示）
@@ -229,5 +260,8 @@ export async function importRecords(records) {
   });
   const after = await countRecords();
   const imported = after - before;
+  if (imported > 0) {
+    await bumpRevision();
+  }
   return { imported, skipped: list.length - imported + skippedInvalid };
 }

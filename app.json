@@ -2,7 +2,7 @@
   "expo": {
     "name": "TimeFlow",
     "slug": "timeflow",
-    "version": "1.0.22",
+    "version": "1.0.28",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -28,20 +28,30 @@
       },
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
       "config": {
         "googleMaps": {
           "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_KEY"
         }
       },
-      "versionCode": 6
+      "versionCode": 12
     },
     "plugins": [
       [
         "expo-location",
         {
           "locationWhenInUsePermission": "打卡时记录您的位置"
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "用于将行程小票长图保存至手机相册",
+          "savePhotosPermission": "用于将行程小票长图保存至手机相册"
         }
       ],
       "expo-localization",

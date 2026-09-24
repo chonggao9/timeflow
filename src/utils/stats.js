@@ -17,8 +17,10 @@ export function filterOutliers(arr) {
   return sorted.filter(v => v <= q3 + 1.5 * iqr);
 }
 
-// ---- 地名占位 ----
+// ---- 地名占位与业务常量 ----
 export const UNNAMED = '未命名';
+export const TRIP_TIMEOUT_MS = 90 * 60 * 1000; // 90分钟无打卡自动断开行程
+export const TRIP_TIMEOUT_SEC = 90 * 60;       // 5400秒
 // 引用 store 里的 legacy 常量，避免循环依赖：这里直接用字符串标记
 const LEGACY_TRIP = 'legacy';
 export function isPlaceholderName(name) {
@@ -87,7 +89,7 @@ export function computePathStats(allRecords) {
     }
   }
 
-  // 补充跨行程但时间紧邻（<=3小时内相邻打卡）的路段，避免误触结束行程导致通勤数据丢失
+  // 补充跨行程但时间紧邻（<=90分钟内相邻打卡）的路段，避免误触结束行程导致通勤数据丢失
   const allSorted = [...allRecords].sort((a, b) => a.timestamp - b.timestamp);
   for (let i = 0; i < allSorted.length - 1; i++) {
     const from = allSorted[i], to = allSorted[i + 1];
@@ -95,7 +97,7 @@ export function computePathStats(allRecords) {
     const tripTo = to.tripId || LEGACY_TRIP;
     if (tripFrom !== tripTo) {
       const sec = (to.timestamp - from.timestamp) / 1000;
-      if (sec > 0 && sec <= 3 * 3600) {
+      if (sec > 0 && sec <= TRIP_TIMEOUT_SEC) {
         const fromKey = placeKey(from), toKey = placeKey(to);
         if (fromKey !== toKey) {
           const key = `${fromKey}→${toKey}|${to.mode || 'unknown'}`;

@@ -13,6 +13,7 @@ import ModeIcon from '../components/ModeIcon';
 import BarChart from '../components/charts/BarChart';
 import HistoryView from '../components/HistoryView';
 import RouteMapScreen from './RouteMapScreen';
+import TripReceiptModal from '../components/TripReceiptModal';
 
 export default function InsightsScreen() {
   const insets = useSafeAreaInsets();
@@ -29,6 +30,7 @@ export default function InsightsScreen() {
   const [result, setResult] = useState(null);
   const [view, setView] = useState('stats'); // 'stats' | 'history'
   const [mapTrip, setMapTrip] = useState(null); // 当前查看地图的行程
+  const [receiptTrip, setReceiptTrip] = useState(null); // 当前查看小票的行程
   const lastFingerprintRef = useRef(null);
 
   useFocusEffect(useCallback(() => {
@@ -128,7 +130,7 @@ export default function InsightsScreen() {
       </View>
 
       {view === 'history' ? (
-        <HistoryView records={records} onShowMap={setMapTrip} />
+        <HistoryView records={records} onShowMap={setMapTrip} onShowReceipt={setReceiptTrip} />
       ) : noData ? (
         <View style={styles.empty}>
           <Ionicons name="analytics-outline" size={40} color={colors.ink3} />
@@ -368,6 +370,9 @@ export default function InsightsScreen() {
 
       {/* 线路轨迹地图（全屏） */}
       <RouteMapScreen visible={mapTrip != null} tripRecords={mapTrip?.records || []} onClose={() => setMapTrip(null)} />
+
+      {/* 行程小票卡片（弹窗） */}
+      <TripReceiptModal visible={receiptTrip != null} trip={receiptTrip} onClose={() => setReceiptTrip(null)} />
     </ScrollView>
   );
 }

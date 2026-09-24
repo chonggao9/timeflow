@@ -12,6 +12,10 @@ ios/
 # 本地 Expo 模块的原生代码（自定义模块 amap-location 需提交，例外 android/ 规则）
 !modules/amap-location/android/
 !modules/amap-location/android/**
+modules/**/build/
+modules/**/.gradle/
+.gradle/
+
 
 # 日志
 *.log
@@ -23,6 +27,8 @@ Thumbs.db
 
 # 密钥
 *.jks
+*.keystore
+keystore.properties
 *.p8
 *.p12
 *.key

@@ -23,6 +23,7 @@ import CheckInButton from '../components/CheckInButton';
 import TransportPicker, { MODE_KEYS } from '../components/TransportPicker';
 import ModeIcon from '../components/ModeIcon';
 import RouteMapScreen from './RouteMapScreen';
+import TripReceiptModal from '../components/TripReceiptModal';
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 const BACKFILL_OFFSETS = [
@@ -64,6 +65,7 @@ export default function HomeScreen() {
   const [backfillMode, setBackfillMode] = useState('walk');
 
   const [mapTrip, setMapTrip] = useState(null); // 当前查看地图的行程
+  const [receiptTrip, setReceiptTrip] = useState(null); // 当前查看小票的行程
 
   const loadToday = useCallback(async () => {
     const today = await getTodayRecords();
@@ -424,6 +426,7 @@ export default function HomeScreen() {
           estimate={estimate}
           onRename={openRename}
           onShowMap={setMapTrip}
+          onShowReceipt={setReceiptTrip}
           onBackfill={openBackfill}
           hasActiveTrip={hasActiveTrip}
         />
@@ -631,6 +634,9 @@ export default function HomeScreen() {
 
       {/* 线路轨迹地图（全屏） */}
       <RouteMapScreen visible={mapTrip != null} tripRecords={mapTrip?.records || []} onClose={() => setMapTrip(null)} />
+
+      {/* 行程小票卡片（弹窗） */}
+      <TripReceiptModal visible={receiptTrip != null} trip={receiptTrip} onClose={() => setReceiptTrip(null)} />
     </View>
   );
 }

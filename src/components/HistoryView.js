@@ -16,7 +16,7 @@ const modeLabelKey = (mode) => (MODES.includes(mode) ? 'mode.' + mode : 'history
 const hasCoords = (records) => (records || []).filter(r => r.lat != null && r.lng != null).length >= 2;
 
 // 历史行程视图：搜索 + 方式筛选 + 按日期分组的行程列表 + 卡片内展开每一站
-export default function HistoryView({ records, onShowMap }) {
+export default function HistoryView({ records, onShowMap, onShowReceipt }) {
   const { t, lang, formatDate } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -54,9 +54,9 @@ export default function HistoryView({ records, onShowMap }) {
 
       {/* 方式筛选 */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-        <Chip label={t('history.all')} active={modeFilter === null} onPress={() => setModeFilter(null)} />
+        <Chip label={t('history.all')} active={modeFilter === null} onPress={() => setModeFilter(null)} styles={styles} />
         {MODES.map(m => (
-          <Chip key={m} label={t('mode.' + m)} active={modeFilter === m} onPress={() => setModeFilter(modeFilter === m ? null : m)} />
+          <Chip key={m} label={t('mode.' + m)} active={modeFilter === m} onPress={() => setModeFilter(modeFilter === m ? null : m)} styles={styles} />
         ))}
       </ScrollView>
 
@@ -78,6 +78,11 @@ export default function HistoryView({ records, onShowMap }) {
                   <View style={styles.tripHead}>
                     <ModeIcon mode={trip.mode} size={16} color={colors.primaryStrong} />
                     <Text style={styles.tripTitle} numberOfLines={1}>{title}</Text>
+                    {onShowReceipt ? (
+                      <TouchableOpacity style={styles.mapBtn} onPress={() => onShowReceipt(trip)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="receipt-outline" size={16} color={colors.primaryStrong} />
+                      </TouchableOpacity>
+                    ) : null}
                     {onShowMap && hasCoords(trip.records) ? (
                       <TouchableOpacity style={styles.mapBtn} onPress={() => onShowMap(trip)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                         <Ionicons name="map" size={17} color={colors.primaryStrong} />
@@ -115,9 +120,7 @@ export default function HistoryView({ records, onShowMap }) {
   );
 }
 
-function Chip({ label, active, onPress }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+function Chip({ label, active, onPress, styles }) {
   return (
     <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress} activeOpacity={0.7}>
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>

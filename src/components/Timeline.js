@@ -38,10 +38,7 @@ function PulseNode({ styles }) {
   );
 }
 
-function Node({ type }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-
+function Node({ type, styles }) {
   if (type === 'current') {
     return (
       <View style={styles.nodeWrap}>
@@ -73,15 +70,11 @@ function Node({ type }) {
   );
 }
 
-function SolidLine() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+function SolidLine({ styles }) {
   return <View style={styles.solidLine} />;
 }
 
-function DashedLine() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+function DashedLine({ styles }) {
   return <View style={styles.dashedLine} />;
 }
 
@@ -109,7 +102,7 @@ function groupByTrip(records) {
 // 是否有 ≥2 个有效坐标点（≥2 才能连成轨迹，否则不显示「查看地图」）
 const hasCoords = (records) => (records || []).filter(r => r.lat != null && r.lng != null).length >= 2;
 
-export default function Timeline({ records, estimate, onRename, onShowMap, onBackfill, hasActiveTrip = false }) {
+export default function Timeline({ records, estimate, onRename, onShowMap, onShowReceipt, onBackfill, hasActiveTrip = false }) {
   const { t, lang } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -175,17 +168,30 @@ export default function Timeline({ records, estimate, onRename, onShowMap, onBac
               </Text>
             )}
           </View>
-          {onShowMap && hasCoords(g.records) ? (
-            <TouchableOpacity
-              style={styles.mapBtn}
-              onPress={() => onShowMap(g)}
-              activeOpacity={0.7}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons name="map-outline" size={13} color={colors.primaryStrong} />
-              <Text style={styles.mapBtnText}>{t('timeline.mapBtn')}</Text>
-            </TouchableOpacity>
-          ) : null}
+          <View style={styles.tripActions}>
+            {onShowReceipt && g.records.length > 0 && (
+              <TouchableOpacity
+                style={styles.receiptBtn}
+                onPress={() => onShowReceipt(g)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Ionicons name="receipt-outline" size={12} color={colors.primaryStrong} />
+                <Text style={styles.receiptBtnText}>{t('receipt.btn')}</Text>
+              </TouchableOpacity>
+            )}
+            {onShowMap && hasCoords(g.records) ? (
+              <TouchableOpacity
+                style={styles.mapBtn}
+                onPress={() => onShowMap(g)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Ionicons name="map-outline" size={13} color={colors.primaryStrong} />
+                <Text style={styles.mapBtnText}>{t('timeline.mapBtn')}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         {/* 轨道内打卡点序列 */}
@@ -209,7 +215,7 @@ export default function Timeline({ records, estimate, onRename, onShowMap, onBac
                 {/* 节点行 */}
                 <View style={styles.row}>
                   <View style={styles.lineCol}>
-                    <Node type={nodeType} />
+                    <Node type={nodeType} styles={styles} />
                   </View>
                   <View style={styles.info}>
                     <Text style={[styles.time, isHot && styles.timeCurrent]}>
@@ -241,7 +247,7 @@ export default function Timeline({ records, estimate, onRename, onShowMap, onBac
                 {isHot && estimate && (
                   <React.Fragment>
                     <View style={styles.segmentRow}>
-                      <View style={styles.lineCol}><DashedLine /></View>
+                      <View style={styles.lineCol}><DashedLine styles={styles} /></View>
                       <View style={styles.segmentInfo}>
                         <View style={styles.estimatePill}>
                           <Ionicons name="sparkles" size={12} color={colors.primaryStrong} />
@@ -252,7 +258,7 @@ export default function Timeline({ records, estimate, onRename, onShowMap, onBac
                       </View>
                     </View>
                     <View style={styles.row}>
-                      <View style={styles.lineCol}><Node type="future" /></View>
+                      <View style={styles.lineCol}><Node type="future" styles={styles} /></View>
                       <View style={styles.info}>
                         <Text style={[styles.time, styles.timeFuture]}>
                           {formatTime(r.timestamp + estimate.estimatedSec * 1000)}
@@ -270,7 +276,7 @@ export default function Timeline({ records, estimate, onRename, onShowMap, onBac
                 {/* 路段位移与耗时胶囊 */}
                 {durBelow != null && (
                   <View style={styles.segmentRow}>
-                    <View style={styles.lineCol}><SolidLine /></View>
+                    <View style={styles.lineCol}><SolidLine styles={styles} /></View>
                     <View style={styles.segmentInfo}>
                       <View style={styles.segmentCard}>
                         {r.mode && (
@@ -446,6 +452,25 @@ const makeStyles = (colors) => StyleSheet.create({
     borderRadius: 999,
   },
   mapBtnText: {
+    fontSize: 11,
+    color: colors.primaryStrong,
+    fontWeight: '700',
+  },
+  tripActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  receiptBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 999,
+  },
+  receiptBtnText: {
     fontSize: 11,
     color: colors.primaryStrong,
     fontWeight: '700',

@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TimeFlow - 行程小票视觉效果展示</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #F4EFEA;
+      --card-bg-light: #FCFAF7;
+      --card-bg-dark: #231B15;
+      --primary: #FF6B6B;
+      --primary-strong: #F24E4E;
+      --primary-soft: #FFE9E4;
+      --ink: #2B231E;
+      --ink2: #7A6F66;
+      --ink3: #B6A99E;
+      --line: #F1E7DD;
+      --line2: #E9DCD0;
+      --chip-light: #FAF6F1;
+      --chip-dark: #2C231D;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #EFE7DE;
+      color: #2B231E;
+      min-height: 100vh;
+      padding: 40px 24px 60px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 36px;
+      max-width: 800px;
+    }
+
+    .badge-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #FFE9E4;
+      color: #F24E4E;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 5px 14px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+
+    .page-title {
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      color: #2B231E;
+      margin-bottom: 10px;
+    }
+
+    .page-desc {
+      font-size: 15px;
+      color: #7A6F66;
+      line-height: 1.6;
+    }
+
+    /* 展示主栅格 */
+    .showcase-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 32px;
+      width: 100%;
+      max-width: 1240px;
+      margin-bottom: 40px;
+    }
+
+    .showcase-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .col-title {
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #7A6F66;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* 手机真机模拟容器 */
+    .phone-mockup {
+      width: 375px;
+      height: 720px;
+      background: #12100E;
+      border-radius: 46px;
+      padding: 12px;
+      box-shadow: 0 25px 60px -12px rgba(43, 35, 30, 0.35), 0 0 0 1px rgba(0,0,0,0.08);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .phone-screen {
+      width: 100%;
+      height: 100%;
+      background: #FBF5EF;
+      border-radius: 36px;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* App 背后模糊背景（今日主页轮廓） */
+    .mock-app-bg {
+      position: absolute;
+      inset: 0;
+      background: #FBF5EF;
+      padding: 50px 20px 20px;
+      filter: blur(2px) opacity(0.5);
+      pointer-events: none;
+    }
+
+    .mock-app-bg .mock-card {
+      background: #FFF;
+      border-radius: 18px;
+      height: 110px;
+      margin-bottom: 14px;
+      border: 1px solid #F1E7DD;
+    }
+
+    /* 遮罩 */
+    .mock-scrim {
+      position: absolute;
+      inset: 0;
+      background: rgba(43, 35, 30, 0.42);
+      backdrop-filter: blur(4px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 10;
+    }
+
+    /* 小票卡片基类 */
+    .receipt-card {
+      width: 100%;
+      max-width: 340px;
+      border-radius: 20px;
+      padding: 22px 20px;
+      box-shadow: 0 16px 36px -8px rgba(43, 35, 30, 0.16), 0 2px 6px rgba(0,0,0,0.04);
+      position: relative;
+      transition: transform 0.2s ease;
+    }
+
+    /* 拟物纸张锯齿边缘效果 */
+    .receipt-card::before, .receipt-card::after {
+      content: '';
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      height: 5px;
+      background-size: 10px 5px;
+      background-repeat: repeat-x;
+      pointer-events: none;
+    }
+    .receipt-card::before {
+      top: -4px;
+      background-image: radial-gradient(circle at 5px 0px, transparent 5px, currentColor 5.5px);
+    }
+    .receipt-card::after {
+      bottom: -4px;
+      background-image: radial-gradient(circle at 5px 5px, transparent 5px, currentColor 5.5px);
+    }
+
+    /* 浅色纸质 */
+    .receipt-light {
+      background: #FCFAF7;
+      color: #2B231E;
+      border: 1px solid #EFE4D8;
+    }
+    .receipt-light::before, .receipt-light::after {
+      color: #FCFAF7;
+    }
+
+    /* 深色黑曜 */
+    .receipt-dark {
+      background: #231B15;
+      color: #F3EDE7;
+      border: 1px solid #362B22;
+    }
+    .receipt-dark::before, .receipt-dark::after {
+      color: #231B15;
+    }
+
+    /* 票头 */
+    .receipt-header {
+      text-align: center;
+      padding-bottom: 2px;
+    }
+
+    .brand-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 3px;
+    }
+
+    .brand-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #FF6B6B;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .brand-title {
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: 2.2px;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    .receipt-subtitle {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      opacity: 0.6;
+      margin-bottom: 4px;
+    }
+
+    .receipt-date {
+      font-size: 11.5px;
+      font-family: 'JetBrains Mono', monospace;
+      opacity: 0.75;
+    }
+
+    /* 打孔虚线 */
+    .dotted-line {
+      height: 1px;
+      border-top: 1.5px dashed;
+      opacity: 0.35;
+      margin: 12px 0;
+    }
+
+    /* 起止与看板 */
+    .route-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .route-arrow {
+      color: #FF6B6B;
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .metrics-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 8px;
+      border-radius: 12px;
+    }
+    .receipt-light .metrics-row { background: #FAF5EE; }
+    .receipt-dark .metrics-row { background: #2B221B; }
+
+    .metric-col {
+      flex: 1;
+      text-align: center;
+    }
+
+    .metric-label {
+      font-size: 9.5px;
+      opacity: 0.55;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .metric-val {
+      font-size: 12px;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .metric-divider {
+      width: 1px;
+      height: 18px;
+      opacity: 0.25;
+      background: currentColor;
+    }
+
+    /* 站点流水 */
+    .stops-stream {
+      display: flex;
+      flex-direction: column;
+      padding: 2px 4px;
+      gap: 2px;
+    }
+
+    .stop-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 2.5px 0;
+    }
+
+    .stop-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.3;
+      flex-shrink: 0;
+    }
+    .stop-dot.accent {
+      width: 8px;
+      height: 8px;
+      background: #FF6B6B;
+      opacity: 1;
+      box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.2);
+    }
+
+    .stop-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      opacity: 0.7;
+      width: 42px;
+      flex-shrink: 0;
+    }
+
+    .stop-name {
+      font-size: 12.5px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .stop-name.bold {
+      font-weight: 800;
+    }
+
+    .leg-row {
+      display: flex;
+      align-items: center;
+      margin-left: 3px;
+      padding: 2px 0 2px 14px;
+      position: relative;
+    }
+
+    .leg-line {
+      position: absolute;
+      left: 3.5px;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: currentColor;
+      opacity: 0.15;
+    }
+
+    .leg-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 9.5px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 6px;
+    }
+    .receipt-light .leg-pill { background: #F3ECE2; color: #7A6F66; }
+    .receipt-dark .leg-pill { background: #352A22; color: #B6A99E; }
+
+    /* 条形码 */
+    .barcode-section {
+      text-align: center;
+      padding-top: 2px;
+    }
+
+    .barcode-svg {
+      width: 85%;
+      height: 32px;
+      margin: 0 auto 5px;
+      display: block;
+    }
+
+    .serial-no {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      opacity: 0.75;
+      margin-bottom: 2px;
+    }
+
+    .receipt-footer-slogan {
+      font-size: 9.5px;
+      opacity: 0.55;
+      letter-spacing: 0.5px;
+    }
+
+    /* 弹窗底部操作按钮 */
+    .action-row {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+      max-width: 340px;
+      margin-top: 14px;
+    }
+
+    .btn-close {
+      flex: 1;
+      height: 44px;
+      border-radius: 14px;
+      background: #FFFFFF;
+      border: 1px solid #E8DED3;
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #7A6F66;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-save {
+      flex: 1.4;
+      height: 44px;
+      border-radius: 14px;
+      background: #FFFFFF;
+      border: 1.5px solid #FFD3CB;
+      font-size: 13px;
+      font-weight: 800;
+      color: #F24E4E;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+    .btn-save:hover {
+      background: #FFF4F0;
+    }
+
+    .btn-share {
+      flex: 1.4;
+      height: 44px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #FF7B7B, #F24E4E);
+      border: none;
+      font-size: 13px;
+      font-weight: 800;
+      color: #FFFFFF;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      box-shadow: 0 6px 16px rgba(242, 78, 78, 0.35);
+    }
+
+    /* 社交纯文本卡片 */
+    .text-card {
+      width: 100%;
+      max-width: 360px;
+      background: #201A16;
+      color: #E6DFD5;
+      border-radius: 20px;
+      padding: 22px;
+      box-shadow: 0 16px 36px -8px rgba(43, 35, 30, 0.2);
+      border: 1px solid #362B22;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .text-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #362B22;
+    }
+
+    .text-badge {
+      font-size: 11px;
+      background: #362B22;
+      color: #FF8F84;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 700;
+    }
+
+    .text-content {
+      font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+      font-size: 12px;
+      line-height: 1.65;
+      color: #D6CCC2;
+      white-space: pre-wrap;
+      background: #171310;
+      padding: 16px 14px;
+      border-radius: 12px;
+      border: 1px solid #2B221B;
+      user-select: all;
+    }
+
+    .copy-btn {
+      margin-top: 14px;
+      height: 40px;
+      border-radius: 12px;
+      background: #2C231D;
+      border: 1px solid #3F332B;
+      color: #E6DFD5;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .copy-btn:hover {
+      background: #3B2E26;
+      color: #FF8F84;
+    }
+
+    /* 特性对比标签 */
+    .features-section {
+      width: 100%;
+      max-width: 1240px;
+      background: #FCFAF7;
+      border-radius: 24px;
+      padding: 30px;
+      border: 1px solid #EFE4D8;
+      box-shadow: 0 10px 30px -10px rgba(43, 35, 30, 0.08);
+      margin-top: 10px;
+    }
+
+    .features-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #2B231E;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 18px;
+    }
+
+    .feature-item {
+      background: #FAF6F1;
+      padding: 16px;
+      border-radius: 14px;
+      border: 1px solid #F1E7DD;
+    }
+
+    .feature-item h4 {
+      font-size: 14px;
+      font-weight: 800;
+      color: #F24E4E;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .feature-item p {
+      font-size: 13px;
+      color: #7A6F66;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="page-header">
+    <div class="badge-tag">✦ TIMEFLOW V2.2 FEATURE ✦</div>
+    <h1 class="page-title">行程纪念小票 (Trip Receipt) 视觉呈现</h1>
+    <p class="page-desc">复古热敏纸拟物风格 · 打孔撕裂虚线 · 站点流速看板 · 一键系统分享支持微信/备忘录</p>
+  </header>
+
+  <main class="showcase-grid">
+
+    <!-- 列 1: 真实手机弹窗交互模拟 -->
+    <div class="showcase-col">
+      <div class="col-title">📱 手机端真实弹窗形态 (App Overlay)</div>
+      <div class="phone-mockup">
+        <div class="phone-screen">
+          <!-- 模拟 App 背后被遮罩的今日主页 -->
+          <div class="mock-app-bg">
+            <div style="font-size:18px; font-weight:900; color:#2B231E; margin-bottom:12px;">今日足迹 · 9月23日</div>
+            <div class="mock-card"></div>
+            <div class="mock-card"></div>
+            <div class="mock-card"></div>
+          </div>
+
+          <!-- 弹窗遮罩 -->
+          <div class="mock-scrim">
+            <!-- 真实小票主体 (浅色暖纸) -->
+            <div class="receipt-card receipt-light">
+              <div class="receipt-header">
+                <div class="brand-row">
+                  <div class="brand-icon">⏱</div>
+                  <span class="brand-title">TIMEFLOW</span>
+                </div>
+                <div class="receipt-subtitle">TRIP RECEIPT · 行程凭条</div>
+                <div class="receipt-date">2026.09.23 星期三</div>
+              </div>
+
+              <div class="dotted-line" style="border-color: #E9DCD0;"></div>
+
+              <!-- 起止概览 -->
+              <div class="route-header">
+                <span>科技园南区</span>
+                <span class="route-arrow">→</span>
+                <span>海湾咖啡馆</span>
+              </div>
+
+              <div class="metrics-row">
+                <div class="metric-col">
+                  <div class="metric-label">历时</div>
+                  <div class="metric-val">42分钟</div>
+                </div>
+                <div class="metric-divider"></div>
+                <div class="metric-col">
+                  <div class="metric-label">途经</div>
+                  <div class="metric-val">4站</div>
+                </div>
+                <div class="metric-divider"></div>
+                <div class="metric-col">
+                  <div class="metric-label">主方式</div>
+                  <div class="metric-val">🚇 地铁</div>
+                </div>
+              </div>
+
+              <div class="dotted-line" style="border-color: #E9DCD0;"></div>
+
+              <!-- 途经站点明细 -->
+              <div class="stops-stream">
+                <div class="stop-row">
+                  <div class="stop-dot accent"></div>
+                  <span class="stop-time">08:30</span>
+                  <span class="stop-name bold">科技园南区</span>
+                </div>
+
+                <div class="leg-row">
+                  <div class="leg-line"></div>
+                  <div class="leg-pill">🚇 18分钟 · 地铁</div>
+                </div>
+
+                <div class="stop-row">
+                  <div class="stop-dot"></div>
+                  <span class="stop-time">08:48</span>
+                  <span class="stop-name">世纪大道枢纽站</span>
+                </div>
+
+                <div class="leg-row">
+                  <div class="leg-line"></div>
+                  <div class="leg-pill">🚲 12分钟 · 骑行</div>
+                </div>
+
+                <div class="stop-row">
+                  <div class="stop-dot"></div>
+                  <span class="stop-time">09:00</span>
+                  <span class="stop-name">滨江生态绿道</span>
+                </div>
+
+                <div class="leg-row">
+                  <div class="leg-line"></div>
+                  <div class="leg-pill">🚶 12分钟 · 漫步</div>
+                </div>
+
+                <div class="stop-row">
+                  <div class="stop-dot accent"></div>
+                  <span class="stop-time">09:12</span>
+                  <span class="stop-name bold">海湾日落咖啡馆</span>
+                </div>
+              </div>
+
+              <div class="dotted-line" style="border-color: #E9DCD0;"></div>
+
+              <!-- 模拟一维条形码 -->
+              <div class="barcode-section">
+                <svg class="barcode-svg" viewBox="0 0 240 32" preserveAspectRatio="none">
+                  <g fill="#2B231E">
+                    <rect x="0" width="3" height="32"/>
+                    <rect x="5" width="2" height="32"/>
+                    <rect x="9" width="4" height="32"/>
+                    <rect x="16" width="2" height="32"/>
+                    <rect x="20" width="5" height="32"/>
+                    <rect x="28" width="2" height="32"/>
+                    <rect x="33" width="3" height="32"/>
+                    <rect x="38" width="1" height="32"/>
+                    <rect x="42" width="4" height="32"/>
+                    <rect x="49" width="2" height="32"/>
+                    <rect x="54" width="5" height="32"/>
+                    <rect x="62" width="2" height="32"/>
+                    <rect x="67" width="3" height="32"/>
+                    <rect x="73" width="2" height="32"/>
+                    <rect x="78" width="4" height="32"/>
+                    <rect x="85" width="2" height="32"/>
+                    <rect x="90" width="5" height="32"/>
+                    <rect x="98" width="1" height="32"/>
+                    <rect x="102" width="3" height="32"/>
+                    <rect x="108" width="4" height="32"/>
+                    <rect x="115" width="2" height="32"/>
+                    <rect x="120" width="5" height="32"/>
+                    <rect x="128" width="2" height="32"/>
+                    <rect x="133" width="3" height="32"/>
+                    <rect x="139" width="2" height="32"/>
+                    <rect x="144" width="4" height="32"/>
+                    <rect x="151" width="3" height="32"/>
+                    <rect x="157" width="5" height="32"/>
+                    <rect x="165" width="2" height="32"/>
+                    <rect x="170" width="4" height="32"/>
+                    <rect x="177" width="2" height="32"/>
+                    <rect x="182" width="5" height="32"/>
+                    <rect x="190" width="2" height="32"/>
+                    <rect x="195" width="3" height="32"/>
+                    <rect x="201" width="2" height="32"/>
+                    <rect x="206" width="4" height="32"/>
+                    <rect x="213" width="2" height="32"/>
+                    <rect x="218" width="5" height="32"/>
+                    <rect x="226" width="2" height="32"/>
+                    <rect x="231" width="3" height="32"/>
+                    <rect x="237" width="3" height="32"/>
+                  </g>
+                </svg>
+                <div class="serial-no">TF-20260923-8B39DF</div>
+                <div class="receipt-footer-slogan">★ TIMEFLOW · 记录行走的时光痕迹 ★</div>
+              </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="action-row">
+              <button class="btn-close">关闭</button>
+              <button class="btn-save" onclick="alert('✔ 已抓取 1:1 高清小票长图 (PNG)！已调起系统面板，支持一键保存至手机相册或本地文件。')">
+                <span>💾 保存到本地</span>
+              </button>
+              <button class="btn-share" onclick="alert('已唤起系统原生分享面板！支持发送至微信好友、朋友圈或系统备忘录。')">
+                <span>🔗 快捷分享</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 列 2: 深色黑曜模式卡片细节 -->
+    <div class="showcase-col">
+      <div class="col-title">🌙 深色黑曜模式 (Dark Mode)</div>
+      <div style="height: 100%; display: flex; flex-direction: column; justify-content: center;">
+        <div class="receipt-card receipt-dark" style="margin-bottom: 20px;">
+          <div class="receipt-header">
+            <div class="brand-row">
+              <div class="brand-icon">⏱</div>
+              <span class="brand-title">TIMEFLOW</span>
+            </div>
+            <div class="receipt-subtitle">TRIP RECEIPT · 行程凭条</div>
+            <div class="receipt-date">2026.09.23 星期三</div>
+          </div>
+
+          <div class="dotted-line" style="border-color: #3F352C;"></div>
+
+          <div class="route-header">
+            <span>深圳湾创新科技园</span>
+            <span class="route-arrow" style="color:#FF8F84;">→</span>
+            <span>大梅沙滨海驿站</span>
+          </div>
+
+          <div class="metrics-row">
+            <div class="metric-col">
+              <div class="metric-label">历时</div>
+              <div class="metric-val">1小时15分</div>
+            </div>
+            <div class="metric-divider" style="background:#3F352C;"></div>
+            <div class="metric-col">
+              <div class="metric-label">途经</div>
+              <div class="metric-val">3站</div>
+            </div>
+            <div class="metric-divider" style="background:#3F352C;"></div>
+            <div class="metric-col">
+              <div class="metric-label">主方式</div>
+              <div class="metric-val">🚗 自驾</div>
+            </div>
+          </div>
+
+          <div class="dotted-line" style="border-color: #3F352C;"></div>
+
+          <div class="stops-stream">
+            <div class="stop-row">
+              <div class="stop-dot accent" style="background:#FF8F84;"></div>
+              <span class="stop-time">14:10</span>
+              <span class="stop-name bold">深圳湾创新科技园</span>
+            </div>
+
+            <div class="leg-row">
+              <div class="leg-line" style="background:#3F352C;"></div>
+              <div class="leg-pill">🚗 45分钟 · 自驾</div>
+            </div>
+
+            <div class="stop-row">
+              <div class="stop-dot"></div>
+              <span class="stop-time">14:55</span>
+              <span class="stop-name">盐田海鲜街观景台</span>
+            </div>
+
+            <div class="leg-row">
+              <div class="leg-line" style="background:#3F352C;"></div>
+              <div class="leg-pill">🚶 30分钟 · 漫步</div>
+            </div>
+
+            <div class="stop-row">
+              <div class="stop-dot accent" style="background:#FF8F84;"></div>
+              <span class="stop-time">15:25</span>
+              <span class="stop-name bold">大梅沙滨海驿站</span>
+            </div>
+          </div>
+
+          <div class="dotted-line" style="border-color: #3F352C;"></div>
+
+          <div class="barcode-section">
+            <svg class="barcode-svg" viewBox="0 0 240 32" preserveAspectRatio="none">
+              <g fill="#C7BCB2">
+                <rect x="0" width="3" height="32"/>
+                <rect x="5" width="2" height="32"/>
+                <rect x="10" width="4" height="32"/>
+                <rect x="17" width="2" height="32"/>
+                <rect x="22" width="5" height="32"/>
+                <rect x="30" width="2" height="32"/>
+                <rect x="36" width="3" height="32"/>
+                <rect x="42" width="4" height="32"/>
+                <rect x="49" width="2" height="32"/>
+                <rect x="55" width="5" height="32"/>
+                <rect x="63" width="2" height="32"/>
+                <rect x="69" width="3" height="32"/>
+                <rect x="76" width="4" height="32"/>
+                <rect x="84" width="2" height="32"/>
+                <rect x="90" width="5" height="32"/>
+                <rect x="99" width="2" height="32"/>
+                <rect x="105" width="3" height="32"/>
+                <rect x="112" width="4" height="32"/>
+                <rect x="120" width="2" height="32"/>
+                <rect x="126" width="5" height="32"/>
+                <rect x="135" width="2" height="32"/>
+                <rect x="142" width="3" height="32"/>
+                <rect x="150" width="4" height="32"/>
+                <rect x="158" width="2" height="32"/>
+                <rect x="165" width="5" height="32"/>
+                <rect x="174" width="2" height="32"/>
+                <rect x="181" width="3" height="32"/>
+                <rect x="188" width="4" height="32"/>
+                <rect x="196" width="2" height="32"/>
+                <rect x="202" width="5" height="32"/>
+                <rect x="211" width="2" height="32"/>
+                <rect x="218" width="4" height="32"/>
+                <rect x="226" width="2" height="32"/>
+                <rect x="232" width="5" height="32"/>
+              </g>
+            </svg>
+            <div class="serial-no" style="color:#C7BCB2;">TF-20260923-C399FA</div>
+            <div class="receipt-footer-slogan" style="color:#8F8276;">★ TIMEFLOW · 记录行走的时光痕迹 ★</div>
+          </div>
+        </div>
+
+        <div style="background: #231B15; border: 1px solid #362B22; border-radius: 14px; padding: 14px; font-size: 13px; color: #C7BCB2;">
+          💡 <strong>深色自适应</strong>：自动适配用户深色模式主题，条形码、背景与阴影切换至黑曜暖褐质感，夜间查看不刺眼。
+        </div>
+      </div>
+    </div>
+
+    <!-- 列 3: 系统分享纯文本格式 -->
+    <div class="showcase-col">
+      <div class="col-title">💬 社交/文本导出 (Share Payload)</div>
+      <div class="text-card">
+        <div class="text-card-header">
+          <span style="font-size: 13px; font-weight: 800; color: #F3EDE7;">微信 / 备忘录 / 短信格式</span>
+          <span class="text-badge">ASCII 艺术小票</span>
+        </div>
+        <pre class="text-content" id="shareContent">┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+  ✦ TIMEFLOW · 行程小票 ✦
+  2026年9月23日 星期三
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+起点 / 终点: 科技园南区 → 海湾咖啡馆
+历时: 42分钟 · 途经4站
+
+────────── [途经明细] ──────────
+08:30  科技园南区
+   ↓   18分钟 · 地铁 🚇
+08:48  世纪大道枢纽站
+   ↓   12分钟 · 骑行 🚲
+09:00  滨江生态绿道
+   ↓   12分钟 · 漫步 🚶
+09:12  海湾咖啡馆
+───────────────────────────────
+凭条编号: TF-20260923-8B39DF
+★ 记录行走的时光痕迹 ★</pre>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('shareContent').innerText); alert('已复制纯文本小票内容！');">
+          📋 复制纯文本到剪贴板
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- 特性说明栏 -->
+  <footer class="features-section">
+    <div class="features-title">
+      <span>✨</span> 行程小票模块核心设计亮点
+    </div>
+    <div class="features-grid">
+      <div class="feature-item">
+        <h4>🧾 复古热敏纸拟物排版</h4>
+        <p>独创双边缘齿孔、居中大写品牌标、等宽字体与虚线打孔撕裂感设计，赋予每一次日常通勤仪式感与收藏纪念价值。</p>
+      </div>
+      <div class="feature-item">
+        <h4>⚡️ 跨组件即刻呼出</h4>
+        <p>已全量打通主页「今日时间轴」长卡片小票图标，以及洞察页「历史归档列表」的便携入口，随时回溯任一单次行程。</p>
+      </div>
+      <div class="feature-item">
+        <h4>🌐 零外部侵入原生分享</h4>
+        <p>集成 React Native 官方系统分享面板，无需引入微信或社交原生 SDK，直通微信、即刻、朋友圈、文件传输助手与系统便签。</p>
+      </div>
+      <div class="feature-item">
+        <h4>🔒 离线安全与双语对齐</h4>
+        <p>全文本本地格式化，纯前端实时派生流水号与条形码。中英文 12 个本地化字段全量对称。</p>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

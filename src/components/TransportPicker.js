@@ -20,9 +20,7 @@ export const MODE_KEYS = [
 const ITEM_WIDTH = 72;
 const ITEM_GAP = 9;
 
-function TransportItem({ modeKey, selected, onSelect, label }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+function TransportItem({ modeKey, selected, onSelect, label, styles, colors }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -93,6 +91,8 @@ export default function TransportPicker({ selected, onSelect }) {
             selected={selected === key}
             onSelect={onSelect}
             label={t(`mode.${key}`)}
+            styles={styles}
+            colors={colors}
           />
         ))}
       </ScrollView>

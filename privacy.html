@@ -44,7 +44,7 @@
 
     <div id="zh-content" class="card">
       <h1>TimeFlow 隐私政策</h1>
-      <p class="date">更新日期：2026 年 9 月 8 日 · 生效日期：2026 年 9 月 8 日</p>
+      <p class="date">更新日期：2026 年 9 月 23 日 · 生效日期：2026 年 9 月 23 日</p>
       <p>TimeFlow（时光流）高度重视用户隐私与个人数据安全。本隐私政策依据《中华人民共和国个人信息保护法》以及 Google Play 开发者政策核心原则制定，详细说明我们在您使用 TimeFlow 时的个人信息处理实践。请在使用本应用前仔细阅读并充分理解。</p>
 
       <h2>一、我们处理的信息（最小必要原则）</h2>
@@ -55,7 +55,7 @@
         <li><b>出行方式与标签</b>：您自主选择的出行方式（步行、骑行、自驾、打车、地铁、公交、高铁、飞机、轮渡）及您填写的地点别名（如「家」「公司」）或打卡备注。</li>
         <li><b>应用偏好与配置</b>：您自设的应用语言、外观色彩模式、打卡偏好及 WebDAV 备份配置参数（如有）。</li>
       </ul>
-      <p>除上述功能必需项外，本应用不收集通讯录、短信、相册、通话记录、设备唯一识别码（IMEI/IMSI）等任何与打卡无关的个人信息。</p>
+      <p>除上述功能必需项外，本应用不收集通讯录、短信、通话记录、设备唯一识别码（IMEI/IMSI）等任何与打卡无关的个人信息。当您主动使用小票生成功能时，相关图片和文本仅在您本机临时生成并保存。</p>
 
       <h2>二、第三方 SDK 及系统服务披露</h2>
       <p>为向您提供快速、稳定的定位与逆地理编码解析能力，本应用集成了以下技术支持组件：</p>
@@ -95,6 +95,8 @@
       <ul>
         <li><b>前台位置权限（ACCESS_FINE_LOCATION / ACCESS_COARSE_LOCATION）</b>：仅在主动打卡瞬时调用。您可随时在手机系统设置中撤回该授权，撤回后打卡功能依然可用，地名将默认显示为「未命名」。</li>
         <li><b>后台位置权限（ACCESS_BACKGROUND_LOCATION）</b>：本应用<b>不申请、不使用</b>任何后台静默位置追踪权限。</li>
+        <li><b>媒体与相册存储权限（READ_MEDIA_IMAGES / WRITE_EXTERNAL_STORAGE / expo-media-library）</b>：仅在您主动点击「保存小票到本地」时调用，用于将应用生成的行程纪念小票高清图片（PNG）保存至您设备的系统相册（TimeFlow 专属相册）。<b>TimeFlow 绝不读取、访问、扫描或上传您相册中的任何已有私人照片或视频。</b>若您拒绝授予该权限，仅无法直接保存图片至相册，不影响任何其他核心记账打卡功能。</li>
+        <li><b>系统剪贴板（expo-clipboard）</b>：仅在您主动点击「分享小票」时，将当前小票的格式化纯文本明细写入系统剪贴板，方便您在其他应用中粘贴发送。<b>TimeFlow 绝不读取您的系统剪贴板历史记录。</b></li>
       </ul>
 
       <h2 id="delete">六、您的权利与数据删除机制（Data Deletion）</h2>
@@ -122,8 +124,8 @@
 
     <div id="en-content" class="card hidden">
       <h1>TimeFlow Privacy Policy</h1>
-      <p class="date">Last Updated: September 8, 2026 · Effective Date: September 8, 2026</p>
-      <p>TimeFlow ("we", "us", or "our") deeply respects and protects your privacy and personal data. This Privacy Policy is formulated in compliance with applicable data protection laws and Google Play Developer Policies. It describes how your personal data is collected, used, stored, and protected when you use TimeFlow. Please read this policy carefully before using the app.</p>
+      <p class="date">Last Updated: September 23, 2026 · Effective Date: September 23, 2026</p>
+      <p>TimeFlow ("we", "us", or "our") deeply respects and protects your privacy and personal data. This Privacy Policy is formulated in compliance with applicable data protection laws and Google Play Developer Policies. It describes how your personal data is processed when you use TimeFlow. Please read this policy carefully before using the app.</p>
 
       <h2>1. Information We Process (Data Minimization)</h2>
       <p>TimeFlow strictly adheres to the "local-first" and data minimization principles. We only process minimal data strictly necessary for milestone tracking:</p>
@@ -133,7 +135,7 @@
         <li><b>Transport Mode &amp; Custom Labels</b>: Your selected transport mode (Walk, Bike, Drive, Taxi, Subway, Transit, Train, Flight, Boat), place aliases (such as "Home" or "Office"), and custom notes.</li>
         <li><b>Preferences &amp; Configuration</b>: Language selection, theme appearance, and optional WebDAV sync settings.</li>
       </ul>
-      <p>We do not collect contacts, SMS, photos, phone status, hardware IDs (IMEI/IMSI), or any sensitive data unrelated to milestone tracking.</p>
+      <p>We do not collect contacts, SMS, photos, phone status, hardware IDs (IMEI/IMSI), or any sensitive data unrelated to milestone tracking. When you use the trip receipt feature, the receipt image and text are rendered and stored solely on your local device.</p>
 
       <h2>2. Third-Party SDKs &amp; Service Providers</h2>
       <p>To provide reliable location retrieval and reverse geocoding across regions, TimeFlow integrates the following components:</p>
@@ -173,6 +175,8 @@
       <ul>
         <li><b>Foreground Location Permission (ACCESS_FINE_LOCATION / ACCESS_COARSE_LOCATION)</b>: Requested only at the moment of check-in. You can revoke this permission at any time in system settings without breaking core manual logging functionality.</li>
         <li><b>Background Location (ACCESS_BACKGROUND_LOCATION)</b>: TimeFlow <b>neither declares nor uses</b> background location tracking.</li>
+        <li><b>Photos &amp; Media Storage Permissions (READ_MEDIA_IMAGES / WRITE_EXTERNAL_STORAGE / expo-media-library)</b>: Requested strictly when you actively tap the "Save Locally" button on a trip receipt, solely to save the generated trip receipt image (PNG) into your device's photo gallery under a dedicated "TimeFlow" album. <b>TimeFlow NEVER reads, scans, accesses, or uploads any of your existing personal photos or videos.</b> Denying this permission only prevents direct image export to your gallery and will not affect any core tracking or logging features.</li>
+        <li><b>System Clipboard (expo-clipboard)</b>: Used solely when you actively tap the "Share Receipt" button to write formatted receipt summary text to your system clipboard for easy pasting into your communication apps. <b>TimeFlow NEVER reads, inspects, or transmits your clipboard history.</b></li>
       </ul>
 
       <h2 id="delete-en">6. Your Rights &amp; Data Deletion Policy</h2>

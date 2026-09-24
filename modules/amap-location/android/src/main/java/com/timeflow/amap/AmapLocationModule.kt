@@ -30,7 +30,12 @@ class AmapLocationModule : Module() {
       return
     }
     var locClient: AMapLocationClient? = null
+    val handler = Handler(Looper.getMainLooper())
+    var timeoutRunnable: Runnable? = null
     val finish = {
+      try {
+        timeoutRunnable?.let { handler.removeCallbacks(it) }
+      } catch (_: Exception) {}
       try { locClient?.stopLocation() } catch (_: Exception) {}
       try { locClient?.onDestroy() } catch (_: Exception) {}
       locClient = null
@@ -80,11 +85,13 @@ class AmapLocationModule : Module() {
       })
       locClient?.startLocation()
 
-      Handler(Looper.getMainLooper()).postDelayed({
-        if (settled.getAndSet(true)) return@postDelayed
+      val r = Runnable {
+        if (settled.getAndSet(true)) return@Runnable
         finish()
         promise.reject("TIMEOUT", "AMap location timeout", null)
-      }, 30000)
+      }
+      timeoutRunnable = r
+      handler.postDelayed(r, 30000)
     } catch (e: Exception) {
       if (!settled.getAndSet(true)) {
         finish()
