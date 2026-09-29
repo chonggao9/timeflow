@@ -8,24 +8,24 @@
 
 > Google Play Console 限制：每个语言不超过 **500 个字符 (Characters)**。在「正式版 → 准备版本 → 版本说明」中填入。
 
-### 1. 英文版 (en-US) — [491 / 500 字符]
+### 1. 英文版 (en-US) — [484 / 500 字符]
 ```text
 v1.0.28 Update:
-• Trip Receipts: Turn any commute or journey into a vintage thermal receipt with route overview, waypoint paces, and custom barcodes!
-• HD Image Export: Save receipt cards directly to your photo album as crisp PNG images.
-• Quick Text Share: One-tap copy receipt summaries to your clipboard for seamless messaging.
-• Retina Vector Icon: Brand new high-res app icon with smooth curves and modern aesthetics.
-• Performance & Stability: Enhanced memory efficiency and smoother timeline interactions.
+• Vintage Trip Receipts: Transform commutes and journeys into thermal receipts with stop paces, route stats, and unique barcodes.
+• HD Receipt Export: One-tap save ultra-crisp PNG receipts directly to your photo album.
+• Quick Text Share: Copy formatted trip details to your clipboard for instant sharing in chats.
+• Modern Vector Icon: Crisp new high-res app icon with smooth curves.
+• Engine & Privacy Boost: Full Android 16 & 16KB page support with zero unnecessary permissions.
 ```
 
-### 2. 简体中文版 (zh-CN) — [230 / 500 字符]
+### 2. 简体中文版 (zh-CN) — [247 / 500 字符]
 ```text
 v1.0.28 更新说明：
-• 行程纪念小票：支持将通勤与旅行记录一键生成复古拟物热敏纸小票，逐站耗时、流速对比与条形码一目了然！
-• 高清长图导出：一键保存超清 PNG 小票长图至系统相册，随时珍藏与分享。
-• 便捷文本分享：支持一键格式化小票明细并复制至剪贴板，轻松粘贴到微信、即时聊天与社交网络。
-• 视网膜级高清图标：纯矢量重绘莫比乌斯流动环与时钟定位微标，显示更细腻。
-• 性能与架构升级：修复极端场景下的内存占用与脏读，时间轴流转更丝滑稳定。
+• 行程纪念小票：将日常通勤与旅途轨迹一键生成复古拟物热敏纸小票，逐站耗时、出行流速与装饰条形码一目了然。
+• 高清相册直存：支持一键保存超清 PNG 小票长图至系统相册，随时珍藏与分享。
+• 便捷文本分享：一键将小票明细格式化写入剪贴板，轻松粘贴至即时聊天与社交网络。
+• 全新矢量图标：纯矢量重绘莫比乌斯流动环与定位微标，视觉更细腻精致。
+• 系统架构与隐私升级：全面适配 Android 16 与 16KB 内存页面机制，彻底移除冗余读取权限，运行更丝滑更安全。
 ```
 
 ---
@@ -191,7 +191,7 @@ TimeFlow（时光流）是一款精致、优雅且绝对尊重隐私的每日通
 
 ## 五、打包文件对照 (Release Artifacts)
 
-| 文件类型 | 适用渠道 | 输出文件路径 |
-| :--- | :--- | :--- |
-| **Android App Bundle (.aab)** | **Google Play Console 生产发布轨道（必须格式）** | `android/app/build/outputs/bundle/release/app-release.aab`（构建脚本会自动复制并命名为 `timeflow-v1.0.28.aab`） |
-| **Android APK (.apk)** | 开发者真机本地验证 / GitHub Release / 国内分发 | `android/app/build/outputs/apk/release/timeflow-v1.0.28.apk` |
+| 文件类型 | 适用渠道 | 版本代码 (versionCode) | 目标 SDK | 输出文件路径 |
+| :--- | :--- | :--- | :--- | :--- |
+| **Android App Bundle (.aab)** | **Google Play Console 生产发布轨道（必须格式）** | **`17`** | **`36` (Android 16)** | `android/app/build/outputs/bundle/release/app-release.aab`（脚本已自动复制至工程根目录：`timeflow-v1.0.28.aab`，29.59 MB） |
+| **Android APK (.apk)** | 开发者真机本地验证 / GitHub Release / 国内分发 | **`17`** | **`36` (Android 16)** | `android/app/build/outputs/apk/release/timeflow-v1.0.28.apk`（脚本已自动复制至工程根目录：`timeflow-v1.0.28.apk`，38.12 MB） |
