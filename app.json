@@ -32,7 +32,7 @@
           "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_KEY"
         }
       },
-      "versionCode": 16
+      "versionCode": 17
     },
     "plugins": [
       "./plugins/withRemoveMediaPermissions",
@@ -59,7 +59,8 @@
             "buildToolsVersion": "36.0.0",
             "enableProguardInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
-            "enableBundleCompression": true
+            "enableBundleCompression": true,
+            "extraProguardRules": "-keep class com.facebook.react.** { *; }\n-keep class expo.modules.** { *; }\n-keep class * extends expo.modules.kotlin.modules.Module { <init>(...); public <methods>; }\n-keep class com.timeflow.amap.** { *; }\n-keep class com.amap.api.location.** { *; }\n-keep class com.reactnativeandroidwidget.** { *; }"
           }
         }
       ],
