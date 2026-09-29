@@ -10,6 +10,7 @@ import {
   Pressable,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Rect, Line } from 'react-native-svg';
@@ -172,11 +173,11 @@ export default function TripReceiptModal({ visible, trip, onClose }) {
       const targetUri = `${FileSystem.documentDirectory}${targetFilename}`;
       await FileSystem.copyAsync({ from: uri, to: targetUri });
 
-      // 3. 优先直接保存到手机系统相册
+      // 3. 优先直接保存到手机系统相册（writeOnly 纯写模式，不申请敏感读相册权限）
       let savedToAlbum = false;
       try {
-        const perm = await MediaLibrary.requestPermissionsAsync();
-        if (perm.status === 'granted' || perm.granted) {
+        const perm = await MediaLibrary.requestPermissionsAsync(true);
+        if (perm.status === 'granted' || perm.granted || Platform.OS === 'android') {
           const asset = await MediaLibrary.createAssetAsync(targetUri);
           try {
             await MediaLibrary.createAlbumAsync('TimeFlow', asset, false);
