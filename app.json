@@ -32,7 +32,7 @@
           "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_KEY"
         }
       },
-      "versionCode": 15
+      "versionCode": 16
     },
     "plugins": [
       "./plugins/withRemoveMediaPermissions",
