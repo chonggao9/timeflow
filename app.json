@@ -2,7 +2,7 @@
   "expo": {
     "name": "TimeFlow",
     "slug": "timeflow",
-    "version": "1.0.28",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -32,7 +32,7 @@
           "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_KEY"
         }
       },
-      "versionCode": 17
+      "versionCode": 19
     },
     "plugins": [
       "./plugins/withRemoveMediaPermissions",
@@ -60,7 +60,7 @@
             "enableProguardInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
             "enableBundleCompression": true,
-            "extraProguardRules": "-keep class com.facebook.react.** { *; }\n-keep class expo.modules.** { *; }\n-keep class * extends expo.modules.kotlin.modules.Module { <init>(...); public <methods>; }\n-keep class com.timeflow.amap.** { *; }\n-keep class com.amap.api.location.** { *; }\n-keep class com.reactnativeandroidwidget.** { *; }"
+            "extraProguardRules": "-keep class com.facebook.react.** { *; }\\n-keep class com.facebook.soloader.** { *; }\\n-keep class com.facebook.soloader.nativeloader.** { *; }\\n-keep class expo.modules.** { *; }\\n-keep class * extends expo.modules.kotlin.modules.Module { <init>(...); public <methods>; }\\n-keep class com.timeflow.amap.** { *; }\\n-keep class com.amap.api.location.** { *; }\\n-keep class com.reactnativeandroidwidget.** { *; }"
           }
         }
       ],
@@ -83,7 +83,8 @@
         }
       ],
       "expo-secure-store",
-      "expo-asset"
+      "expo-asset",
+      "expo-font"
     ],
     "extra": {
       "eas": {

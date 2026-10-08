@@ -3,7 +3,7 @@
 const { withGradleProperties } = require('@expo/config-plugins');
 
 const KEY = 'reactNativeArchitectures';
-const ARCHS = 'armeabi-v7a,arm64-v8a';
+const ARCHS = 'armeabi-v7a,arm64-v8a,x86_64';
 
 module.exports = function withAbiFilter(config) {
   return withGradleProperties(config, (cfg) => {

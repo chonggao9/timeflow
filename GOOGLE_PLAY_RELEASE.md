@@ -1,4 +1,4 @@
-# TimeFlow Google Play 发布文案与上架指南 (v1.0.28)
+# TimeFlow Google Play 发布文案与上架指南 (v1.1.0)
 
 本文档整理了 Google Play 开发者后台（Google Play Console）上架审核所需的全部文案、权限合规说明以及数据安全（Data Safety）表单对照指南。所有字符数均已严格对齐 Google Play 限制。
 
@@ -10,7 +10,7 @@
 
 ### 1. 英文版 (en-US) — [484 / 500 字符]
 ```text
-v1.0.28 Update:
+v1.1.0 Update:
 • Vintage Trip Receipts: Transform commutes and journeys into thermal receipts with stop paces, route stats, and unique barcodes.
 • HD Receipt Export: One-tap save ultra-crisp PNG receipts directly to your photo album.
 • Quick Text Share: Copy formatted trip details to your clipboard for instant sharing in chats.
@@ -20,7 +20,7 @@ v1.0.28 Update:
 
 ### 2. 简体中文版 (zh-CN) — [247 / 500 字符]
 ```text
-v1.0.28 更新说明：
+v1.1.0 更新说明：
 • 行程纪念小票：将日常通勤与旅途轨迹一键生成复古拟物热敏纸小票，逐站耗时、出行流速与装饰条形码一目了然。
 • 高清相册直存：支持一键保存超清 PNG 小票长图至系统相册，随时珍藏与分享。
 • 便捷文本分享：一键将小票明细格式化写入剪贴板，轻松粘贴至即时聊天与社交网络。
@@ -193,5 +193,5 @@ TimeFlow（时光流）是一款精致、优雅且绝对尊重隐私的每日通
 
 | 文件类型 | 适用渠道 | 版本代码 (versionCode) | 目标 SDK | 输出文件路径 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Android App Bundle (.aab)** | **Google Play Console 生产发布轨道（必须格式）** | **`17`** | **`36` (Android 16)** | `android/app/build/outputs/bundle/release/app-release.aab`（脚本已自动复制至工程根目录：`timeflow-v1.0.28.aab`，29.59 MB） |
-| **Android APK (.apk)** | 开发者真机本地验证 / GitHub Release / 国内分发 | **`17`** | **`36` (Android 16)** | `android/app/build/outputs/apk/release/timeflow-v1.0.28.apk`（脚本已自动复制至工程根目录：`timeflow-v1.0.28.apk`，38.12 MB） |
+| **Android App Bundle (.aab)** | **Google Play Console 生产发布轨道（必须格式）** | **`19`** | **`36` (Android 16)** | `android/app/build/outputs/bundle/release/app-release.aab`（脚本已自动复制至工程根目录：`timeflow-v1.1.0.aab`，39.90 MB） |
+| **Android APK (.apk)** | 开发者真机本地验证 / GitHub Release / 国内分发 | **`19`** | **`36` (Android 16)** | `android/app/build/outputs/apk/release/app-release.apk`（脚本已自动复制至工程根目录：`timeflow-v1.1.0.apk`，56.40 MB） |

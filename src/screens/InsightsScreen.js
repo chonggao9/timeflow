@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Alert } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -318,49 +319,54 @@ export default function InsightsScreen() {
         <View style={styles.overlay}>
           <View style={styles.dialog}>
             <Text style={styles.dialogTitle}>{pickerFor === 'from' ? t('insights.from') : t('insights.to')}</Text>
-            <ScrollView style={styles.placeList} showsVerticalScrollIndicator={false}>
-              {placeOptions.map(o => {
-                const isSelected = (pickerFor === 'from' && o.key === fromKey) || (pickerFor === 'to' && o.key === toKey);
-                const isOpposing = (pickerFor === 'from' && o.key === toKey) || (pickerFor === 'to' && o.key === fromKey);
-                return (
-                  <TouchableOpacity
-                    key={o.key}
-                    style={[
-                      styles.placeOption,
-                      isSelected && styles.placeOptionActive,
-                      isOpposing && styles.placeOptionDisabled,
-                    ]}
-                    onPress={() => !isOpposing && selectPlace(o.key)}
-                    disabled={isOpposing}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.placeOptionLeft}>
-                      {isSelected && <Ionicons name="checkmark-circle" size={17} color={colors.primary} style={{ marginRight: 6 }} />}
-                      <Text
-                        style={[
-                          styles.placeOptionText,
-                          isSelected && styles.placeOptionTextActive,
-                          isOpposing && styles.placeOptionTextDisabled,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {o.name}
+            <View style={styles.placeList}>
+              <FlashList
+                data={placeOptions}
+                estimatedItemSize={50}
+                showsVerticalScrollIndicator={false}
+                keyExtractor={(item) => item.key}
+                renderItem={({ item: o }) => {
+                  const isSelected = (pickerFor === 'from' && o.key === fromKey) || (pickerFor === 'to' && o.key === toKey);
+                  const isOpposing = (pickerFor === 'from' && o.key === toKey) || (pickerFor === 'to' && o.key === fromKey);
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.placeOption,
+                        isSelected && styles.placeOptionActive,
+                        isOpposing && styles.placeOptionDisabled,
+                      ]}
+                      onPress={() => !isOpposing && selectPlace(o.key)}
+                      disabled={isOpposing}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.placeOptionLeft}>
+                        {isSelected && <Ionicons name="checkmark-circle" size={17} color={colors.primary} style={{ marginRight: 6 }} />}
+                        <Text
+                          style={[
+                            styles.placeOptionText,
+                            isSelected && styles.placeOptionTextActive,
+                            isOpposing && styles.placeOptionTextDisabled,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {o.name}
+                        </Text>
+                        {isOpposing && (
+                          <View style={styles.opposingTag}>
+                            <Text style={styles.opposingTagText}>
+                              {pickerFor === 'from' ? t('insights.to') : t('insights.from')}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.placeOptionCount, isOpposing && { opacity: 0.5 }]}>
+                        {t('insights.placeTimes', { n: o.count })}
                       </Text>
-                      {isOpposing && (
-                        <View style={styles.opposingTag}>
-                          <Text style={styles.opposingTagText}>
-                            {pickerFor === 'from' ? t('insights.to') : t('insights.from')}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={[styles.placeOptionCount, isOpposing && { opacity: 0.5 }]}>
-                      {t('insights.placeTimes', { n: o.count })}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            </View>
             <TouchableOpacity style={styles.dialogCancel} onPress={() => setPickerFor(null)}>
               <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
@@ -559,7 +565,7 @@ const makeStyles = (colors) => StyleSheet.create({
     maxHeight: '70%',
   },
   dialogTitle: { fontSize: 17, fontWeight: '700', color: colors.ink, textAlign: 'center', marginBottom: 8 },
-  placeList: { maxHeight: 340 },
+  placeList: { height: 340, width: '100%' },
   placeOption: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 13, paddingHorizontal: 12, borderRadius: 12,
