@@ -1,9 +1,9 @@
 ========================================
-TimeFlow v1.2.0 Release Notes (Google Play - versionCode: 22)
+TimeFlow v1.2.1 Release Notes (Google Play - versionCode: 23)
 ========================================
 
 【1. 简体中文版 (zh-CN) - 适用于 Google Play 更新说明，已严格控制在 500 字符以内】
-v1.2.0 更新说明：
+v1.2.1 更新说明：
 • 🚀 首页全新架构改版：行程轨迹与室内专注深度模式隔离，界面独立纯粹；顶部统计卡片实时呈现。
 • 🚗 行程轨迹交互升级：进行中行程默认展开，历史行程优雅折叠；路段胶囊支持一键修改出行方式；打卡卡片支持地名、时间与方式微调。
 • 🔘 智能打卡与防误触：长按结程增加 650ms 环形充能进度与物理下潜反馈；底部独立「+补记」抽屉面板，快速回溯遗漏打卡。
@@ -11,7 +11,7 @@ v1.2.0 更新说明：
 • 🌐 100% 中英双语对称，零网络依赖，数据纯本地安全隐私。
 
 【2. 英文版 (en-US) - For Google Play Console "What's new", within 500 characters】
-v1.2.0 What's New:
+v1.2.1 What's New:
 • 🚀 Redesigned Home: Complete separation between Travel Trips & Indoor Focus modes with focused top stats.
 • 🚗 Interactive Travel Timeline: Ongoing trips auto-expanded; tap segment pills to edit transport mode; edit place name, time & mode directly.
 • 🔘 Hold-to-End Safety: Check-in button features 650ms circular charging ring; new Backfill drawer for rapid past check-ins.

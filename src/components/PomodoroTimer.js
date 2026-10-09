@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, Animated, PanResponder, Pressable, Vibration, Easing, TouchableOpacity, ScrollView, TextInput, Modal, Alert } from 'react-native';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, Animated, PanResponder, Pressable, Vibration, Easing, TouchableOpacity, ScrollView, TextInput, Modal, Alert, AppState } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
@@ -35,6 +35,16 @@ const AMBIENT_OPTIONS = [
   { key: 'stream', icon: 'water-outline', label: 'pomodoro.ambient_stream' },
 ];
 
+const AMBIENT_SOUND_FILES = {
+  rain: require('../../assets/sounds/rain.mp3'),
+  forest: require('../../assets/sounds/forest.mp3'),
+  ocean: require('../../assets/sounds/ocean.mp3'),
+  fire: require('../../assets/sounds/fire.mp3'),
+  cafe: require('../../assets/sounds/cafe.mp3'),
+  train: require('../../assets/sounds/train.mp3'),
+  stream: require('../../assets/sounds/stream.mp3'),
+};
+
 export default function PomodoroTimer({
   onStartFocus,
   onSaveFocus,
@@ -66,15 +76,40 @@ export default function PomodoroTimer({
   const [ambient, setAmbient] = useState('none');
   const [showAmbientPicker, setShowAmbientPicker] = useState(false);
   const soundRef = useRef(null);
+  const playReqIdRef = useRef(0);
 
   const [category, setCategory] = useState(null);
   const [goalName, setGoalName] = useState('');
   const [showHelp, setShowHelp] = useState(false);
   const [showPostFocus, setShowPostFocus] = useState(false);
   const [showAbandonModal, setShowAbandonModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customMinutesInput, setCustomMinutesInput] = useState('');
   const [postCategory, setPostCategory] = useState(null);
   const [postNote, setPostNote] = useState('');
   const pendingSaveRef = useRef(null);
+
+  // 计算今日专注总时长与各分类占比
+  const todayFocusRecordsList = todayFocusRecords || [];
+  const totalFocusSecCalculated = todayFocusSec || todayFocusRecordsList.reduce((s, r) => s + (Number(r.duration) || 0), 0);
+  const totalFocusCountCalculated = todayFocusCount || todayFocusRecordsList.length;
+
+  const distributionBar = useMemo(() => {
+    if (!totalFocusSecCalculated || !todayFocusRecordsList.length) return [];
+    const map = {};
+    for (const r of todayFocusRecordsList) {
+      const catKey = r.category || 'unnamed';
+      const meta = CATEGORY_ITEMS.find(c => c.key === catKey);
+      const color = meta ? meta.color : '#B9A99D';
+      if (!map[catKey]) map[catKey] = { color, sec: 0 };
+      map[catKey].sec += Number(r.duration) || 0;
+    }
+    return Object.values(map).map(m => ({
+      color: m.color,
+      pct: Math.max(3, Math.round((m.sec / totalFocusSecCalculated) * 100)),
+    }));
+  }, [todayFocusRecordsList, totalFocusSecCalculated]);
 
   const timerRef = useRef(null);
 
@@ -91,21 +126,28 @@ export default function PomodoroTimer({
   const r = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * r;
 
-  // Gestural Dial
+  // Gestural Dial - 仅在明确垂直拖拽时响应，不抢占点击与滚动
   const initialDurationRef = useRef(durationSec);
   const dialResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !running,
-      onMoveShouldSetPanResponder: () => !running,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        if (running) return false;
+        // 严格垂直阈值：垂直位移超过 18px 且垂直意图明显大于水平
+        return (
+          Math.abs(gestureState.dy) > 18 &&
+          Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 2
+        );
+      },
       onPanResponderGrant: () => {
         initialDurationRef.current = durationSec;
       },
       onPanResponderMove: (evt, gestureState) => {
         if (running) return;
-        const deltaMins = Math.round(-gestureState.dy / 10) * 5;
+        const deltaMins = Math.round(-gestureState.dy / 22) * 5;
         let newSec = initialDurationRef.current + deltaMins * 60;
         if (newSec < 5 * 60) newSec = 5 * 60;
-        if (newSec > 120 * 60) newSec = 120 * 60;
+        if (newSec > 180 * 60) newSec = 180 * 60;
 
         if (newSec !== durationSec) {
           setDurationSec(newSec);
@@ -115,40 +157,59 @@ export default function PomodoroTimer({
     })
   ).current;
 
-  // Timer Tick
+  // 基于绝对时间戳的实时计时同步器（解决息屏/后台计时挂起问题）
+  const targetEndTsRef = useRef(null);
+  const accumulatedFocusSecRef = useRef(0);
+
+  const syncTimeTick = useCallback(() => {
+    if (!running || paused) return;
+    const targetEnd = targetEndTsRef.current;
+    if (!targetEnd) return;
+    const now = Date.now();
+
+    if (now < targetEnd) {
+      // 倒计时阶段
+      const remSec = Math.max(1, Math.round((targetEnd - now) / 1000));
+      setTimeLeft(remSec);
+      setOvertimeSec(0);
+      progressAnim.setValue(remSec / durationSec);
+    } else {
+      // 倒计时已跑完，进入心流延展超时阶段
+      setTimeLeft(0);
+      const overSec = Math.max(0, Math.round((now - targetEnd) / 1000));
+      setOvertimeSec(overSec);
+      progressAnim.setValue(1);
+      if (!flowMode) {
+        setFlowMode(true);
+        Vibration.vibrate([0, 100, 50, 100]);
+      }
+    }
+  }, [running, paused, durationSec, flowMode, progressAnim]);
+
+  // 息屏/前后台唤醒时立即校准时间
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active' && running && !paused) {
+        syncTimeTick();
+      }
+    });
+    return () => sub.remove();
+  }, [running, paused, syncTimeTick]);
+
+  // 前台 UI 刷新定时器（仅负责每秒调度 syncTimeTick，不再依赖累加减一）
   useEffect(() => {
     if (running && !paused) {
+      syncTimeTick();
       timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            if (!flowMode) {
-              setFlowMode(true);
-              Vibration.vibrate([0, 100, 50, 100]);
-              Animated.timing(progressAnim, { toValue: 1, duration: 1000, useNativeDriver: true }).start();
-            }
-            setOvertimeSec(o => o + 1);
-            return 0;
-          }
-          return prev - 1;
-        });
+        syncTimeTick();
       }, 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [running, paused, flowMode]);
-
-  // Update progress ring
-  useEffect(() => {
-    if (running && !paused && !flowMode) {
-      Animated.timing(progressAnim, {
-        toValue: timeLeft / durationSec,
-        duration: 1000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [timeLeft, running, paused, durationSec, flowMode]);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [running, paused, syncTimeTick]);
 
   // Breathing effect during focus
   useEffect(() => {
@@ -165,32 +226,100 @@ export default function PomodoroTimer({
     }
   }, [flowMode, running, paused]);
 
-  // Ambient Audio Playback
+  // 1. 初始化全局音频模式
   useEffect(() => {
-    (async () => {
+    Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      staysActiveInBackground: true,
+      playsInSilentModeIOS: true,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    }).catch((err) => {
+      console.warn('[Audio] setAudioModeAsync error:', err);
+    });
+
+    return () => {
       if (soundRef.current) {
-        await soundRef.current.unloadAsync();
+        soundRef.current.unloadAsync().catch(() => {});
         soundRef.current = null;
       }
-      if (ambient === 'none' || !running || paused) return;
+    };
+  }, []);
 
-      const files = {
-        rain: require('../../assets/sounds/rain.mp3'),
-        forest: require('../../assets/sounds/forest.mp3'),
-        ocean: require('../../assets/sounds/ocean.mp3'),
-        fire: require('../../assets/sounds/fire.mp3'),
-        cafe: require('../../assets/sounds/cafe.mp3'),
-        train: require('../../assets/sounds/train.mp3'),
-        stream: require('../../assets/sounds/stream.mp3'),
-      };
-      if (!files[ambient]) return;
+  // 2. 统一白噪音播放核心函数（防竞态与泄露）
+  const playAmbientSound = async (soundKey) => {
+    const reqId = ++playReqIdRef.current;
+
+    // 卸载已加载声音
+    if (soundRef.current) {
+      const prev = soundRef.current;
+      soundRef.current = null;
       try {
-        const { sound } = await Audio.Sound.createAsync(files[ambient], { isLooping: true, volume: 0.5 });
-        soundRef.current = sound;
-      } catch (e) { }
-    })();
-    return () => { if (soundRef.current) { soundRef.current.unloadAsync(); soundRef.current = null; } };
-  }, [ambient, running, paused]);
+        await prev.stopAsync();
+        await prev.unloadAsync();
+      } catch (e) {}
+    }
+
+    if (soundKey === 'none' || !AMBIENT_SOUND_FILES[soundKey]) {
+      return;
+    }
+
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        AMBIENT_SOUND_FILES[soundKey],
+        {
+          shouldPlay: true,
+          isLooping: true,
+          volume: 0.7,
+        }
+      );
+
+      // 若在加载过程中已有新请求，立即释放并退出
+      if (reqId !== playReqIdRef.current) {
+        await sound.stopAsync().catch(() => {});
+        await sound.unloadAsync().catch(() => {});
+        return;
+      }
+
+      soundRef.current = sound;
+      await sound.playAsync();
+    } catch (err) {
+      console.warn('[Audio] playAmbientSound error:', soundKey, err);
+    }
+  };
+
+  const stopAmbientSound = async () => {
+    playReqIdRef.current++;
+    if (soundRef.current) {
+      const cur = soundRef.current;
+      soundRef.current = null;
+      try {
+        await cur.stopAsync();
+        await cur.unloadAsync();
+      } catch (e) {}
+    }
+  };
+
+  // 3. 专注状态与音频播放联动
+  useEffect(() => {
+    if (running) {
+      if (paused) {
+        if (soundRef.current) {
+          soundRef.current.pauseAsync().catch(() => {});
+        }
+      } else {
+        if (soundRef.current) {
+          soundRef.current.playAsync().catch(() => {});
+        } else if (ambient !== 'none') {
+          playAmbientSound(ambient);
+        }
+      }
+    } else {
+      if (!showAmbientPicker) {
+        stopAmbientSound();
+      }
+    }
+  }, [running, paused, ambient, showAmbientPicker]);
 
   const handleStart = () => {
     if (!category) {
@@ -200,19 +329,45 @@ export default function PomodoroTimer({
     }
     if (!running) {
       Vibration.vibrate(20);
+      accumulatedFocusSecRef.current = 0;
+      targetEndTsRef.current = Date.now() + durationSec * 1000;
       setRunning(true);
       setPaused(false);
+      setFlowMode(false);
+      setOvertimeSec(0);
+      setTimeLeft(durationSec);
+      progressAnim.setValue(1);
       if (onStartFocus) onStartFocus({ durationSec, goalName: goalName.trim() || t('home.unnamedFocus'), category });
     }
   };
 
   const handlePause = () => {
     Vibration.vibrate(20);
+    const now = Date.now();
+    if (targetEndTsRef.current) {
+      if (now < targetEndTsRef.current) {
+        const remSec = Math.max(0, Math.round((targetEndTsRef.current - now) / 1000));
+        accumulatedFocusSecRef.current = durationSec - remSec;
+        setTimeLeft(remSec);
+      } else {
+        const overSec = Math.max(0, Math.round((now - targetEndTsRef.current) / 1000));
+        accumulatedFocusSecRef.current = durationSec + overSec;
+        setOvertimeSec(overSec);
+        setTimeLeft(0);
+      }
+    }
+    targetEndTsRef.current = null;
     setPaused(true);
   };
 
   const handleResume = () => {
     Vibration.vibrate(20);
+    const now = Date.now();
+    if (!flowMode) {
+      targetEndTsRef.current = now + timeLeft * 1000;
+    } else {
+      targetEndTsRef.current = now - overtimeSec * 1000;
+    }
     setPaused(false);
   };
 
@@ -224,6 +379,9 @@ export default function PomodoroTimer({
   const confirmAbandon = () => {
     setShowAbandonModal(false);
     Vibration.vibrate(30);
+    stopAmbientSound();
+    targetEndTsRef.current = null;
+    accumulatedFocusSecRef.current = 0;
     setRunning(false);
     setPaused(false);
     setFlowMode(false);
@@ -234,10 +392,13 @@ export default function PomodoroTimer({
 
   const handleFinish = () => {
     Vibration.vibrate(80);
+    stopAmbientSound();
+    const actualFocusSec = durationSec - timeLeft + overtimeSec;
+    targetEndTsRef.current = null;
+    accumulatedFocusSecRef.current = 0;
     setRunning(false);
     setPaused(false);
 
-    const actualFocusSec = durationSec - timeLeft + overtimeSec;
     if (actualFocusSec > 30) {
       // Show post-focus modal for review
       pendingSaveRef.current = { duration: actualFocusSec, goalName: goalName.trim() || t('home.unnamedFocus'), category };
@@ -270,6 +431,16 @@ export default function PomodoroTimer({
     setTimeLeft(sec);
   };
 
+  const handleCustomDurationConfirm = () => {
+    const mins = parseInt(customMinutesInput, 10);
+    if (!isNaN(mins) && mins >= 1 && mins <= 180) {
+      handleDurationPreset(mins);
+      setShowCustomModal(false);
+    } else {
+      Alert.alert(t('pomodoro.customDurTitle', '自定义专注时长'), t('pomodoro.customDurHint', '请输入 1~180 之间的分钟数'));
+    }
+  };
+
   const formatTime = (secs) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -291,8 +462,24 @@ export default function PomodoroTimer({
   const currentAmbient = AMBIENT_OPTIONS.find(a => a.key === ambient);
   const currentAmbientLabel = currentAmbient ? t(currentAmbient.label, currentAmbient.key) : t('pomodoro.ambient_none', '无声');
 
+  const handleSelectAmbientInModal = (key) => {
+    setAmbient(key);
+    if (key === 'none') {
+      stopAmbientSound();
+    } else {
+      playAmbientSound(key);
+    }
+  };
+
+  const handleCloseAmbientModal = () => {
+    setShowAmbientPicker(false);
+    if (!running) {
+      stopAmbientSound();
+    }
+  };
+
   const renderAmbientModal = () => (
-    <Modal visible={showAmbientPicker} transparent animationType="fade">
+    <Modal visible={showAmbientPicker} transparent animationType="fade" onRequestClose={handleCloseAmbientModal}>
       <View style={styles.modalBg}>
         <View style={styles.modalContent}>
           <Text style={styles.modalTitle}>{t('pomodoro.bgSound', '背景声音')}</Text>
@@ -303,16 +490,22 @@ export default function PomodoroTimer({
                 <TouchableOpacity
                   key={item.key}
                   style={[styles.ambientOption, isActive && styles.ambientOptionActive]}
-                  onPress={() => { setAmbient(item.key); setShowAmbientPicker(false); }}
+                  onPress={() => handleSelectAmbientInModal(item.key)}
+                  activeOpacity={0.7}
                 >
                   <Ionicons name={item.icon} size={20} color={isActive ? colors.primaryStrong : colors.ink2} />
-                  <Text style={[styles.ambientOptionText, isActive && { color: colors.primaryStrong, fontWeight: '700' }]}>{t(item.label, item.key)}</Text>
+                  <Text style={[styles.ambientOptionText, isActive && { color: colors.primaryStrong, fontWeight: '700' }]}>
+                    {t(item.label, item.key)}
+                  </Text>
+                  {isActive && item.key !== 'none' && (
+                    <Ionicons name="volume-high" size={14} color={colors.primaryStrong} style={{ marginLeft: 'auto' }} />
+                  )}
                 </TouchableOpacity>
               );
             })}
           </View>
-          <TouchableOpacity style={[styles.modalClose, { backgroundColor: colors.chip }]} onPress={() => setShowAmbientPicker(false)}>
-            <Text style={[styles.modalCloseText, { color: colors.ink }]}>{t('pomodoro.helpBtn', '关闭')}</Text>
+          <TouchableOpacity style={[styles.modalClose, { backgroundColor: colors.chip }]} onPress={handleCloseAmbientModal}>
+            <Text style={[styles.modalCloseText, { color: colors.ink }]}>{t('common.done', '完成')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -540,40 +733,7 @@ export default function PomodoroTimer({
     );
   }
 
-  // 计算今日专注总时长与各分类占比
-  const todayFocusRecordsList = todayFocusRecords || [];
-  const totalFocusSecCalculated = todayFocusSec || todayFocusRecordsList.reduce((s, r) => s + (Number(r.duration) || 0), 0);
-  const totalFocusCountCalculated = todayFocusCount || todayFocusRecordsList.length;
 
-  const distributionBar = useMemo(() => {
-    if (!totalFocusSecCalculated || !todayFocusRecordsList.length) return [];
-    const map = {};
-    for (const r of todayFocusRecordsList) {
-      const catKey = r.category || 'unnamed';
-      const meta = CATEGORY_ITEMS.find(c => c.key === catKey);
-      const color = meta ? meta.color : '#B9A99D';
-      if (!map[catKey]) map[catKey] = { color, sec: 0 };
-      map[catKey].sec += Number(r.duration) || 0;
-    }
-    return Object.values(map).map(m => ({
-      color: m.color,
-      pct: Math.max(3, Math.round((m.sec / totalFocusSecCalculated) * 100)),
-    }));
-  }, [todayFocusRecordsList, totalFocusSecCalculated]);
-
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [showCustomModal, setShowCustomModal] = useState(false);
-  const [customMinutesInput, setCustomMinutesInput] = useState('');
-
-  const handleCustomDurationConfirm = () => {
-    const mins = parseInt(customMinutesInput, 10);
-    if (!isNaN(mins) && mins >= 1 && mins <= 180) {
-      handleDurationPreset(mins);
-      setShowCustomModal(false);
-    } else {
-      Alert.alert(t('pomodoro.customDurTitle', '自定义专注时长'), t('pomodoro.customDurHint', '请输入 1~180 之间的分钟数'));
-    }
-  };
 
   // ==================== IDLE STATE ====================
   return (
@@ -664,20 +824,29 @@ export default function PomodoroTimer({
         </View>
       </View>
 
-      {/* 4. 居中计时大环 (200x200) */}
-      <View style={styles.dialWrap} {...dialResponder.panHandlers}>
-        <View style={styles.dialRing}>
-          <Svg width={200} height={200}>
-            <Circle cx={100} cy={100} r={90} stroke="#F1E3D8" strokeWidth={12} fill="none" />
-            <Circle cx={100} cy={100} r={90} stroke="#D63B3B" strokeWidth={12} fill="none" strokeLinecap="round" />
-          </Svg>
-          <View style={styles.dialTimeCenter}>
-            <Text style={styles.dialTimeText}>{formatTime(timeLeft)}</Text>
-            <Text style={styles.dialSubText}>
-              {category ? `${t(category).replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')} · ` : ''}
-              {t('pomodoro.focusDurLabel', '专注时长')}
-            </Text>
-          </View>
+      {/* 4. 居中计时大环 (200x200) - 手势严格限制在圆圈内，外部不拦截滚动 */}
+      <View style={styles.dialWrap}>
+        <View style={styles.dialRing} {...dialResponder.panHandlers}>
+          <TouchableOpacity
+            style={styles.dialRingInnerTouch}
+            activeOpacity={0.88}
+            onPress={() => {
+              setCustomMinutesInput(String(durationMin));
+              setShowCustomModal(true);
+            }}
+          >
+            <Svg width={200} height={200}>
+              <Circle cx={100} cy={100} r={90} stroke="#F1E3D8" strokeWidth={12} fill="none" />
+              <Circle cx={100} cy={100} r={90} stroke="#D63B3B" strokeWidth={12} fill="none" strokeLinecap="round" />
+            </Svg>
+            <View style={styles.dialTimeCenter}>
+              <Text style={styles.dialTimeText}>{formatTime(timeLeft)}</Text>
+              <Text style={styles.dialSubText}>
+                {category ? `${t(category).replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')} · ` : ''}
+                {t('pomodoro.focusDurLabel', '专注时长')}
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -884,6 +1053,11 @@ const makeStyles = (colors) => StyleSheet.create({
     position: 'relative',
     width: 200,
     height: 200,
+  },
+  dialRingInnerTouch: {
+    width: 200,
+    height: 200,
+    position: 'relative',
   },
   dialTimeCenter: {
     position: 'absolute',
