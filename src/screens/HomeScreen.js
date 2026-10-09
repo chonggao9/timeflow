@@ -1,48 +1,68 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity, Linking, ActivityIndicator, Vibration, AppState, Animated,
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  Modal,
+  TextInput,
+  TouchableOpacity,
+  Pressable,
+  Linking,
+  ActivityIndicator,
+  Vibration,
+  AppState,
+  Animated,
+  Easing,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Circle } from 'react-native-svg';
 import * as Location from 'expo-location';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  saveRecord, getRecords, getTodayRecords, getRecordById, updateRecord, deleteRecord, ensureTrip, endTrip,
-  getCurrentTripId, getLastMode, setLastMode, getRecordsFingerprint,
+  saveRecord,
+  getRecords,
+  getTodayRecords,
+  getRecordById,
+  updateRecord,
+  deleteRecord,
+  ensureTrip,
+  endTrip,
+  getCurrentTripId,
+  getLastMode,
+  setLastMode,
+  getRecordsFingerprint,
 } from '../storage/store';
-import { computePathStats, placeKey, UNNAMED, isPlaceholderName } from '../utils/stats';
+import { computePathStats, placeKey, UNNAMED, isPlaceholderName, formatDuration, formatTime } from '../utils/stats';
 import { getPlaceOptions } from '../utils/analytics';
-import { shadow } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import { getPositionFast, reverseGeocodeWithTimeout } from '../utils/location';
 import { refreshWidget } from '../utils/widgetRefresh';
 import { runBackupIfDue } from '../backup/schedule';
 import Timeline from '../components/Timeline';
-import CheckInButton from '../components/CheckInButton';
-import TransportPicker, { MODE_KEYS } from '../components/TransportPicker';
 import ModeIcon from '../components/ModeIcon';
 import PomodoroTimer from '../components/PomodoroTimer';
 import RouteMapScreen from './RouteMapScreen';
 import TripReceiptModal from '../components/TripReceiptModal';
-const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-const FOCUS_PRESETS_KEYS = ['pomodoro.helpWork', 'pomodoro.helpStudy', 'pomodoro.helpCreate', 'pomodoro.helpBodyMind', 'pomodoro.helpLife', 'pomodoro.helpPlan'];
+import BackfillModal from '../components/BackfillModal';
 
-const BACKFILL_OFFSETS = [
-  { min: 0, labelKey: 'home.justNow' },
-  { min: 5, labelKey: 'home.m5Ago' },
-  { min: 15, labelKey: 'home.m15Ago' },
-  { min: 30, labelKey: 'home.m30Ago' },
-  { min: 60, labelKey: 'home.h1Ago' },
-];
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const PRIMARY_MODES = ['walk', 'bike', 'drive', 'taxi', 'subway'];
+const MORE_MODES = ['transit', 'train', 'flight', 'boat'];
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { t, formatDate } = useI18n();
+  const { t, formatDate, lang } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -57,30 +77,41 @@ export default function HomeScreen() {
       navigation.setOptions({ tabBarStyle: undefined });
     };
   }, [isFocusRunning, navigation]);
+
   const [mode, setMode] = useState('walk');
   const [estimate, setEstimate] = useState(null);
   const [hasActiveTrip, setHasActiveTrip] = useState(false);
-  const [locStatus, setLocStatus] = useState(null); // null | 'pending' | 'denied' | 'services' | 'failed'
-  const [activeLocStatus, setActiveLocStatus] = useState(null); // 用于胶囊渐退动画缓冲
+  const [locStatus, setLocStatus] = useState(null);
+  const [activeLocStatus, setActiveLocStatus] = useState(null);
   const locAnim = useRef(new Animated.Value(0)).current;
   const locTargetRef = useRef(null);
-  const fillSeqRef = useRef(0); // 补位序号：状态条只反映最新一次补位
-  const checkingInRef = useRef(false); // 同步原子锁：防毫秒级极速快速双击造成重复打卡
-  const pathStatsCacheRef = useRef({ fp: null, stats: [] }); // 预估耗时计算缓存
+  const fillSeqRef = useRef(0);
+  const checkingInRef = useRef(false);
+  const pathStatsCacheRef = useRef({ fp: null, stats: [] });
 
   const [commonPlaces, setCommonPlaces] = useState([]);
   const [renameTarget, setRenameTarget] = useState(null);
   const [draftName, setDraftName] = useState('');
   const [draftMode, setDraftMode] = useState('walk');
+  const [draftTimestamp, setDraftTimestamp] = useState(Date.now());
+
+  // 主打卡按钮物理下潜与环形蓄力充能进度
+  const checkinScale = useRef(new Animated.Value(1)).current;
+  const chargeProgress = useRef(new Animated.Value(0)).current;
+  const isChargingLongRef = useRef(false);
 
   // 补卡相关状态
   const [backfillVisible, setBackfillVisible] = useState(false);
-  const [backfillOffset, setBackfillOffset] = useState(15);
-  const [backfillName, setBackfillName] = useState('');
-  const [backfillMode, setBackfillMode] = useState('walk');
 
-  const [mapTrip, setMapTrip] = useState(null); // 当前查看地图的行程
-  const [receiptTrip, setReceiptTrip] = useState(null); // 当前查看小票的行程
+  // 更多出行方式弹窗
+  const [showMoreModes, setShowMoreModes] = useState(false);
+
+  // 路段出行方式修改弹窗
+  const [segmentTarget, setSegmentTarget] = useState(null);
+
+  // 地图与小票
+  const [mapTrip, setMapTrip] = useState(null);
+  const [receiptTrip, setReceiptTrip] = useState(null);
 
   const loadToday = useCallback(async () => {
     const today = await getTodayRecords();
@@ -89,27 +120,31 @@ export default function HomeScreen() {
     const trip = await getCurrentTripId();
     setHasActiveTrip(!!trip);
 
-    // 弱网与补卡快选：提取历史常用地点（过滤占位符，前5个最高频）
+    // 常用地点快选（Top 5 最高频地名）
     try {
       const all = await getRecords();
       const options = getPlaceOptions(all);
       const topPlaces = options
-        .map(o => o.name)
-        .filter(nm => nm && !isPlaceholderName(nm) && nm !== UNNAMED)
+        .map((o) => o.name)
+        .filter((nm) => nm && !isPlaceholderName(nm) && nm !== UNNAMED)
         .slice(0, 5);
       setCommonPlaces(topPlaces);
-    } catch (e) { /* 容错忽略 */ }
+    } catch (e) {}
     return sorted;
   }, []);
 
-  // 初始化：记住上次出行方式
+  // 初始化上次出行方式
   useEffect(() => {
     (async () => setMode(await getLastMode()))();
   }, []);
 
-  useFocusEffect(useCallback(() => { loadToday(); }, [loadToday]));
+  useFocusEffect(
+    useCallback(() => {
+      loadToday();
+    }, [loadToday])
+  );
 
-  // 前台唤醒：若10分钟内最新一次打卡仍处于无坐标状态（如地库打卡后走出室外），自动尝试静默补位一次
+  // 前台唤醒时静默补定位
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (nextState) => {
       if (nextState === 'active') {
@@ -126,7 +161,7 @@ export default function HomeScreen() {
     return () => sub.remove();
   }, [loadToday]);
 
-  // 定位状态胶囊显隐动效（零布局推挤）
+  // 定位状态胶囊动效
   useEffect(() => {
     if (locStatus) {
       setActiveLocStatus(locStatus);
@@ -147,9 +182,13 @@ export default function HomeScreen() {
     }
   }, [locStatus, locAnim]);
 
-  // 计算预估：从最后一个点出发的最常见路段（带指纹缓存，避免每次打卡全量重算）
+  // 预估到达计算
   useEffect(() => {
-    if (records.length < 1) { setEstimate(null); return; }
+    const travelRecs = records.filter((r) => r.mode !== 'focus');
+    if (travelRecs.length < 1) {
+      setEstimate(null);
+      return;
+    }
     (async () => {
       const fp = await getRecordsFingerprint();
       let stats = pathStatsCacheRef.current.stats;
@@ -158,10 +197,13 @@ export default function HomeScreen() {
         stats = computePathStats(all);
         pathStatsCacheRef.current = { fp, stats };
       }
-      if (!stats.length) { setEstimate(null); return; }
-      const last = records[records.length - 1];
+      if (!stats.length) {
+        setEstimate(null);
+        return;
+      }
+      const last = travelRecs[travelRecs.length - 1];
       const key = placeKey(last);
-      const match = stats.find(s => s.fromKey === key);
+      const match = stats.find((s) => s.fromKey === key);
       if (match) {
         setEstimate({ locationName: match.toName, estimatedSec: match.medianSec });
       } else {
@@ -170,7 +212,7 @@ export default function HomeScreen() {
     })();
   }, [records]);
 
-  // 一键打卡：轻按记录途经点，长按结程（打卡同时结束本次行程）
+  // 一键打卡（轻按打卡，长按结束行程）
   const handleCheckIn = async (isEndTrip = false) => {
     if (checkingInRef.current) return;
     checkingInRef.current = true;
@@ -179,72 +221,77 @@ export default function HomeScreen() {
     try {
       const tripId = await ensureTrip();
       const id = makeId();
-      await saveRecord({ id, timestamp: tnow, locationName: UNNAMED, lat: null, lng: null, mode, tripId });
+      await saveRecord({
+        id,
+        timestamp: tnow,
+        locationName: UNNAMED,
+        lat: null,
+        lng: null,
+        mode,
+        tripId,
+      });
       await setLastMode(mode);
 
       if (isEndTrip) {
-        await endTrip(); // 立即封存关闭当前行程，下次打卡自动开启新行程
+        await endTrip();
       }
 
       setLoading(false);
       setSuccess(isEndTrip ? 'ended' : true);
       if (isEndTrip) {
-        Vibration.vibrate(40); // 确定性触觉反馈：结程
+        Vibration.vibrate(40);
       } else {
-        Vibration.vibrate(15); // 轻触感：普通打卡
+        Vibration.vibrate(15);
       }
 
       await loadToday();
-      refreshWidget(); // 桌面 widget 即时同步最新次数/时间
-      runBackupIfDue().catch(() => {}); // 打卡触发自动备份（fire-and-forget）
+      refreshWidget();
+      runBackupIfDue().catch(() => {});
       setTimeout(() => setSuccess(false), isEndTrip ? 1500 : 1200);
 
-      fillLocation(id); // 后台定位 + 反查，不阻塞打卡
+      fillLocation(id);
     } catch (e) {
       setLoading(false);
-      Vibration.vibrate([0, 40, 30, 40]); // 双震：保存失败
+      Vibration.vibrate([0, 40, 30, 40]);
       Alert.alert(t('home.failTitle'), t('home.failBody'));
     } finally {
-      setTimeout(() => { checkingInRef.current = false; }, 1000); // 1秒冷却锁
+      setTimeout(() => {
+        checkingInRef.current = false;
+      }, 1000);
     }
   };
 
-  // 后台补坐标 + 地名：状态条呈现 补位中/被拒/服务关闭/超时，成功则静默消失
+  // 后台补定位与逆地理编码
   const fillLocation = async (id) => {
     const seq = ++fillSeqRef.current;
     locTargetRef.current = id;
     setLocStatus('pending');
     const isStale = () => seq !== fillSeqRef.current;
-    const log = (...a) => { if (__DEV__) console.log(`[fillLocation:${seq}]`, ...a); };
     try {
-      log('step1 权限只读查询');
       let { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') {
-        log('step1b 未授权，发起请求');
         ({ status } = await Location.requestForegroundPermissionsAsync());
       }
-      log('step1c 权限结果 =', status);
-      if (status !== 'granted') { if (!isStale()) setLocStatus('denied'); return; }
+      if (status !== 'granted') {
+        if (!isStale()) setLocStatus('denied');
+        return;
+      }
 
-      log('step2 并行定位中');
-      const { loc, reason, provider } = await getPositionFast();
-      log('step2b 定位结果:', { reason, provider, coords: loc && loc.coords });
+      const { loc, reason } = await getPositionFast();
       if (!loc) {
         if (!isStale()) setLocStatus(reason === 'services-off' ? 'services' : 'failed');
         return;
       }
-      const lat = loc.coords.latitude, lng = loc.coords.longitude;
+      const lat = loc.coords.latitude,
+        lng = loc.coords.longitude;
 
       let addr = loc.address;
       if (!addr) {
-        log('step3 反查地名（SDK 无地址）');
         addr = await reverseGeocodeWithTimeout(lat, lng);
       }
-      log('step3b 地名 =', addr);
 
       const current = await getRecordById(id);
       if (!current) {
-        log('step4 记录已被删除，跳过写库');
         if (!isStale()) setLocStatus(null);
         return;
       }
@@ -254,129 +301,192 @@ export default function HomeScreen() {
         patch.locationName = addr;
       }
       await updateRecord(id, patch);
-      log('step4 写库完成');
       await loadToday();
       refreshWidget();
-      log('step5 完成，清状态条');
       if (!isStale()) setLocStatus(null);
     } catch (e) {
-      log('ERROR', e && e.message);
       if (!isStale()) setLocStatus('failed');
     }
   };
 
-  // 定位状态条点击
   const handleLocBarPress = async () => {
     if (locStatus === 'denied') {
       const { status } = await Location.getForegroundPermissionsAsync();
-      if (status === 'granted') { const id = locTargetRef.current; if (id) fillLocation(id); }
-      else Linking.openSettings();
+      if (status === 'granted') {
+        const id = locTargetRef.current;
+        if (id) fillLocation(id);
+      } else Linking.openSettings();
     } else if (locStatus === 'services') {
       Linking.openSettings();
     } else if (locStatus === 'failed') {
       let servicesOn = true;
-      try { servicesOn = await Location.hasServicesEnabledAsync(); } catch (e) { /* 忽略 */ }
+      try {
+        servicesOn = await Location.hasServicesEnabledAsync();
+      } catch (e) {}
       if (!servicesOn) Linking.openSettings();
-      else { const id = locTargetRef.current; if (id) fillLocation(id); }
+      else {
+        const id = locTargetRef.current;
+        if (id) fillLocation(id);
+      }
     }
   };
 
-  // ---- 地名与交通方式编辑 ----
+  // 主打卡按钮手势交互
+  const handleCheckinPressIn = () => {
+    if (loading || success) return;
+    isChargingLongRef.current = false;
+    Animated.spring(checkinScale, {
+      toValue: 0.95,
+      friction: 6,
+      tension: 140,
+      useNativeDriver: true,
+    }).start();
+
+    chargeProgress.setValue(0);
+    Animated.timing(chargeProgress, {
+      toValue: 1,
+      duration: 650,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const handleCheckinPressOut = () => {
+    Animated.spring(checkinScale, {
+      toValue: 1,
+      friction: 5,
+      tension: 100,
+      useNativeDriver: true,
+    }).start();
+
+    Animated.timing(chargeProgress, {
+      toValue: 0,
+      duration: 160,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const handleCheckinLongPress = () => {
+    if (loading || success) return;
+    isChargingLongRef.current = true;
+    handleCheckIn(true);
+  };
+
+  const handleCheckinPress = () => {
+    if (isChargingLongRef.current) return;
+    handleCheckIn(false);
+  };
+
+  // ---- 打卡点编辑 ----
   const openRename = (record) => {
     setRenameTarget(record);
     setDraftName(record.locationName && record.locationName !== UNNAMED ? record.locationName : '');
     setDraftMode(record.mode || 'walk');
+    setDraftTimestamp(record.timestamp || Date.now());
   };
   const closeRename = () => {
     setRenameTarget(null);
     setDraftName('');
     setDraftMode('walk');
+    setDraftTimestamp(Date.now());
   };
   const confirmRename = async () => {
     if (!renameTarget) return;
     const name = draftName.trim();
-    if (!name) { Alert.alert(t('home.renameEmpty')); return; }
-    await updateRecord(renameTarget.id, { locationName: name, mode: draftMode });
+    if (!name) {
+      Alert.alert(t('home.renameEmpty'));
+      return;
+    }
+    await updateRecord(renameTarget.id, {
+      locationName: name,
+      mode: draftMode,
+      timestamp: draftTimestamp,
+    });
     closeRename();
     await loadToday();
     refreshWidget();
   };
 
-  // 补救结程：在编辑弹窗中直接将当前点标记为终点
   const handleModalEndTrip = async () => {
     await endTrip();
     closeRename();
     await loadToday();
-    Alert.alert(t('trip.endedTitle'), t('trip.endedToast'));
+    Alert.alert(t('trip.endedTitle', '提示'), t('trip.endedToast'));
   };
 
-  // 误打卡：确认后删除这条记录
   const confirmDelete = () => {
     if (!renameTarget) return;
     Alert.alert(t('home.deleteTitle'), t('home.deleteBody'), [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.delete'), style: 'destructive', onPress: async () => {
-        await deleteRecord(renameTarget.id);
-        setLocStatus(null);
-        closeRename();
-        await loadToday();
-        refreshWidget();
-      } },
+      {
+        text: t('common.delete'),
+        style: 'destructive',
+        onPress: async () => {
+          await deleteRecord(renameTarget.id);
+          setLocStatus(null);
+          closeRename();
+          await loadToday();
+          refreshWidget();
+        },
+      },
     ]);
   };
 
-  // ---- 补记打卡（补卡） ----
-  const openBackfill = () => {
-    setBackfillOffset(15);
-    setBackfillName('');
-    setBackfillMode(mode || 'walk');
-    setBackfillVisible(true);
-  };
-  const closeBackfill = () => {
-    setBackfillVisible(false);
-    setBackfillName('');
-    setBackfillMode('walk');
-  };
-  const handleSaveBackfill = async () => {
+  // ---- 补记打卡（BackfillModal） ----
+  const handleSaveBackfill = async (data) => {
     if (checkingInRef.current) return;
-    const name = backfillName.trim();
-    if (!name) {
-      Alert.alert(t('home.backfillEmpty'));
-      return;
-    }
     checkingInRef.current = true;
-    const tCheckin = Date.now() - backfillOffset * 60 * 1000;
+    const tCheckin = Date.now() - data.offsetMin * 60 * 1000;
     try {
       const tripId = await ensureTrip();
       const id = makeId();
       await saveRecord({
         id,
         timestamp: tCheckin,
-        locationName: name,
+        locationName: data.locationName,
         lat: null,
         lng: null,
-        mode: backfillMode,
+        mode: data.mode,
         tripId,
       });
       Vibration.vibrate(25);
-      closeBackfill();
+      setBackfillVisible(false);
       await loadToday();
       refreshWidget();
       runBackupIfDue().catch(() => {});
     } catch (e) {
       Alert.alert(t('home.failTitle'), t('home.failBody'));
     } finally {
-      setTimeout(() => { checkingInRef.current = false; }, 800);
+      setTimeout(() => {
+        checkingInRef.current = false;
+      }, 800);
     }
   };
 
+  // ---- 修改路段出行方式 ----
+  const handleOpenSegmentMode = (record) => {
+    setSegmentTarget(record);
+  };
+  const handleConfirmSegmentMode = async (newMode) => {
+    if (!segmentTarget) return;
+    await updateRecord(segmentTarget.id, { mode: newMode });
+    setSegmentTarget(null);
+    await loadToday();
+    refreshWidget();
+  };
+
+  // ---- 室内专注处理 ----
   const handleStartFocus = async (data) => {
     try {
-      await AsyncStorage.setItem('timeflow_active_focus', JSON.stringify({
-        startTs: Date.now(),
-        durationSec: data.durationSec,
-        goalName: data.goalName
-      }));
+      await AsyncStorage.setItem(
+        'timeflow_active_focus',
+        JSON.stringify({
+          startTs: Date.now(),
+          durationSec: data.durationSec,
+          goalName: data.goalName,
+        })
+      );
       refreshWidget();
     } catch (e) {}
   };
@@ -408,53 +518,101 @@ export default function HomeScreen() {
     }
   };
 
+  const handleUpdateFocusRecord = async (id, patch) => {
+    await updateRecord(id, patch);
+    await loadToday();
+    refreshWidget();
+  };
+
+  const handleDeleteFocusRecord = async (id) => {
+    await deleteRecord(id);
+    await loadToday();
+    refreshWidget();
+  };
+
+  // ---- 数据分离与统计 ----
   const dateStr = formatDate(new Date());
-  const travelCount = records.filter(r => r.mode !== 'focus').length;
-  const focusRecords = records.filter(r => r.mode === 'focus');
+
+  // 1. 行程轨迹专属数据（严格排除 focus）
+  const travelRecords = useMemo(
+    () => records.filter((r) => r.mode !== 'focus'),
+    [records]
+  );
+  const travelCount = travelRecords.length;
+
+  const travelTripsCount = useMemo(() => {
+    if (!travelRecords.length) return 0;
+    const set = new Set();
+    for (const r of travelRecords) {
+      set.add(r.tripId || 'legacy');
+    }
+    return set.size;
+  }, [travelRecords]);
+
+  const travelDurationSec = useMemo(() => {
+    if (travelRecords.length < 2) return 0;
+    const minT = Math.min(...travelRecords.map((r) => r.timestamp));
+    const maxT = Math.max(...travelRecords.map((r) => r.timestamp));
+    return Math.max(0, Math.round((maxT - minT) / 1000));
+  }, [travelRecords]);
+
+  // 2. 室内专注专属数据
+  const focusRecords = useMemo(
+    () => records.filter((r) => r.mode === 'focus'),
+    [records]
+  );
   const focusCount = focusRecords.length;
-  const todayFocusSec = focusRecords.reduce((sum, r) => sum + (Number(r.duration) || 0), 0);
+  const todayFocusSec = useMemo(
+    () => focusRecords.reduce((sum, r) => sum + (Number(r.duration) || 0), 0),
+    [focusRecords]
+  );
 
   return (
     <View style={styles.screen}>
       {!(scene === 'focus' && isFocusRunning) && (
-        <>
-          <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-            <View style={styles.titleBlock}>
-              <Text style={styles.title}>{t('home.today')}</Text>
-              <Text style={styles.date}>{dateStr}</Text>
-            </View>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>
-                {focusCount > 0 
-                  ? `${t('home.checkins', { n: travelCount })} · ${t('home.focuses', { n: focusCount })}`
-                  : t('home.checkins', { n: travelCount })}
-              </Text>
-            </View>
+        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+          {/* 左侧：今天 + 日期 */}
+          <View style={styles.titleBlock}>
+            <Text style={styles.title}>{t('home.today')}</Text>
+            <Text style={styles.date}>{dateStr}</Text>
           </View>
 
-          {/* 场景切换器 (Travel vs Focus) */}
+          {/* 右侧：模式切换分段器 (🚗 行程轨迹 vs ⏱ 室内专注) */}
           <View style={styles.sceneToggleWrap}>
-            <View style={styles.sceneToggle}>
-              <TouchableOpacity
-                style={[styles.sceneToggleBtn, scene === 'travel' && styles.sceneToggleBtnActive]}
-                onPress={() => setScene('travel')}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.sceneToggleText, scene === 'travel' && styles.sceneToggleTextActive]}>{t('home.sceneTravel', '🚗 行程轨迹')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.sceneToggleBtn, scene === 'focus' && styles.sceneToggleBtnActive]}
-                onPress={() => setScene('focus')}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.sceneToggleText, scene === 'focus' && styles.sceneToggleTextActive]}>{t('home.sceneFocus', '🍅 室内专注')}</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={[styles.sceneToggleBtn, scene === 'travel' && styles.sceneToggleBtnActive]}
+              onPress={() => setScene('travel')}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="car-outline"
+                size={15}
+                color={scene === 'travel' ? '#B3302C' : '#5C4B43'}
+              />
+              <Text style={[styles.sceneToggleText, scene === 'travel' && styles.sceneToggleTextActive]}>
+                {t('home.sceneTravel', '行程轨迹').replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.sceneToggleBtn, scene === 'focus' && styles.sceneToggleBtnActive]}
+              onPress={() => setScene('focus')}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="timer-outline"
+                size={15}
+                color={scene === 'focus' ? '#B3302C' : '#5C4B43'}
+              />
+              <Text style={[styles.sceneToggleText, scene === 'focus' && styles.sceneToggleTextActive]}>
+                {t('home.sceneFocus', '室内专注').replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')}
+              </Text>
+            </TouchableOpacity>
           </View>
-        </>
+        </View>
       )}
 
-      {/* 悬浮灵动定位胶囊（绝对定位，彻底消除页面抖动与布局推挤） */}
+      {/* 悬浮灵动定位胶囊 */}
       {activeLocStatus && (
         <Animated.View
           style={[
@@ -488,15 +646,17 @@ export default function HomeScreen() {
           >
             {activeLocStatus === 'pending' ? (
               <View style={styles.capsuleRow}>
-                <ActivityIndicator size="small" color={colors.primary} style={{ transform: [{ scale: 0.78 }] }} />
+                <ActivityIndicator size="small" color="#D63B3B" style={{ transform: [{ scale: 0.78 }] }} />
                 <Text style={styles.capsuleTextPending}>{t('home.locPending')}</Text>
               </View>
             ) : (
               <View style={styles.capsuleRow}>
-                <Ionicons name="warning-outline" size={14} color={colors.danger} />
+                <Ionicons name="warning-outline" size={14} color="#D63B3B" />
                 <Text style={styles.capsuleTextDanger}>
-                  {activeLocStatus === 'denied' ? t('home.locDenied')
-                    : activeLocStatus === 'services' ? t('home.locServices')
+                  {activeLocStatus === 'denied'
+                    ? t('home.locDenied')
+                    : activeLocStatus === 'services'
+                    ? t('home.locServices')
                     : t('home.locFailed')}
                 </Text>
               </View>
@@ -505,69 +665,250 @@ export default function HomeScreen() {
         </Animated.View>
       )}
 
+      {/* 主视图内容 */}
       {scene === 'travel' ? (
         <>
-          <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* 行程统计 3 列卡片 */}
+          <View style={styles.statsCard}>
+            <View style={styles.statsCol}>
+              <Text style={styles.statsValue}>{travelCount}</Text>
+              <Text style={styles.statsLabel}>{t('home.statCheckins')}</Text>
+            </View>
+            <View style={[styles.statsCol, styles.statsColBorder]}>
+              <Text style={styles.statsValue}>{travelTripsCount}</Text>
+              <Text style={styles.statsLabel}>{t('home.statTrips')}</Text>
+            </View>
+            <View style={styles.statsCol}>
+              <Text style={styles.statsValue}>
+                {travelCount > 1 ? formatDuration(travelDurationSec, lang) : '--'}
+              </Text>
+              <Text style={styles.statsLabel}>{t('home.statElapsed')}</Text>
+            </View>
+          </View>
+
+          {/* 时间轴滚动区 */}
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
             <Timeline
-              records={records}
+              records={travelRecords}
               estimate={estimate}
               onRename={openRename}
               onShowMap={setMapTrip}
               onShowReceipt={setReceiptTrip}
-              onBackfill={openBackfill}
+              onChangeSegmentMode={handleOpenSegmentMode}
               hasActiveTrip={hasActiveTrip}
             />
           </ScrollView>
 
-          {/* 底部居中全宽操作区 */}
-          <View style={styles.composer}>
-            <TransportPicker selected={mode} onSelect={setMode} />
-            <View style={styles.gap} />
-            <View style={styles.checkinWrap}>
-              <CheckInButton
-                onPress={() => handleCheckIn(false)}
-                onLongPress={() => handleCheckIn(true)}
-                loading={loading}
-                success={success}
-              />
+          {/* 底部操作区：出行方式 + 补记 + 打卡 */}
+          <View style={styles.bottomComposer}>
+            {/* 出行方式 6 宫格 */}
+            <View style={styles.modesGrid}>
+              {PRIMARY_MODES.map((m) => {
+                const isSelected = mode === m;
+                return (
+                  <TouchableOpacity
+                    key={'mode-btn-' + m}
+                    style={[styles.modeBtn, isSelected && styles.modeBtnActive]}
+                    onPress={async () => {
+                      setMode(m);
+                      await setLastMode(m);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <ModeIcon mode={m} size={20} color={isSelected ? '#B3302C' : '#4A3F39'} />
+                    <Text style={[styles.modeBtnText, isSelected && styles.modeBtnTextActive]}>
+                      {t('mode.' + m)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* 第 6 个：更多 */}
+              <TouchableOpacity
+                style={[
+                  styles.modeBtnMore,
+                  MORE_MODES.includes(mode) && styles.modeBtnActive,
+                ]}
+                onPress={() => setShowMoreModes(true)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="ellipsis-horizontal"
+                  size={20}
+                  color={MORE_MODES.includes(mode) ? '#B3302C' : '#4A3F39'}
+                />
+                <Text
+                  style={[
+                    styles.modeBtnText,
+                    MORE_MODES.includes(mode) && styles.modeBtnTextActive,
+                  ]}
+                >
+                  {MORE_MODES.includes(mode) ? t('mode.' + mode) : t('home.moreModes')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 核心操作行：[+ 补记] 与 [打卡] */}
+            <View style={styles.actionBtnRow}>
+              {/* 独立补记按钮 */}
+              <TouchableOpacity
+                style={styles.backfillSquareBtn}
+                onPress={() => setBackfillVisible(true)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add" size={22} color="#B3302C" />
+                <Text style={styles.backfillSquareText}>{t('home.backfill')}</Text>
+              </TouchableOpacity>
+
+              {/* 核心打卡主按钮（带物理下潜与环形蓄力充能） */}
+              <Animated.View style={[{ flex: 1 }, { transform: [{ scale: checkinScale }] }]}>
+                <Pressable
+                  style={[
+                    styles.checkinMainBtn,
+                    success === 'ended' && styles.checkinBtnEnded,
+                    success === true && styles.checkinBtnSuccess,
+                  ]}
+                  onPressIn={handleCheckinPressIn}
+                  onPressOut={handleCheckinPressOut}
+                  onPress={handleCheckinPress}
+                  onLongPress={handleCheckinLongPress}
+                  delayLongPress={650}
+                  disabled={loading || !!success}
+                >
+                  {/* 长按充能内衬 */}
+                  <Animated.View
+                    style={[
+                      styles.chargeFill,
+                      {
+                        width: chargeProgress.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0%', '100%'],
+                        }),
+                        opacity: chargeProgress.interpolate({
+                          inputRange: [0, 0.2, 1],
+                          outputRange: [0, 0.15, 0.35],
+                        }),
+                      },
+                    ]}
+                  />
+
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : success ? (
+                    <View style={styles.checkinInnerRow}>
+                      <Text style={{ fontSize: 22, color: '#fff' }}>
+                        {success === 'ended' ? '🏁' : '✓'}
+                      </Text>
+                      <View style={styles.checkinTextGroup}>
+                        <Text style={styles.checkinBtnTitle}>
+                          {success === 'ended' ? t('checkin.ended') : t('checkin.done')}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.checkinInnerRow}>
+                      {/* 指纹图标与环形充能圈 */}
+                      <View style={styles.fingerRingWrap}>
+                        <Svg width={40} height={40}>
+                          {/* 环形底轨 */}
+                          <Circle
+                            cx={20}
+                            cy={20}
+                            r={17}
+                            stroke="rgba(255,255,255,0.25)"
+                            strokeWidth={3}
+                            fill="none"
+                          />
+                          {/* 充能进度环 */}
+                          <AnimatedCircle
+                            cx={20}
+                            cy={20}
+                            r={17}
+                            stroke="#FFFFFF"
+                            strokeWidth={3}
+                            strokeDasharray={106.8}
+                            strokeDashoffset={chargeProgress.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [106.8, 0],
+                            })}
+                            strokeLinecap="round"
+                            fill="none"
+                            transform="rotate(-90 20 20)"
+                          />
+                        </Svg>
+                        <View style={styles.fingerIconCenter}>
+                          <Ionicons name="finger-print-outline" size={24} color="#fff" />
+                        </View>
+                      </View>
+
+                      <View style={styles.checkinTextGroup}>
+                        <Text style={styles.checkinBtnTitle}>{t('checkin.btn')}</Text>
+                        <Text style={styles.checkinBtnSub}>{t('checkin.hint')}</Text>
+                      </View>
+                    </View>
+                  )}
+                </Pressable>
+              </Animated.View>
             </View>
           </View>
         </>
       ) : (
-        <View style={[styles.focusContainer, isFocusRunning && { paddingTop: insets.top, paddingBottom: insets.bottom, flex: 1 }]}>
+        /* 室内专注模式 */
+        <View
+          style={[
+            styles.focusContainer,
+            isFocusRunning && { paddingTop: insets.top, paddingBottom: insets.bottom, flex: 1 },
+          ]}
+        >
           <PomodoroTimer
             onStartFocus={handleStartFocus}
             onSaveFocus={handleSaveFocus}
             todayFocusCount={focusCount}
             todayFocusSec={todayFocusSec}
+            todayFocusRecords={focusRecords}
+            onUpdateRecord={handleUpdateFocusRecord}
+            onDeleteRecord={handleDeleteFocusRecord}
             onGoInsights={() => navigation.navigate('Insights')}
             onRunningChange={setIsFocusRunning}
           />
         </View>
       )}
 
-      {/* 地名与交通方式编辑弹窗 */}
+      {/* 补记抽屉面板 */}
+      <BackfillModal
+        visible={backfillVisible}
+        onClose={() => setBackfillVisible(false)}
+        onSave={handleSaveBackfill}
+        commonPlaces={commonPlaces}
+        initialMode={mode}
+      />
+
+      {/* 地名编辑弹窗 */}
       <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={closeRename}>
         <View style={styles.overlay}>
           <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{renameTarget?.mode === 'focus' ? t('home.renameFocusTitle') : t('home.renameTitle')}</Text>
-            <Text style={styles.dialogSub}>{renameTarget?.mode === 'focus' ? t('home.renameFocusSub') : t('home.renameSub')}</Text>
+            <Text style={styles.dialogTitle}>{t('home.renameTitle')}</Text>
+            <Text style={styles.dialogSub}>{t('home.renameSub')}</Text>
             <TextInput
               style={styles.input}
               value={draftName}
               onChangeText={setDraftName}
-              placeholder={renameTarget?.mode === 'focus' ? t('home.renameFocusPlaceholder') : t('home.renamePlaceholder')}
-              placeholderTextColor={colors.ink3}
+              placeholder={t('home.renamePlaceholder')}
+              placeholderTextColor="#9A8A80"
               autoFocus={false}
               returnKeyType="done"
               onSubmitEditing={confirmRename}
             />
 
-            {/* 弱网/离线地点快选 或 专注分类快选 */}
-            {(renameTarget?.mode === 'focus' ? FOCUS_PRESETS_KEYS : commonPlaces).length > 0 && (
+            {/* 常用地点快选 */}
+            {commonPlaces.length > 0 && (
               <View style={styles.quickPlaceWrap}>
                 <View style={styles.chipRow}>
-                  {(renameTarget?.mode === 'focus' ? FOCUS_PRESETS_KEYS.map(k => t(k)) : commonPlaces).map((place, pIdx) => {
+                  {commonPlaces.map((place, pIdx) => {
                     const isSelected = draftName === place;
                     return (
                       <TouchableOpacity
@@ -576,126 +917,10 @@ export default function HomeScreen() {
                         onPress={() => setDraftName(place)}
                         activeOpacity={0.7}
                       >
-                        {renameTarget?.mode !== 'focus' && (
-                          <Ionicons
-                            name="location-outline"
-                            size={12}
-                            color={isSelected ? colors.primaryStrong : colors.ink2}
-                          />
-                        )}
-                        <Text style={[styles.quickChipText, isSelected && styles.quickChipTextActive]}>
-                          {place}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
-            {/* 切换出行方式（专注模式下不显示） */}
-            {renameTarget?.mode !== 'focus' && (
-              <>
-                <Text style={styles.dialogSectionLabel}>{t('home.editMode')}</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dialogModeScroll}>
-                  {MODE_KEYS.map((k) => {
-                    const on = draftMode === k;
-                    return (
-                      <TouchableOpacity
-                        key={k}
-                        style={[styles.dialogModeItem, on && styles.dialogModeItemSelected]}
-                        onPress={() => setDraftMode(k)}
-                        activeOpacity={0.7}
-                      >
-                        <ModeIcon mode={k} size={16} color={on ? colors.primaryStrong : colors.ink2} />
-                        <Text style={[styles.dialogModeLabel, on && styles.dialogModeLabelSelected]}>{t(`mode.${k}`)}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </>
-            )}
-
-            <View style={styles.dialogRow}>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeRename}>
-                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmRename}>
-                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.dialogFooterRow}>
-              {hasActiveTrip && records.length > 0 && renameTarget && renameTarget.id === records[records.length - 1].id ? (
-                <TouchableOpacity style={styles.dialogEndTrip} onPress={handleModalEndTrip} activeOpacity={0.6}>
-                  <Ionicons name="flag-outline" size={15} color={colors.primary} />
-                  <Text style={styles.dialogEndTripText}>{t('trip.markAsEnd')}</Text>
-                </TouchableOpacity>
-              ) : (
-                <View />
-              )}
-              <TouchableOpacity style={styles.dialogDelete} onPress={confirmDelete} activeOpacity={0.6}>
-                <Ionicons name="trash-outline" size={15} color={colors.danger} />
-                <Text style={styles.dialogDeleteText}>{t('home.deleteBtn')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 补记打卡弹窗（离线/遗漏打卡补录） */}
-      <Modal visible={backfillVisible} transparent animationType="fade" onRequestClose={closeBackfill}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('home.backfillTitle')}</Text>
-            <Text style={styles.dialogSub}>{t('home.backfillSub')}</Text>
-
-            {/* 1. 时间偏移选择器 */}
-            <Text style={styles.dialogSectionLabel}>{t('home.backfillTime')}</Text>
-            <View style={styles.timeOffsetRow}>
-              {BACKFILL_OFFSETS.map((item) => {
-                const on = backfillOffset === item.min;
-                return (
-                  <TouchableOpacity
-                    key={item.min}
-                    style={[styles.timeChip, on && styles.timeChipSelected]}
-                    onPress={() => setBackfillOffset(item.min)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.timeChipText, on && styles.timeChipTextSelected]}>
-                      {t(item.labelKey)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* 2. 地点输入与常用地点快选 */}
-            <Text style={styles.dialogSectionLabel}>{t('home.backfillLocation')}</Text>
-            <TextInput
-              style={styles.input}
-              value={backfillName}
-              onChangeText={setBackfillName}
-              placeholder={t('home.renamePlaceholder')}
-              placeholderTextColor={colors.ink3}
-              returnKeyType="done"
-            />
-            {commonPlaces.length > 0 && (
-              <View style={styles.quickPlaceWrap}>
-                <View style={styles.chipRow}>
-                  {commonPlaces.map((place, pIdx) => {
-                    const isSelected = backfillName === place;
-                    return (
-                      <TouchableOpacity
-                        key={'backfill-place-' + pIdx}
-                        style={[styles.quickChip, isSelected && styles.quickChipActive]}
-                        onPress={() => setBackfillName(place)}
-                        activeOpacity={0.7}
-                      >
                         <Ionicons
                           name="location-outline"
                           size={12}
-                          color={isSelected ? colors.primaryStrong : colors.ink2}
+                          color={isSelected ? '#B3302C' : '#5C4B43'}
                         />
                         <Text style={[styles.quickChipText, isSelected && styles.quickChipTextActive]}>
                           {place}
@@ -707,240 +932,680 @@ export default function HomeScreen() {
               </View>
             )}
 
-            {/* 3. 切换出行方式 */}
-            <Text style={styles.dialogSectionLabel}>{t('home.editMode')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dialogModeScroll}>
-              {MODE_KEYS.map((k) => {
-                const on = backfillMode === k;
-                return (
+            {/* 修改打卡时间 */}
+            <Text style={styles.dialogSectionLabel}>{t('home.editTime')}</Text>
+            <View style={styles.timeEditRow}>
+              <View style={styles.timeDisplayPill}>
+                <Ionicons name="time-outline" size={16} color="#B3302C" />
+                <Text style={styles.timeDisplayText}>{formatTime(draftTimestamp)}</Text>
+              </View>
+              <View style={styles.timeOffsetBtns}>
+                {[-10, -5, 5, 10].map((delta) => (
                   <TouchableOpacity
-                    key={k}
-                    style={[styles.dialogModeItem, on && styles.dialogModeItemSelected]}
-                    onPress={() => setBackfillMode(k)}
+                    key={'time-adj-' + delta}
+                    style={styles.timeOffsetBtn}
+                    onPress={() => setDraftTimestamp((prev) => prev + delta * 60 * 1000)}
                     activeOpacity={0.7}
                   >
-                    <ModeIcon mode={k} size={16} color={on ? colors.primaryStrong : colors.ink2} />
-                    <Text style={[styles.dialogModeLabel, on && styles.dialogModeLabelSelected]}>{t(`mode.${k}`)}</Text>
+                    <Text style={styles.timeOffsetBtnText}>
+                      {delta > 0 ? `+${delta}分` : `${delta}分`}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* 修改出行方式 */}
+            <Text style={styles.dialogSectionLabel}>{t('home.editMode')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dialogModeScroll}>
+              {[...PRIMARY_MODES, ...MORE_MODES].map((m) => {
+                const isSelected = draftMode === m;
+                return (
+                  <TouchableOpacity
+                    key={'rename-mode-' + m}
+                    style={[styles.dialogModeChip, isSelected && styles.dialogModeChipActive]}
+                    onPress={() => setDraftMode(m)}
+                    activeOpacity={0.7}
+                  >
+                    <ModeIcon mode={m} size={15} color={isSelected ? '#B3302C' : '#5C4B43'} />
+                    <Text style={[styles.dialogModeChipText, isSelected && styles.dialogModeChipTextActive]}>
+                      {t('mode.' + m)}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
 
-            <View style={styles.dialogRow}>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeBackfill}>
-                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+            {/* 设为终点与删除 */}
+            <View style={styles.dialogActionRow}>
+              {hasActiveTrip && (
+                <TouchableOpacity style={styles.endTripBtn} onPress={handleModalEndTrip}>
+                  <Ionicons name="flag-outline" size={14} color="#5C4B43" />
+                  <Text style={styles.endTripBtnText}>{t('trip.markAsEnd')}</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.deleteLink} onPress={confirmDelete}>
+                <Ionicons name="trash-outline" size={14} color="#D63B3B" />
+                <Text style={styles.deleteLinkText}>{t('home.deleteBtn')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={handleSaveBackfill}>
-                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
+            </View>
+
+            {/* 确认 / 取消 */}
+            <View style={styles.dialogButtons}>
+              <TouchableOpacity style={styles.dialogBtnCancel} onPress={closeRename}>
+                <Text style={styles.dialogBtnCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dialogBtnConfirm} onPress={confirmRename}>
+                <Text style={styles.dialogBtnConfirmText}>{t('common.save')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* 线路轨迹地图（全屏） */}
-      <RouteMapScreen visible={mapTrip != null} tripRecords={mapTrip?.records || []} onClose={() => setMapTrip(null)} />
+      {/* 修改路段出行方式弹窗 */}
+      <Modal visible={!!segmentTarget} transparent animationType="fade" onRequestClose={() => setSegmentTarget(null)}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('home.changeSegmentMode')}</Text>
+            <View style={styles.segModeGrid}>
+              {[...PRIMARY_MODES, ...MORE_MODES].map((m) => {
+                const isCur = (segmentTarget?.mode || 'walk') === m;
+                return (
+                  <TouchableOpacity
+                    key={'seg-mode-' + m}
+                    style={[styles.segModeItem, isCur && styles.segModeItemActive]}
+                    onPress={() => handleConfirmSegmentMode(m)}
+                    activeOpacity={0.7}
+                  >
+                    <ModeIcon mode={m} size={18} color={isCur ? '#B3302C' : '#5C4B43'} />
+                    <Text style={[styles.segModeText, isCur && styles.segModeTextActive]}>
+                      {t('mode.' + m)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity style={styles.dialogBtnCancelFull} onPress={() => setSegmentTarget(null)}>
+              <Text style={styles.dialogBtnCancelText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
-      {/* 行程小票卡片（弹窗） */}
-      <TripReceiptModal visible={receiptTrip != null} trip={receiptTrip} onClose={() => setReceiptTrip(null)} />
+      {/* 更多出行方式弹窗 */}
+      <Modal visible={showMoreModes} transparent animationType="fade" onRequestClose={() => setShowMoreModes(false)}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('home.moreModesTitle')}</Text>
+            <View style={styles.segModeGrid}>
+              {MORE_MODES.map((m) => {
+                const isCur = mode === m;
+                return (
+                  <TouchableOpacity
+                    key={'more-mode-' + m}
+                    style={[styles.segModeItem, isCur && styles.segModeItemActive]}
+                    onPress={async () => {
+                      setMode(m);
+                      await setLastMode(m);
+                      setShowMoreModes(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <ModeIcon mode={m} size={20} color={isCur ? '#B3302C' : '#5C4B43'} />
+                    <Text style={[styles.segModeText, isCur && styles.segModeTextActive]}>
+                      {t('mode.' + m)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity style={styles.dialogBtnCancelFull} onPress={() => setShowMoreModes(false)}>
+              <Text style={styles.dialogBtnCancelText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 轨迹地图模态框 */}
+      {mapTrip && (
+        <RouteMapScreen
+          visible={!!mapTrip}
+          trip={mapTrip}
+          onClose={() => setMapTrip(null)}
+        />
+      )}
+
+      {/* 行程小票模态框 */}
+      {receiptTrip && (
+        <TripReceiptModal
+          visible={!!receiptTrip}
+          trip={receiptTrip}
+          onClose={() => setReceiptTrip(null)}
+        />
+      )}
     </View>
   );
 }
 
-const makeStyles = (colors) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingBottom: 10,
-  },
-  titleBlock: { flex: 1 },
-  title: { fontSize: 28, fontWeight: '800', color: colors.ink, letterSpacing: -0.6, lineHeight: 32 },
-  date: { fontSize: 13, color: colors.ink2, marginTop: 4, fontWeight: '500' },
-  badge: {
-    backgroundColor: colors.primarySoft, borderRadius: 999,
-    paddingHorizontal: 13, paddingVertical: 6,
-    borderWidth: 1, borderColor: colors.line,
-  },
-  badgeText: { fontSize: 12, color: colors.primaryStrong, fontWeight: '700' },
-
-  floatingCapsule: {
-    position: 'absolute',
-    alignSelf: 'center',
-    zIndex: 999,
-    borderRadius: 999,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...shadow.float,
-  },
-  capsuleInner: {
-    paddingVertical: 7,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-  },
-  capsuleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  capsuleTextPending: {
-    fontSize: 12,
-    color: colors.ink2,
-    fontWeight: '500',
-  },
-  capsuleTextDanger: {
-    fontSize: 12,
-    color: colors.danger,
-    fontWeight: '600',
-  },
-
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingBottom: 12 },
-
-  composer: {
-    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12,
-    backgroundColor: colors.bg,
-  },
-  focusContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  gap: { height: 10 },
-  checkinWrap: { width: '100%' },
-
-  overlay: {
-    flex: 1, backgroundColor: colors.scrim,
-    alignItems: 'center', justifyContent: 'center', padding: 28,
-  },
-  dialog: { width: '100%', backgroundColor: colors.surface, borderRadius: 20, padding: 20 },
-  dialogTitle: { fontSize: 18, fontWeight: '700', color: colors.ink },
-  dialogSub: { fontSize: 13, color: colors.ink3, marginTop: 4 },
-  input: {
-    marginTop: 14, borderWidth: 1.5, borderColor: colors.line2, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: colors.ink,
-    backgroundColor: colors.chip,
-  },
-  dialogSectionLabel: {
-    fontSize: 13, color: colors.ink2, fontWeight: '600', marginTop: 14, marginBottom: 8,
-  },
-  dialogModeScroll: { flexDirection: 'row', gap: 8, paddingVertical: 2 },
-  dialogModeItem: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
-    paddingVertical: 8, paddingHorizontal: 11, borderRadius: 10, backgroundColor: colors.chip,
-    borderWidth: 1.5, borderColor: colors.line,
-  },
-  dialogModeItemSelected: {
-    backgroundColor: colors.primarySoft, borderColor: colors.primary,
-  },
-  dialogModeLabel: { fontSize: 12, color: colors.ink2, fontWeight: '600' },
-  dialogModeLabelSelected: { color: colors.primaryStrong },
-
-  dialogRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  dialogBtn: { flex: 1, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  dialogCancel: { backgroundColor: colors.chip },
-  dialogCancelText: { fontSize: 15, color: colors.ink2, fontWeight: '600' },
-  dialogOk: { backgroundColor: colors.primary },
-  dialogOkText: { fontSize: 15, color: '#fff', fontWeight: '700' },
-
-  dialogFooterRow: {
-    marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.line,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  dialogEndTrip: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  dialogEndTripText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
-  dialogDelete: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  dialogDeleteText: { fontSize: 13, color: colors.danger, fontWeight: '600' },
-
-  timeOffsetRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 7,
-    marginTop: 2,
-  },
-  timeChip: {
-    paddingVertical: 7,
-    paddingHorizontal: 11,
-    borderRadius: 10,
-    backgroundColor: colors.chip,
-    borderWidth: 1.5,
-    borderColor: colors.line,
-  },
-  timeChipSelected: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-  timeChipText: {
-    fontSize: 12,
-    color: colors.ink2,
-    fontWeight: '600',
-  },
-  timeChipTextSelected: {
-    color: colors.primaryStrong,
-    fontWeight: '700',
-  },
-  quickPlaceWrap: {
-    marginTop: 8,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  quickChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    backgroundColor: colors.chip,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  quickChipActive: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-  quickChipText: {
-    fontSize: 12,
-    color: colors.ink2,
-    fontWeight: '500',
-  },
-  quickChipTextActive: {
-    color: colors.primaryStrong,
-    fontWeight: '700',
-  },
-  
-  sceneToggleWrap: {
-    paddingHorizontal: 20,
-    paddingBottom: 10,
-    alignItems: 'center',
-  },
-  sceneToggle: {
-    flexDirection: 'row',
-    backgroundColor: colors.chip,
-    borderRadius: 999,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  sceneToggleBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-  },
-  sceneToggleBtnActive: {
-    backgroundColor: colors.surface,
-    ...shadow.sm,
-  },
-  sceneToggleText: {
-    fontSize: 13,
-    color: colors.ink2,
-    fontWeight: '500',
-  },
-  sceneToggleTextActive: {
-    color: colors.ink,
-    fontWeight: '700',
-  },
-});
+const makeStyles = (colors) =>
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: '#FBF4ED',
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingBottom: 8,
+    },
+    titleBlock: {
+      justifyContent: 'center',
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: '800',
+      color: '#2B1F1A',
+      lineHeight: 28,
+    },
+    date: {
+      fontSize: 12,
+      color: '#6F5F57',
+      lineHeight: 16,
+      marginTop: 2,
+    },
+    sceneToggleWrap: {
+      flexDirection: 'row',
+      backgroundColor: '#F1E6DC',
+      borderRadius: 14,
+      padding: 3,
+      gap: 2,
+    },
+    sceneToggleBtn: {
+      height: 40,
+      paddingHorizontal: 12,
+      borderRadius: 11,
+      backgroundColor: 'transparent',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+    },
+    sceneToggleBtnActive: {
+      backgroundColor: '#fff',
+      shadowColor: '#502814',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.12,
+      shadowRadius: 3,
+      elevation: 2,
+    },
+    sceneToggleText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: '#5C4B43',
+    },
+    sceneToggleTextActive: {
+      fontWeight: '700',
+      color: '#B3302C',
+    },
+    statsCard: {
+      flexDirection: 'row',
+      marginHorizontal: 16,
+      marginBottom: 10,
+      paddingVertical: 8,
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: '#EFE2D7',
+      borderRadius: 16,
+    },
+    statsCol: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    statsColBorder: {
+      borderLeftWidth: 1,
+      borderRightWidth: 1,
+      borderColor: '#EFE2D7',
+    },
+    statsValue: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: '#2B1F1A',
+      lineHeight: 22,
+    },
+    statsLabel: {
+      fontSize: 11,
+      color: '#6F5F57',
+      marginTop: 2,
+    },
+    scroll: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: 12,
+      paddingBottom: 16,
+    },
+    bottomComposer: {
+      backgroundColor: '#FBF4ED',
+      paddingHorizontal: 12,
+      paddingTop: 10,
+      paddingBottom: Platform.OS === 'ios' ? 14 : 10,
+      shadowColor: '#784628',
+      shadowOffset: { width: 0, height: -6 },
+      shadowOpacity: 0.07,
+      shadowRadius: 14,
+      elevation: 8,
+    },
+    modesGrid: {
+      flexDirection: 'row',
+      gap: 6,
+      marginBottom: 10,
+    },
+    modeBtn: {
+      flex: 1,
+      height: 58,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: '#EADDD2',
+      backgroundColor: '#fff',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 3,
+    },
+    modeBtnActive: {
+      borderColor: '#D63B3B',
+      backgroundColor: '#FDE9E6',
+    },
+    modeBtnMore: {
+      flex: 1,
+      height: 58,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: '#CDBCAF',
+      borderStyle: 'dashed',
+      backgroundColor: 'transparent',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 3,
+    },
+    modeBtnText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#4A3F39',
+    },
+    modeBtnTextActive: {
+      fontWeight: '800',
+      color: '#B3302C',
+    },
+    actionBtnRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    backfillSquareBtn: {
+      width: 68,
+      height: 60,
+      borderRadius: 18,
+      borderWidth: 1.5,
+      borderColor: '#E4D5C9',
+      backgroundColor: '#fff',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 2,
+    },
+    backfillSquareText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: '#B3302C',
+    },
+    checkinMainBtn: {
+      width: '100%',
+      height: 60,
+      borderRadius: 18,
+      backgroundColor: '#D63B3B',
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#D63B3B',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.32,
+      shadowRadius: 14,
+      elevation: 6,
+      position: 'relative',
+      overflow: 'hidden',
+    },
+    checkinBtnEnded: {
+      backgroundColor: '#5C4B43',
+      shadowColor: '#5C4B43',
+    },
+    checkinBtnSuccess: {
+      backgroundColor: '#2E9E6B',
+      shadowColor: '#2E9E6B',
+    },
+    chargeFill: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      bottom: 0,
+      backgroundColor: '#FFFFFF',
+      borderRadius: 18,
+      zIndex: 1,
+    },
+    checkinInnerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      zIndex: 2,
+    },
+    fingerRingWrap: {
+      width: 40,
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    fingerIconCenter: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkinTextGroup: {
+      justifyContent: 'center',
+    },
+    checkinBtnTitle: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: '#fff',
+      letterSpacing: 4,
+      lineHeight: 24,
+    },
+    checkinBtnSub: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: '#fff',
+      opacity: 0.95,
+      lineHeight: 14,
+    },
+    timeEditRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 14,
+    },
+    timeDisplayPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: '#FDE9E6',
+      borderWidth: 1,
+      borderColor: '#D63B3B',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 10,
+    },
+    timeDisplayText: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: '#B3302C',
+    },
+    timeOffsetBtns: {
+      flexDirection: 'row',
+      gap: 6,
+    },
+    timeOffsetBtn: {
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+      backgroundColor: '#F8F1EA',
+      borderWidth: 1,
+      borderColor: '#EADDD2',
+      borderRadius: 8,
+    },
+    timeOffsetBtnText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: '#5C4B43',
+    },
+    focusContainer: {
+      flex: 1,
+    },
+    floatingCapsule: {
+      position: 'absolute',
+      left: 16,
+      right: 16,
+      zIndex: 99,
+      alignItems: 'center',
+    },
+    capsuleInner: {
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 20,
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: '#EFE2D7',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    capsuleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    capsuleTextPending: {
+      fontSize: 12,
+      color: '#6F5F57',
+    },
+    capsuleTextDanger: {
+      fontSize: 12,
+      color: '#D63B3B',
+      fontWeight: '600',
+    },
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 20,
+    },
+    dialog: {
+      width: '100%',
+      backgroundColor: '#fff',
+      borderRadius: 20,
+      padding: 20,
+    },
+    dialogTitle: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: '#2B1F1A',
+      marginBottom: 6,
+      textAlign: 'center',
+    },
+    dialogSub: {
+      fontSize: 13,
+      color: '#6F5F57',
+      marginBottom: 14,
+      textAlign: 'center',
+    },
+    input: {
+      height: 46,
+      borderWidth: 1.5,
+      borderColor: '#EADDD2',
+      borderRadius: 14,
+      paddingHorizontal: 12,
+      fontSize: 15,
+      color: '#2B1F1A',
+      marginBottom: 14,
+    },
+    quickPlaceWrap: {
+      marginBottom: 14,
+    },
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+    quickChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 10,
+      backgroundColor: '#F8F1EA',
+      borderWidth: 1,
+      borderColor: '#EADDD2',
+    },
+    quickChipActive: {
+      backgroundColor: '#FDE9E6',
+      borderColor: '#D63B3B',
+    },
+    quickChipText: {
+      fontSize: 12,
+      color: '#4A3F39',
+      fontWeight: '600',
+    },
+    quickChipTextActive: {
+      color: '#B3302C',
+      fontWeight: '700',
+    },
+    dialogSectionLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#5C4B43',
+      marginBottom: 8,
+    },
+    dialogModeScroll: {
+      gap: 8,
+      paddingBottom: 14,
+    },
+    dialogModeChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 12,
+      backgroundColor: '#F8F1EA',
+      borderWidth: 1,
+      borderColor: '#EADDD2',
+    },
+    dialogModeChipActive: {
+      backgroundColor: '#FDE9E6',
+      borderColor: '#D63B3B',
+    },
+    dialogModeChipText: {
+      fontSize: 13,
+      color: '#4A3F39',
+      fontWeight: '600',
+    },
+    dialogModeChipTextActive: {
+      color: '#B3302C',
+      fontWeight: '700',
+    },
+    dialogActionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+      borderTopWidth: 1,
+      borderTopColor: '#F3E9E0',
+      marginBottom: 10,
+    },
+    endTripBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    endTripBtnText: {
+      fontSize: 13,
+      color: '#5C4B43',
+      fontWeight: '600',
+    },
+    deleteLink: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    deleteLinkText: {
+      fontSize: 13,
+      color: '#D63B3B',
+      fontWeight: '700',
+    },
+    dialogButtons: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    dialogBtnCancel: {
+      flex: 1,
+      height: 44,
+      borderRadius: 14,
+      backgroundColor: '#F1E6DC',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dialogBtnCancelFull: {
+      width: '100%',
+      height: 44,
+      borderRadius: 14,
+      backgroundColor: '#F1E6DC',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 10,
+    },
+    dialogBtnCancelText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#5C4B43',
+    },
+    dialogBtnConfirm: {
+      flex: 1,
+      height: 44,
+      borderRadius: 14,
+      backgroundColor: '#D63B3B',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dialogBtnConfirmText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: '#fff',
+    },
+    segModeGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginVertical: 14,
+    },
+    segModeItem: {
+      width: '48%',
+      height: 44,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: '#EADDD2',
+      backgroundColor: '#fff',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    segModeItemActive: {
+      borderColor: '#D63B3B',
+      backgroundColor: '#FDE9E6',
+    },
+    segModeText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: '#4A3F39',
+    },
+    segModeTextActive: {
+      color: '#B3302C',
+      fontWeight: '800',
+    },
+  });

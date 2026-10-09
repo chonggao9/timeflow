@@ -7,16 +7,19 @@ import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import { radius, shadow } from '../theme';
 
+import { formatDuration } from '../utils/stats';
+import FocusHistoryModal from './FocusHistoryModal';
+
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-// 6 大类的 i18n key 和对应的彩色边框色（与分析页保持一致）
+// 6 大类的 i18n key 和对应的彩色色值（严格与设计稿色彩保持一致）
 const CATEGORY_ITEMS = [
-  { key: 'pomodoro.helpWork', icon: '💼', color: '#2F4B7C' },
-  { key: 'pomodoro.helpStudy', icon: '📚', color: '#E4572E' },
-  { key: 'pomodoro.helpCreate', icon: '🎨', color: '#E9A23B' },
-  { key: 'pomodoro.helpBodyMind', icon: '🧘', color: '#4E9F7D' },
-  { key: 'pomodoro.helpLife', icon: '🧹', color: '#5E9BC9' },
-  { key: 'pomodoro.helpPlan', icon: '💡', color: '#7B5EA7' },
+  { key: 'pomodoro.helpWork', icon: '💼', color: '#3B6FD6' },
+  { key: 'pomodoro.helpStudy', icon: '📚', color: '#D63B3B' },
+  { key: 'pomodoro.helpCreate', icon: '🎨', color: '#E58A1F' },
+  { key: 'pomodoro.helpBodyMind', icon: '🧘', color: '#2E9E6B' },
+  { key: 'pomodoro.helpLife', icon: '🧹', color: '#2B8FB5' },
+  { key: 'pomodoro.helpPlan', icon: '💡', color: '#7B5BC4' },
 ];
 
 const DURATION_PRESETS = [15, 25, 45, 60];
@@ -32,9 +35,19 @@ const AMBIENT_OPTIONS = [
   { key: 'stream', icon: 'water-outline', label: 'pomodoro.ambient_stream' },
 ];
 
-export default function PomodoroTimer({ onStartFocus, onSaveFocus, todayFocusCount = 0, todayFocusSec = 0, onGoInsights, onRunningChange }) {
+export default function PomodoroTimer({
+  onStartFocus,
+  onSaveFocus,
+  todayFocusCount = 0,
+  todayFocusSec = 0,
+  todayFocusRecords = [],
+  onUpdateRecord,
+  onDeleteRecord,
+  onGoInsights,
+  onRunningChange,
+}) {
   const { colors } = useTheme();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [durationSec, setDurationSec] = useState(25 * 60);
@@ -527,21 +540,84 @@ export default function PomodoroTimer({ onStartFocus, onSaveFocus, todayFocusCou
     );
   }
 
+  // 计算今日专注总时长与各分类占比
+  const todayFocusRecordsList = todayFocusRecords || [];
+  const totalFocusSecCalculated = todayFocusSec || todayFocusRecordsList.reduce((s, r) => s + (Number(r.duration) || 0), 0);
+  const totalFocusCountCalculated = todayFocusCount || todayFocusRecordsList.length;
+
+  const distributionBar = useMemo(() => {
+    if (!totalFocusSecCalculated || !todayFocusRecordsList.length) return [];
+    const map = {};
+    for (const r of todayFocusRecordsList) {
+      const catKey = r.category || 'unnamed';
+      const meta = CATEGORY_ITEMS.find(c => c.key === catKey);
+      const color = meta ? meta.color : '#B9A99D';
+      if (!map[catKey]) map[catKey] = { color, sec: 0 };
+      map[catKey].sec += Number(r.duration) || 0;
+    }
+    return Object.values(map).map(m => ({
+      color: m.color,
+      pct: Math.max(3, Math.round((m.sec / totalFocusSecCalculated) * 100)),
+    }));
+  }, [todayFocusRecordsList, totalFocusSecCalculated]);
+
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customMinutesInput, setCustomMinutesInput] = useState('');
+
+  const handleCustomDurationConfirm = () => {
+    const mins = parseInt(customMinutesInput, 10);
+    if (!isNaN(mins) && mins >= 1 && mins <= 180) {
+      handleDurationPreset(mins);
+      setShowCustomModal(false);
+    } else {
+      Alert.alert(t('pomodoro.customDurTitle', '自定义专注时长'), t('pomodoro.customDurHint', '请输入 1~180 之间的分钟数'));
+    }
+  };
+
   // ==================== IDLE STATE ====================
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Top Right: Today Stats */}
-      <TouchableOpacity style={styles.todayStats} onPress={onGoInsights} activeOpacity={0.7}>
-        <Text style={styles.todayStatsText}>
-          {t('pomodoro.todayStats', '今日 {n} 个 · {t}').replace('{n}', todayFocusCount).replace('{t}', formatShortDur(todayFocusSec))}
-        </Text>
-        <Ionicons name="chevron-forward" size={14} color={colors.primaryStrong} />
+      {/* 1. 今日专注卡片：点开看记录 */}
+      <TouchableOpacity
+        style={styles.todayFocusCard}
+        onPress={() => setShowHistoryModal(true)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.todayFocusHeader}>
+          <Text style={styles.todayFocusTitle}>{t('pomodoro.todayFocus', '今日专注')}</Text>
+          <Text style={styles.todayFocusStatText}>
+            {totalFocusCountCalculated} 次 · {formatDuration(totalFocusSecCalculated, lang)}
+          </Text>
+          <View style={styles.todayFocusRight}>
+            <Text style={styles.todayFocusViewLogs}>{t('pomodoro.viewRecords', '查看记录')}</Text>
+            <Ionicons name="chevron-forward" size={13} color="#5C4B43" />
+          </View>
+        </View>
+
+        {/* 用途分布条 */}
+        <View style={styles.todayFocusBar}>
+          {distributionBar.length > 0 ? (
+            distributionBar.map((b, idx) => (
+              <View
+                key={'bar-' + idx}
+                style={{
+                  width: `${b.pct}%`,
+                  backgroundColor: b.color,
+                  height: '100%',
+                }}
+              />
+            ))
+          ) : (
+            <View style={{ flex: 1, backgroundColor: '#EFE2D7' }} />
+          )}
+        </View>
       </TouchableOpacity>
 
-      {/* Section: Category (3x2 Grid) */}
+      {/* 2. 这次专注做什么？ (3x2 Grid) */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('pomodoro.categoryTitle', '专注分类')}</Text>
+          <Text style={styles.sectionTitle}>{t('pomodoro.whatToDo', '这次专注做什么？')}</Text>
           <TouchableOpacity onPress={() => setShowHelp(true)}>
             <Text style={styles.helpLink}>{t('pomodoro.categoryHelp', '分类说明')}</Text>
           </TouchableOpacity>
@@ -554,14 +630,17 @@ export default function PomodoroTimer({ onStartFocus, onSaveFocus, todayFocusCou
                 key={item.key}
                 style={[
                   styles.catBtn,
-                  isSelected && { borderColor: item.color, borderWidth: 2, backgroundColor: item.color + '15' },
+                  isSelected && { borderColor: '#D63B3B', borderWidth: 1.5, backgroundColor: '#FDE9E6' },
                 ]}
                 onPress={() => setCategory(item.key)}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.catLabel, isSelected && { fontWeight: '700', color: colors.ink }]}>{t(item.key)}</Text>
+                <View style={[styles.catBtnDot, { backgroundColor: item.color }]} />
+                <Text style={[styles.catLabel, isSelected && { fontWeight: '800', color: '#B3302C' }]}>
+                  {t(item.key).replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')}
+                </Text>
                 {isSelected && (
-                  <Ionicons name="checkmark" size={14} color={item.color} style={styles.catCheckIcon} />
+                  <Ionicons name="checkmark" size={14} color="#D63B3B" style={{ marginLeft: 2 }} />
                 )}
               </TouchableOpacity>
             );
@@ -569,84 +648,140 @@ export default function PomodoroTimer({ onStartFocus, onSaveFocus, todayFocusCou
         </View>
       </View>
 
-      {/* Section: Task Name */}
+      {/* 3. 具体内容输入框 */}
       <View style={styles.section}>
         <View style={styles.taskInputWrap}>
-          <Ionicons name="pencil-outline" size={18} color={colors.ink3} />
+          <Ionicons name="pencil-outline" size={16} color="#6F5F57" />
           <TextInput
             style={styles.taskInput}
             value={goalName}
             onChangeText={setGoalName}
-            placeholder={t('pomodoro.taskPlaceholder', '这次具体做什么?(可选,如:英语听力)')}
-            placeholderTextColor={colors.ink3}
+            placeholder={t('pomodoro.taskPlaceholder', '具体做什么？（选填，如：英语听力）')}
+            placeholderTextColor="#9A8A80"
             maxLength={30}
             returnKeyType="done"
           />
         </View>
       </View>
 
-      {/* Section: Duration Presets */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('pomodoro.durationTitle', '专注时长')}</Text>
-        <View style={styles.durRow}>
-          {DURATION_PRESETS.map(mins => {
-            const isActive = durationMin === mins;
-            return (
-              <TouchableOpacity
-                key={mins}
-                style={[styles.durBtn, isActive && styles.durBtnActive]}
-                onPress={() => handleDurationPreset(mins)}
-              >
-                <Text style={[styles.durText, isActive && styles.durTextActive]}>{mins}{t('pomodoro.minUnit', '分')}</Text>
-              </TouchableOpacity>
-            );
-          })}
-          <TouchableOpacity
-            style={[styles.durBtn, !DURATION_PRESETS.includes(durationMin) && styles.durBtnActive]}
-            onPress={() => {/* custom handled by dial */ }}
-          >
-            <Text style={[styles.durText, !DURATION_PRESETS.includes(durationMin) && styles.durTextActive]}>
-              {DURATION_PRESETS.includes(durationMin) ? t('pomodoro.custom', '自定义') : `${durationMin}${t('pomodoro.minUnit', '分')}`}
+      {/* 4. 居中计时大环 (200x200) */}
+      <View style={styles.dialWrap} {...dialResponder.panHandlers}>
+        <View style={styles.dialRing}>
+          <Svg width={200} height={200}>
+            <Circle cx={100} cy={100} r={90} stroke="#F1E3D8" strokeWidth={12} fill="none" />
+            <Circle cx={100} cy={100} r={90} stroke="#D63B3B" strokeWidth={12} fill="none" strokeLinecap="round" />
+          </Svg>
+          <View style={styles.dialTimeCenter}>
+            <Text style={styles.dialTimeText}>{formatTime(timeLeft)}</Text>
+            <Text style={styles.dialSubText}>
+              {category ? `${t(category).replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')} · ` : ''}
+              {t('pomodoro.focusDurLabel', '专注时长')}
             </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Timer Ring (smaller, for gesture adjustment) */}
-      <View style={styles.ringContainer} {...dialResponder.panHandlers}>
-        <Svg width={size} height={size}>
-          <Circle cx={cx} cy={cy} r={r} stroke={colors.line2} strokeWidth={strokeWidth} fill="none" />
-        </Svg>
-        <View style={styles.timeWrap}>
-          <Text style={styles.timeText}>{formatTime(timeLeft)}</Text>
-          <Text style={styles.timeSubCategory}>
-            {category ? `${t(CATEGORY_ITEMS.find(c => c.key === category)?.key || '')} · ` : ''}
-            {t('pomodoro.focusDurLabel', '专注时长')}
-          </Text>
-          <View style={styles.hintRow}>
-            <Ionicons name="swap-vertical" size={12} color={colors.ink3} />
-            <Text style={styles.hintText}>{t('pomodoro.adjustHint', '上下滑动调节')}</Text>
           </View>
         </View>
       </View>
 
-      {/* Sound Selector (collapsed) */}
-      <TouchableOpacity style={styles.soundRow} onPress={() => setShowAmbientPicker(true)} activeOpacity={0.7}>
-        <Ionicons name={currentAmbient?.icon || 'volume-mute-outline'} size={16} color={colors.ink2} />
-        <Text style={styles.soundLabel}>{t('pomodoro.bgSound', '背景声音')} · {currentAmbientLabel}</Text>
-        <Ionicons name="chevron-forward" size={14} color={colors.ink3} />
+      {/* 5. 时长选择器 (15, 25, 45, 60, 自定义) */}
+      <View style={styles.durGrid}>
+        {DURATION_PRESETS.map(mins => {
+          const isActive = durationMin === mins;
+          return (
+            <TouchableOpacity
+              key={'dur-' + mins}
+              style={[styles.durPill, isActive && styles.durPillActive]}
+              onPress={() => handleDurationPreset(mins)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.durPillText, isActive && styles.durPillTextActive]}>{mins}</Text>
+            </TouchableOpacity>
+          );
+        })}
+        <TouchableOpacity
+          style={[styles.durPillDashed, !DURATION_PRESETS.includes(durationMin) && styles.durPillActive]}
+          onPress={() => {
+            setCustomMinutesInput(String(durationMin));
+            setShowCustomModal(true);
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.durPillText, !DURATION_PRESETS.includes(durationMin) && styles.durPillTextActive]}>
+            {!DURATION_PRESETS.includes(durationMin) ? `${durationMin}分` : t('pomodoro.custom', '自定义')}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 6. 白噪声条 */}
+      <TouchableOpacity
+        style={styles.whiteNoiseBar}
+        onPress={() => setShowAmbientPicker(true)}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="cellular-outline" size={18} color="#4A3F39" />
+        <Text style={styles.whiteNoiseTitle}>{t('pomodoro.bgSound', '白噪声')}</Text>
+        <Text style={styles.whiteNoiseCurrent}>
+          {ambient === 'none' ? t('pomodoro.soundNone', '无声') : currentAmbientLabel}
+        </Text>
+        <Ionicons name="chevron-forward" size={14} color="#9A8A80" />
       </TouchableOpacity>
 
-      {/* Start Button */}
-      <Pressable
-        style={[styles.startBtn, !category && { opacity: 0.5 }]}
-        onPress={handleStart}
-      >
-        <Ionicons name="play" size={20} color="#fff" />
-        <Text style={styles.startBtnText}>
-          {t('pomodoro.start', '开始专注')} · {durationMin} {t('pomodoro.minUnit', '分')}
-        </Text>
-      </Pressable>
+      {/* 7. 底部开始按钮 */}
+      <View style={styles.startBtnWrap}>
+        <TouchableOpacity
+          style={[styles.startBtn, !category && { opacity: 0.85 }]}
+          onPress={handleStart}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="play" size={20} color="#fff" />
+          <Text style={styles.startBtnText}>
+            {t('pomodoro.startFocusWithMin', { min: durationMin })}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* FocusHistoryModal 弹窗 */}
+      <FocusHistoryModal
+        visible={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        records={todayFocusRecordsList}
+        onUpdateRecord={onUpdateRecord}
+        onDeleteRecord={onDeleteRecord}
+      />
+
+      {/* 自定义时长弹窗 */}
+      <Modal visible={showCustomModal} transparent animationType="fade" onRequestClose={() => setShowCustomModal(false)}>
+        <View style={styles.modalBg}>
+          <View style={styles.customDurDialog}>
+            <Text style={styles.modalTitle}>{t('pomodoro.customDurTitle', '自定义专注时长')}</Text>
+            <View style={styles.customDurInputRow}>
+              <TextInput
+                style={styles.customDurInput}
+                value={customMinutesInput}
+                onChangeText={setCustomMinutesInput}
+                placeholder="25"
+                placeholderTextColor="#9A8A80"
+                keyboardType="number-pad"
+                maxLength={3}
+                autoFocus
+              />
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#2B1F1A' }}>{t('pomodoro.minUnit', '分钟')}</Text>
+            </View>
+            <View style={styles.customDurBtnRow}>
+              <TouchableOpacity
+                style={styles.customDurBtnCancel}
+                onPress={() => setShowCustomModal(false)}
+              >
+                <Text style={styles.customDurBtnCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.customDurBtnConfirm}
+                onPress={handleCustomDurationConfirm}
+              >
+                <Text style={styles.customDurBtnConfirmText}>{t('common.done')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Ambient Picker Modal */}
       {renderAmbientModal()}
@@ -688,6 +823,213 @@ const makeStyles = (colors) => StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     paddingBottom: 40,
+  },
+  todayFocusCard: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#EFE2D7',
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  todayFocusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 28,
+  },
+  todayFocusTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#2B1F1A',
+  },
+  todayFocusStatText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#B3302C',
+  },
+  todayFocusRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  todayFocusViewLogs: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5C4B43',
+  },
+  todayFocusBar: {
+    flexDirection: 'row',
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+    gap: 2,
+    marginTop: 8,
+    backgroundColor: '#F3E4DB',
+  },
+  catBtnDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  dialWrap: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 12,
+  },
+  dialRing: {
+    position: 'relative',
+    width: 200,
+    height: 200,
+  },
+  dialTimeCenter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialTimeText: {
+    fontSize: 44,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: '#2B1F1A',
+    lineHeight: 48,
+  },
+  dialSubText: {
+    fontSize: 12,
+    color: '#6F5F57',
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  durGrid: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  durPill: {
+    flex: 1,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#EADDD2',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  durPillActive: {
+    borderColor: '#D63B3B',
+    backgroundColor: '#FDE9E6',
+  },
+  durPillDashed: {
+    flex: 1.2,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#CDBCAF',
+    borderStyle: 'dashed',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  durPillText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4A3F39',
+  },
+  durPillTextActive: {
+    fontWeight: '800',
+    color: '#B3302C',
+  },
+  whiteNoiseBar: {
+    width: '100%',
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#EFE2D7',
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    marginBottom: 14,
+  },
+  whiteNoiseTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4A3F39',
+  },
+  whiteNoiseCurrent: {
+    flex: 1,
+    textAlign: 'right',
+    fontSize: 13,
+    color: '#6F5F57',
+    marginRight: 4,
+  },
+  startBtnWrap: {
+    width: '100%',
+    marginBottom: 10,
+  },
+  customDurDialog: {
+    width: '85%',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+  },
+  customDurInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 18,
+  },
+  customDurInput: {
+    width: 100,
+    height: 48,
+    borderWidth: 1.5,
+    borderColor: '#D63B3B',
+    borderRadius: 14,
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+    color: '#2B1F1A',
+  },
+  customDurBtnRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+  },
+  customDurBtnCancel: {
+    flex: 1,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#F1E6DC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customDurBtnCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#5C4B43',
+  },
+  customDurBtnConfirm: {
+    flex: 1,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#D63B3B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customDurBtnConfirmText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
   todayStats: {
     flexDirection: 'row',

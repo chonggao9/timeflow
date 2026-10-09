@@ -4,15 +4,16 @@ TimeFlow v1.2.0 Release Notes (Google Play - versionCode: 22)
 
 【1. 简体中文版 (zh-CN) - 适用于 Google Play 更新说明，已严格控制在 500 字符以内】
 v1.2.0 更新说明：
-• 🍅 番茄专注全新升级：重构 3×2 分类大网格、15/25/45/60 分钟预设时长、任务独立备注；新增 8 款治愈环境白噪音（雨声/森林/海浪/篝火等）；全屏沉浸模式与整体居中对称双按钮，防误触防中断。
-• 📊 专注分析深度图谱：统一时间跨度筛选（今天/本周/本月/全部）；交互式专注柱图带断档标记；6 大分类二级 Top 5 细分任务展开；历史数据向前兼容智能归类。
-• 💡 黄金时段与习惯洞察：自动聚类四个时段，定位高产期并生成个性化智能分析报告。
-• 🎨 视觉体验与双语优化：界面细节严格对齐设计稿，修复多重图标，中英双语 100% 深度覆盖。
-• ⚡ 纯本地隐私优先：专注数据全本地加密安全存储，零追踪零泄露。
+• 🚀 首页全新架构改版：行程轨迹与室内专注深度模式隔离，界面独立纯粹；顶部统计卡片实时呈现。
+• 🚗 行程轨迹交互升级：进行中行程默认展开，历史行程优雅折叠；路段胶囊支持一键修改出行方式；打卡卡片支持地名、时间与方式微调。
+• 🔘 智能打卡与防误触：长按结程增加 650ms 环形充能进度与物理下潜反馈；底部独立「+补记」抽屉面板，快速回溯遗漏打卡。
+• 🍅 室内专注体验革新：待开始页新增「今日专注」卡片与多彩用途分布条；点开即可查看并补充历史用途；8款治愈白噪音陪伴。
+• 🌐 100% 中英双语对称，零网络依赖，数据纯本地安全隐私。
 
 【2. 英文版 (en-US) - For Google Play Console "What's new", within 500 characters】
 v1.2.0 What's New:
-• 🍅 Reimagined Pomodoro Focus: 3x2 category grid, duration presets (15/25/45/60m), distinct task notes, 8 ambient soundscapes (rain, forest, waves, cafe), and full-screen flow mode with centered dual action pills.
-• 📊 Focus Insights Dashboard: Unified time filters (Today/Week/Month/All), trend charts with gap dots, and expandable category breakdowns with Top 5 tasks.
-• 💡 Peak Hours & Habit Analytics: Discover your golden focus windows with smart insights.
-• 🌐 100% Bilingual polish throughout.
+• 🚀 Redesigned Home: Complete separation between Travel Trips & Indoor Focus modes with focused top stats.
+• 🚗 Interactive Travel Timeline: Ongoing trips auto-expanded; tap segment pills to edit transport mode; edit place name, time & mode directly.
+• 🔘 Hold-to-End Safety: Check-in button features 650ms circular charging ring; new Backfill drawer for rapid past check-ins.
+• 🍅 Reimagined Focus: Top daily focus summary card with color breakdown bar; interactive session log drawer; 8 ambient soundscapes.
+• 🌐 100% Bilingual polish & 100% offline local privacy.
