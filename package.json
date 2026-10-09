@@ -1,6 +1,6 @@
 {
   "name": "timeflow",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
@@ -24,6 +24,7 @@
     "crypto-js": "^4.1.1",
     "expo": "~53.0.0",
     "expo-asset": "~11.1.7",
+    "expo-av": "^16.0.8",
     "expo-build-properties": "~0.14.8",
     "expo-clipboard": "~7.1.5",
     "expo-constants": "~17.1.8",

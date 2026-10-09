@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, Text, ScrollView, StyleSheet, Alert, Modal, TextInput, TouchableOpacity, Linking, ActivityIndicator, Vibration, AppState, Animated,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   saveRecord, getRecords, getTodayRecords, getRecordById, updateRecord, deleteRecord, ensureTrip, endTrip,
@@ -22,9 +23,11 @@ import Timeline from '../components/Timeline';
 import CheckInButton from '../components/CheckInButton';
 import TransportPicker, { MODE_KEYS } from '../components/TransportPicker';
 import ModeIcon from '../components/ModeIcon';
+import PomodoroTimer from '../components/PomodoroTimer';
 import RouteMapScreen from './RouteMapScreen';
 import TripReceiptModal from '../components/TripReceiptModal';
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const FOCUS_PRESETS_KEYS = ['pomodoro.helpWork', 'pomodoro.helpStudy', 'pomodoro.helpCreate', 'pomodoro.helpBodyMind', 'pomodoro.helpLife', 'pomodoro.helpPlan'];
 
 const BACKFILL_OFFSETS = [
   { min: 0, labelKey: 'home.justNow' },
@@ -36,12 +39,24 @@ const BACKFILL_OFFSETS = [
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const { t, formatDate } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [scene, setScene] = useState('travel'); // 'travel' | 'focus'
+  const [isFocusRunning, setIsFocusRunning] = useState(false);
+
+  useEffect(() => {
+    navigation.setOptions({
+      tabBarStyle: isFocusRunning ? { display: 'none' } : undefined,
+    });
+    return () => {
+      navigation.setOptions({ tabBarStyle: undefined });
+    };
+  }, [isFocusRunning, navigation]);
   const [mode, setMode] = useState('walk');
   const [estimate, setEstimate] = useState(null);
   const [hasActiveTrip, setHasActiveTrip] = useState(false);
@@ -355,19 +370,89 @@ export default function HomeScreen() {
     }
   };
 
+  const handleStartFocus = async (data) => {
+    try {
+      await AsyncStorage.setItem('timeflow_active_focus', JSON.stringify({
+        startTs: Date.now(),
+        durationSec: data.durationSec,
+        goalName: data.goalName
+      }));
+      refreshWidget();
+    } catch (e) {}
+  };
+
+  const handleSaveFocus = async (data) => {
+    const tnow = Date.now();
+    try {
+      await AsyncStorage.removeItem('timeflow_active_focus');
+      const tripId = await ensureTrip();
+      const id = makeId();
+      await saveRecord({
+        id,
+        timestamp: tnow,
+        locationName: data.goalName,
+        lat: null,
+        lng: null,
+        mode: 'focus',
+        tripId,
+        duration: data.duration,
+        category: data.category,
+        note: data.note,
+      });
+      Vibration.vibrate(40);
+      await loadToday();
+      refreshWidget();
+      runBackupIfDue().catch(() => {});
+    } catch (e) {
+      Alert.alert(t('home.failTitle'), t('home.failBody'));
+    }
+  };
+
   const dateStr = formatDate(new Date());
+  const travelCount = records.filter(r => r.mode !== 'focus').length;
+  const focusRecords = records.filter(r => r.mode === 'focus');
+  const focusCount = focusRecords.length;
+  const todayFocusSec = focusRecords.reduce((sum, r) => sum + (Number(r.duration) || 0), 0);
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <View style={styles.titleBlock}>
-          <Text style={styles.title}>{t('home.today')}</Text>
-          <Text style={styles.date}>{dateStr}</Text>
-        </View>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{t('home.checkins', { n: records.length })}</Text>
-        </View>
-      </View>
+      {!(scene === 'focus' && isFocusRunning) && (
+        <>
+          <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+            <View style={styles.titleBlock}>
+              <Text style={styles.title}>{t('home.today')}</Text>
+              <Text style={styles.date}>{dateStr}</Text>
+            </View>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {focusCount > 0 
+                  ? `${t('home.checkins', { n: travelCount })} · ${t('home.focuses', { n: focusCount })}`
+                  : t('home.checkins', { n: travelCount })}
+              </Text>
+            </View>
+          </View>
+
+          {/* 场景切换器 (Travel vs Focus) */}
+          <View style={styles.sceneToggleWrap}>
+            <View style={styles.sceneToggle}>
+              <TouchableOpacity
+                style={[styles.sceneToggleBtn, scene === 'travel' && styles.sceneToggleBtnActive]}
+                onPress={() => setScene('travel')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.sceneToggleText, scene === 'travel' && styles.sceneToggleTextActive]}>{t('home.sceneTravel', '🚗 行程轨迹')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.sceneToggleBtn, scene === 'focus' && styles.sceneToggleBtnActive]}
+                onPress={() => setScene('focus')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.sceneToggleText, scene === 'focus' && styles.sceneToggleTextActive]}>{t('home.sceneFocus', '🍅 室内专注')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </>
+      )}
 
       {/* 悬浮灵动定位胶囊（绝对定位，彻底消除页面抖动与布局推挤） */}
       {activeLocStatus && (
@@ -420,54 +505,69 @@ export default function HomeScreen() {
         </Animated.View>
       )}
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Timeline
-          records={records}
-          estimate={estimate}
-          onRename={openRename}
-          onShowMap={setMapTrip}
-          onShowReceipt={setReceiptTrip}
-          onBackfill={openBackfill}
-          hasActiveTrip={hasActiveTrip}
-        />
-      </ScrollView>
+      {scene === 'travel' ? (
+        <>
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <Timeline
+              records={records}
+              estimate={estimate}
+              onRename={openRename}
+              onShowMap={setMapTrip}
+              onShowReceipt={setReceiptTrip}
+              onBackfill={openBackfill}
+              hasActiveTrip={hasActiveTrip}
+            />
+          </ScrollView>
 
-      {/* 底部居中全宽操作区 */}
-      <View style={styles.composer}>
-        <TransportPicker selected={mode} onSelect={setMode} />
-        <View style={styles.gap} />
-        <View style={styles.checkinWrap}>
-          <CheckInButton
-            onPress={() => handleCheckIn(false)}
-            onLongPress={() => handleCheckIn(true)}
-            loading={loading}
-            success={success}
+          {/* 底部居中全宽操作区 */}
+          <View style={styles.composer}>
+            <TransportPicker selected={mode} onSelect={setMode} />
+            <View style={styles.gap} />
+            <View style={styles.checkinWrap}>
+              <CheckInButton
+                onPress={() => handleCheckIn(false)}
+                onLongPress={() => handleCheckIn(true)}
+                loading={loading}
+                success={success}
+              />
+            </View>
+          </View>
+        </>
+      ) : (
+        <View style={[styles.focusContainer, isFocusRunning && { paddingTop: insets.top, paddingBottom: insets.bottom, flex: 1 }]}>
+          <PomodoroTimer
+            onStartFocus={handleStartFocus}
+            onSaveFocus={handleSaveFocus}
+            todayFocusCount={focusCount}
+            todayFocusSec={todayFocusSec}
+            onGoInsights={() => navigation.navigate('Insights')}
+            onRunningChange={setIsFocusRunning}
           />
         </View>
-      </View>
+      )}
 
       {/* 地名与交通方式编辑弹窗 */}
       <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={closeRename}>
         <View style={styles.overlay}>
           <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('home.renameTitle')}</Text>
-            <Text style={styles.dialogSub}>{t('home.renameSub')}</Text>
+            <Text style={styles.dialogTitle}>{renameTarget?.mode === 'focus' ? t('home.renameFocusTitle') : t('home.renameTitle')}</Text>
+            <Text style={styles.dialogSub}>{renameTarget?.mode === 'focus' ? t('home.renameFocusSub') : t('home.renameSub')}</Text>
             <TextInput
               style={styles.input}
               value={draftName}
               onChangeText={setDraftName}
-              placeholder={t('home.renamePlaceholder')}
+              placeholder={renameTarget?.mode === 'focus' ? t('home.renameFocusPlaceholder') : t('home.renamePlaceholder')}
               placeholderTextColor={colors.ink3}
               autoFocus={false}
               returnKeyType="done"
               onSubmitEditing={confirmRename}
             />
 
-            {/* 弱网/离线地点快选 */}
-            {commonPlaces.length > 0 && (
+            {/* 弱网/离线地点快选 或 专注分类快选 */}
+            {(renameTarget?.mode === 'focus' ? FOCUS_PRESETS_KEYS : commonPlaces).length > 0 && (
               <View style={styles.quickPlaceWrap}>
                 <View style={styles.chipRow}>
-                  {commonPlaces.map((place, pIdx) => {
+                  {(renameTarget?.mode === 'focus' ? FOCUS_PRESETS_KEYS.map(k => t(k)) : commonPlaces).map((place, pIdx) => {
                     const isSelected = draftName === place;
                     return (
                       <TouchableOpacity
@@ -476,11 +576,13 @@ export default function HomeScreen() {
                         onPress={() => setDraftName(place)}
                         activeOpacity={0.7}
                       >
-                        <Ionicons
-                          name="location-outline"
-                          size={12}
-                          color={isSelected ? colors.primaryStrong : colors.ink2}
-                        />
+                        {renameTarget?.mode !== 'focus' && (
+                          <Ionicons
+                            name="location-outline"
+                            size={12}
+                            color={isSelected ? colors.primaryStrong : colors.ink2}
+                          />
+                        )}
                         <Text style={[styles.quickChipText, isSelected && styles.quickChipTextActive]}>
                           {place}
                         </Text>
@@ -491,24 +593,28 @@ export default function HomeScreen() {
               </View>
             )}
 
-            {/* 切换出行方式 */}
-            <Text style={styles.dialogSectionLabel}>{t('home.editMode')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dialogModeScroll}>
-              {MODE_KEYS.map((k) => {
-                const on = draftMode === k;
-                return (
-                  <TouchableOpacity
-                    key={k}
-                    style={[styles.dialogModeItem, on && styles.dialogModeItemSelected]}
-                    onPress={() => setDraftMode(k)}
-                    activeOpacity={0.7}
-                  >
-                    <ModeIcon mode={k} size={16} color={on ? colors.primaryStrong : colors.ink2} />
-                    <Text style={[styles.dialogModeLabel, on && styles.dialogModeLabelSelected]}>{t(`mode.${k}`)}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+            {/* 切换出行方式（专注模式下不显示） */}
+            {renameTarget?.mode !== 'focus' && (
+              <>
+                <Text style={styles.dialogSectionLabel}>{t('home.editMode')}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dialogModeScroll}>
+                  {MODE_KEYS.map((k) => {
+                    const on = draftMode === k;
+                    return (
+                      <TouchableOpacity
+                        key={k}
+                        style={[styles.dialogModeItem, on && styles.dialogModeItemSelected]}
+                        onPress={() => setDraftMode(k)}
+                        activeOpacity={0.7}
+                      >
+                        <ModeIcon mode={k} size={16} color={on ? colors.primaryStrong : colors.ink2} />
+                        <Text style={[styles.dialogModeLabel, on && styles.dialogModeLabelSelected]}>{t(`mode.${k}`)}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            )}
 
             <View style={styles.dialogRow}>
               <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeRename}>
@@ -695,6 +801,11 @@ const makeStyles = (colors) => StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12,
     backgroundColor: colors.bg,
   },
+  focusContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   gap: { height: 10 },
   checkinWrap: { width: '100%' },
 
@@ -798,6 +909,38 @@ const makeStyles = (colors) => StyleSheet.create({
   },
   quickChipTextActive: {
     color: colors.primaryStrong,
+    fontWeight: '700',
+  },
+  
+  sceneToggleWrap: {
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    alignItems: 'center',
+  },
+  sceneToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.chip,
+    borderRadius: 999,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  sceneToggleBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+  },
+  sceneToggleBtnActive: {
+    backgroundColor: colors.surface,
+    ...shadow.sm,
+  },
+  sceneToggleText: {
+    fontSize: 13,
+    color: colors.ink2,
+    fontWeight: '500',
+  },
+  sceneToggleTextActive: {
+    color: colors.ink,
     fontWeight: '700',
   },
 });

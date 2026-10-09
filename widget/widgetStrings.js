@@ -18,6 +18,7 @@ export const MODE_EMOJIS = {
   train: '🚄',
   flight: '✈️',
   boat: '⛴️',
+  focus: '🍅',
 };
 
 // 最小字典：widget 用到的文案。system-infer 逻辑与 LanguageContext.systemLang() 一致。
@@ -35,6 +36,10 @@ const STRINGS = {
     emptyPrompt: '今日旅程尚未开启',
     emptySub: '轻触下方按钮，记录今日首次打卡',
     recentPlace: '最近地点',
+    focusing: '专注中',
+    endsAt: '结束于 ${t}',
+    focusUnnamed: '未命名专注',
+    returnFocus: '🍅 返回专注',
   },
   en: {
     title: 'TimeFlow',
@@ -49,6 +54,10 @@ const STRINGS = {
     emptyPrompt: 'Journey not started yet',
     emptySub: 'Tap below to record your first stop',
     recentPlace: 'Recent place',
+    focusing: 'Focusing',
+    endsAt: 'Ends at ${t}',
+    focusUnnamed: 'Unnamed focus',
+    returnFocus: '🍅 Return to Focus',
   },
 };
 

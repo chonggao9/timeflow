@@ -17,13 +17,22 @@ export function TimeFlowWidget({ data, colors, strings }) {
   const count = todayList.length;
   const maybeLatest = count > 0 ? todayList[count - 1] : null;
 
-  const place = maybeLatest
-    ? (maybeLatest.locationName && maybeLatest.locationName !== strings.unnamed
-        ? maybeLatest.locationName
-        : strings.placeEmpty)
-    : null;
-  const latestTime = maybeLatest ? data.fmt(maybeLatest.timestamp) : null;
-  const modeEmoji = maybeLatest?.mode ? (MODE_EMOJIS[maybeLatest.mode] || '📍') : '📍';
+  const activeFocus = data.activeFocus;
+  const isFocusing = !!activeFocus;
+
+  const place = isFocusing
+    ? (activeFocus.goalName && activeFocus.goalName !== '专注' ? activeFocus.goalName : strings.focusUnnamed)
+    : (maybeLatest
+      ? (maybeLatest.locationName && maybeLatest.locationName !== strings.unnamed
+          ? maybeLatest.locationName
+          : strings.placeEmpty)
+      : null);
+
+  const latestTime = isFocusing
+    ? strings.endsAt.replace('${t}', data.fmt(activeFocus.startTs + activeFocus.durationSec * 1000))
+    : (maybeLatest ? data.fmt(maybeLatest.timestamp) : null);
+
+  const modeEmoji = isFocusing ? MODE_EMOJIS.focus : (maybeLatest?.mode ? (MODE_EMOJIS[maybeLatest.mode] || '📍') : '📍');
 
   return (
     <FlexWidget
@@ -113,12 +122,12 @@ export function TimeFlowWidget({ data, colors, strings }) {
               }}
             >
               <TextWidget
-                text={`${modeEmoji} ${strings.recentPlace}`}
+                text={isFocusing ? `${modeEmoji} ${strings.focusing}` : `${modeEmoji} ${strings.recentPlace}`}
                 style={{ fontSize: 11, color: ink3, fontWeight: '600' }}
               />
               <TextWidget
                 text={latestTime || ''}
-                style={{ fontSize: 11.5, color: primary, fontWeight: '700' }}
+                style={{ fontSize: 11.5, color: isFocusing ? success : primary, fontWeight: '700' }}
               />
             </FlexWidget>
 
@@ -146,7 +155,7 @@ export function TimeFlowWidget({ data, colors, strings }) {
 
       {/* 3. 底部：全宽横向舒展一键打卡按钮（盲操友好） */}
       <FlexWidget
-        clickAction="checkIn"
+        clickAction={isFocusing ? 'OPEN_APP' : 'checkIn'}
         style={{
           width: 'match_parent',
           height: 42,
@@ -157,7 +166,7 @@ export function TimeFlowWidget({ data, colors, strings }) {
         }}
       >
         <TextWidget
-          text={strings.checkinBtn}
+          text={isFocusing ? strings.returnFocus : strings.checkinBtn}
           style={{
             fontSize: 13.5,
             fontWeight: '800',

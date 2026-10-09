@@ -54,11 +54,17 @@ function getDb() {
           lat REAL,
           lng REAL,
           mode TEXT,
-          trip_id TEXT
+          trip_id TEXT,
+          duration INTEGER,
+          category TEXT,
+          note TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_records_ts ON records(timestamp);
         CREATE INDEX IF NOT EXISTS idx_records_trip ON records(trip_id);
       `);
+      try { await db.execAsync('ALTER TABLE records ADD COLUMN duration INTEGER;'); } catch (e) {}
+      try { await db.execAsync('ALTER TABLE records ADD COLUMN category TEXT;'); } catch (e) {}
+      try { await db.execAsync('ALTER TABLE records ADD COLUMN note TEXT;'); } catch (e) {}
       try { await migrateLegacy(db); } catch (e) { /* 迁移失败不阻塞，旧数据留待下次重试 */ }
       return db;
     })();
@@ -78,8 +84,8 @@ async function migrateLegacy(db) {
   await db.withTransactionAsync(async () => {
     for (const r of records) {
       await db.runAsync(
-        'INSERT OR IGNORE INTO records (id, timestamp, location_name, lat, lng, mode, trip_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        r.id, r.timestamp, r.locationName ?? null, r.lat ?? null, r.lng ?? null, r.mode ?? null, r.tripId ?? null
+        'INSERT OR IGNORE INTO records (id, timestamp, location_name, lat, lng, mode, trip_id, duration, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        r.id, r.timestamp, r.locationName ?? null, r.lat ?? null, r.lng ?? null, r.mode ?? null, r.tripId ?? null, r.duration ?? null, r.category ?? null
       );
     }
   });
@@ -142,15 +148,15 @@ export async function setLastMode(mode) {
   try { await AsyncStorage.setItem(MODE_KEY, mode); } catch (e) {}
 }
 
-const COLS = 'id, timestamp, location_name AS locationName, lat, lng, mode, trip_id AS tripId';
+const COLS = 'id, timestamp, location_name AS locationName, lat, lng, mode, trip_id AS tripId, duration, category, note';
 
 // 保存一条打卡记录（SQLite 单条 INSERT 天然原子）
 export function saveRecord(record) {
   return (async () => {
     const db = await getDb();
     await db.runAsync(
-      'INSERT INTO records (id, timestamp, location_name, lat, lng, mode, trip_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      record.id, record.timestamp, record.locationName ?? null, record.lat ?? null, record.lng ?? null, record.mode ?? null, record.tripId ?? null
+      'INSERT INTO records (id, timestamp, location_name, lat, lng, mode, trip_id, duration, category, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      record.id, record.timestamp, record.locationName ?? null, record.lat ?? null, record.lng ?? null, record.mode ?? null, record.tripId ?? null, record.duration ?? null, record.category ?? null, record.note ?? null
     );
     await bumpRevision();
   })();
@@ -192,7 +198,7 @@ export async function getRecordsFingerprint() {
 }
 
 // patch 驼峰键 → 表列名
-const COL_MAP = { locationName: 'location_name', tripId: 'trip_id', mode: 'mode', lat: 'lat', lng: 'lng' };
+const COL_MAP = { locationName: 'location_name', tripId: 'trip_id', mode: 'mode', lat: 'lat', lng: 'lng', duration: 'duration', category: 'category', note: 'note' };
 
 // 更新一条记录（如改地名 / 补坐标）
 export function updateRecord(id, patch) {
@@ -253,8 +259,8 @@ export async function importRecords(records) {
   await db.withTransactionAsync(async () => {
     for (const r of list) {
       await db.runAsync(
-        'INSERT OR IGNORE INTO records (id, timestamp, location_name, lat, lng, mode, trip_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        r.id, r.timestamp ?? null, r.locationName ?? null, r.lat ?? null, r.lng ?? null, r.mode ?? null, r.tripId ?? null
+        'INSERT OR IGNORE INTO records (id, timestamp, location_name, lat, lng, mode, trip_id, duration, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        r.id, r.timestamp ?? null, r.locationName ?? null, r.lat ?? null, r.lng ?? null, r.mode ?? null, r.tripId ?? null, r.duration ?? null, r.category ?? null
       );
     }
   });

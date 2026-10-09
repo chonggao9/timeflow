@@ -2,7 +2,7 @@
   "expo": {
     "name": "TimeFlow",
     "slug": "timeflow",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -32,7 +32,7 @@
           "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_KEY"
         }
       },
-      "versionCode": 19
+      "versionCode": 21
     },
     "plugins": [
       "./plugins/withRemoveMediaPermissions",

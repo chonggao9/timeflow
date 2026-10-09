@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>poster-6-zh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+
+  :root {
+    --bg-page: #0C0F15;
+    --text-main: #F0F6FC;
+    --text-muted: #8B949E;
+    --accent: #FF6B6B;
+    --accent-strong: #F24E4E;
+
+    --tf-bg: #FBF5EF;
+    --tf-surface: #FFFFFF;
+    --tf-primary: #FF6B6B;
+    --tf-primary-strong: #F24E4E;
+    --tf-primary-soft: #FFE9E4;
+    --tf-primary-softer: #FFF4F0;
+    --tf-ink: #2B231E;
+    --tf-ink2: #7A6F66;
+    --tf-ink3: #B6A99E;
+    --tf-line: #F1E7DD;
+    --tf-line2: #E9DCD0;
+    --tf-chip: #FAF6F1;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    margin: 0;
+    padding: 0;
+    background: #06080B;
+    color: var(--text-main);
+    font-family: 'Plus Jakarta Sans', 'Noto Sans SC', -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 60px;
+  }
+
+  .poster-stage {
+    width: 1080px;
+    height: 1920px;
+    background: #0B0E14;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-sizing: border-box;
+    padding: 90px 60px 0;
+  }
+
+  /* 顶部发光微晕 */
+  .poster-stage::before {
+    content: '';
+    position: absolute;
+    top: -200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 900px;
+    height: 900px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 107, 107, 0.16) 0%, rgba(255, 107, 107, 0.04) 45%, transparent 70%);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .poster-header {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  .poster-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 107, 107, 0.16);
+    color: #FF6B6B;
+    border: 1.5px solid rgba(255, 107, 107, 0.32);
+    padding: 8px 22px;
+    border-radius: 999px;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+  }
+
+  .poster-title {
+    font-size: 56px;
+    font-weight: 800;
+    color: #FFFFFF;
+    letter-spacing: -1px;
+    line-height: 1.15;
+    margin-bottom: 12px;
+    text-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+
+  .poster-sub {
+    font-size: 25px;
+    font-weight: 600;
+    color: #94A3B8;
+    letter-spacing: -0.2px;
+  }
+
+  /* 旗舰机身容器 */
+  .phone-chassis-outer {
+    position: relative;
+    z-index: 2;
+    width: 760px;
+    height: 1540px;
+    background: #14171E;
+    border-radius: 68px;
+    padding: 18px;
+    box-sizing: border-box;
+    box-shadow: 
+      0 40px 100px rgba(0, 0, 0, 0.8),
+      0 0 0 10px #1E232D,
+      0 0 0 14px #2E3644,
+      inset 0 0 0 3px rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .phone-screen-viewport {
+    width: 724px;
+    height: 1504px;
+    border-radius: 54px;
+    overflow: hidden;
+    background: var(--tf-bg);
+    position: relative;
+  }
+
+  /* 2.194x 等比矢量放大 */
+  .scaled-content-wrapper {
+    width: 330px;
+    height: 686px;
+    transform: scale(2.194);
+    transform-origin: top left;
+  }
+
+  .phone-frame {
+    width: 330px !important;
+    height: 686px !important;
+    background: var(--tf-bg);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    font-family: 'Plus Jakarta Sans', 'Noto Sans SC', sans-serif;
+    color: var(--tf-ink);
+    user-select: none;
+    position: relative;
+  }
+
+  .statusbar {
+    height: 32px;
+    padding: 10px 18px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--tf-ink);
+  }
+
+  /* 专注页面主体 */
+  .pomodoro-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 14px 18px 20px;
+    box-sizing: border-box;
+  }
+
+  .nth-badge-text {
+    font-size: 11.5px;
+    color: var(--tf-ink3);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .task-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: #FFF1EC;
+    border: 1px solid #F3C9BC;
+    box-shadow: 0 1px 4px rgba(228,87,46,0.08);
+  }
+  .task-pill-cat {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--tf-ink);
+  }
+  .task-pill-goal {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--tf-ink2);
+  }
+
+  /* 仪表盘圆环 */
+  .ring-wrap {
+    margin-top: 32px;
+    width: 236px;
+    height: 236px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ring-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .ring-center-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .timer-digits {
+    font-size: 52px;
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -1.5px;
+    font-variant-numeric: tabular-nums;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    color: var(--tf-ink);
+  }
+  .timer-sub {
+    font-size: 11.5px;
+    color: var(--tf-ink3);
+    margin-top: 6px;
+    font-weight: 600;
+  }
+
+  /* 整体居中的双操作胶囊容器 */
+  .actions-outer-wrap {
+    margin-top: 34px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .actions-group {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-abandon {
+    width: 76px;
+    height: 48px;
+    border-radius: 999px;
+    border: 1px solid var(--tf-line2);
+    background: var(--tf-surface);
+    color: var(--tf-ink2);
+    font-size: 13.5px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 18px;
+    box-shadow: 0 2px 6px rgba(43,35,30,0.04);
+  }
+
+  .btn-pause {
+    width: 138px;
+    height: 54px;
+    border-radius: 999px;
+    background: var(--tf-primary);
+    color: #FFFFFF;
+    font-size: 15.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 16px rgba(255,107,107,0.35);
+  }
+  .pause-icon {
+    width: 16px;
+    height: 16px;
+    fill: #FFFFFF;
+  }
+
+  /* 白噪音播放卡片 */
+  .sound-bar {
+    margin-top: 28px;
+    width: 100%;
+    height: 44px;
+    background: var(--tf-surface);
+    border: 1px solid var(--tf-line);
+    border-radius: 12px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    box-shadow: 0 2px 8px rgba(43,35,30,0.03);
+  }
+  .sound-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--tf-ink);
+  }
+  .sound-right {
+    margin-left: auto;
+    font-size: 11.5px;
+    color: var(--tf-ink3);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .notice-text {
+    margin-top: 14px;
+    font-size: 10.5px;
+    color: var(--tf-ink3);
+    text-align: center;
+    line-height: 1.45;
+  }
+
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 1080px !important;
+  height: 1920px !important;
+  overflow: hidden !important;
+  background: #0B0E14 !important;
+}
+.poster-stage {
+  margin: 0 !important;
+}
+</style>
+</head>
+<body>
+<div class="poster-stage" id="poster-6-zh">
+    <div class="poster-header">
+      <div class="poster-tag">SCREENSHOT 06 · 番茄专注</div>
+      <div class="poster-title">全屏沉浸式番茄专注</div>
+      <div class="poster-sub">6大生活场景分类 · 8款治愈白噪音 · 全屏心流防误触</div>
+    </div>
+    
+    <div class="phone-chassis-outer">
+      <div class="phone-screen-viewport">
+        <div class="scaled-content-wrapper">
+          <div class="phone-frame">
+            <div class="statusbar">
+              <span>09:41</span>
+              <span>📶 🔋</span>
+            </div>
+
+            <div class="pomodoro-content">
+              <div class="nth-badge-text">今天第 6 个番茄</div>
+              
+              <div class="task-pill">
+                <span class="task-pill-cat">📚 学习</span>
+                <span class="task-pill-goal">· 英语听力</span>
+              </div>
+
+              <div class="ring-wrap">
+                <svg class="ring-svg" viewBox="0 0 208 208" fill="none">
+                  <circle cx="104" cy="104" r="94" stroke="#F1E7DD" stroke-width="12"></circle>
+                  <circle cx="104" cy="104" r="94" stroke="#FF6B6B" stroke-width="12" stroke-linecap="round" stroke-dasharray="380 590" transform="rotate(-90 104 104)"></circle>
+                </svg>
+                <div class="ring-center-content">
+                  <div class="timer-digits">18:45</div>
+                  <div class="timer-sub">共 25 分钟 · 已专注 06 分 15 秒</div>
+                </div>
+              </div>
+
+              <!-- 严格整体居中的操作按钮组 -->
+              <div class="actions-outer-wrap">
+                <div class="actions-group">
+                  <div class="btn-abandon">放弃</div>
+                  <div class="btn-pause">
+                    <svg class="pause-icon" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"></path></svg>
+                    <span>暂停</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 白噪音状态卡片 -->
+              <div class="sound-bar">
+                <div class="sound-left">
+                  <span>🌊</span>
+                  <span>海浪声</span>
+                </div>
+                <div class="sound-right">
+                  <span>正在播放</span>
+                  <span>›</span>
+                </div>
+              </div>
+
+              <div class="notice-text">
+                专注中隐藏底部导航。点「放弃」会再确认一次，避免误触。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

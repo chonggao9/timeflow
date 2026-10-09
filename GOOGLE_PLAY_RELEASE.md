@@ -1,4 +1,4 @@
-# TimeFlow Google Play 发布文案与上架指南 (v1.1.0)
+# TimeFlow Google Play 发布文案与上架指南 (v1.2.0)
 
 本文档整理了 Google Play 开发者后台（Google Play Console）上架审核所需的全部文案、权限合规说明以及数据安全（Data Safety）表单对照指南。所有字符数均已严格对齐 Google Play 限制。
 
@@ -8,24 +8,22 @@
 
 > Google Play Console 限制：每个语言不超过 **500 个字符 (Characters)**。在「正式版 → 准备版本 → 版本说明」中填入。
 
-### 1. 英文版 (en-US) — [484 / 500 字符]
+### 1. 英文版 (en-US) — [488 / 500 字符]
 ```text
-v1.1.0 Update:
-• Vintage Trip Receipts: Transform commutes and journeys into thermal receipts with stop paces, route stats, and unique barcodes.
-• HD Receipt Export: One-tap save ultra-crisp PNG receipts directly to your photo album.
-• Quick Text Share: Copy formatted trip details to your clipboard for instant sharing in chats.
-• Modern Vector Icon: Crisp new high-res app icon with smooth curves.
-• Engine & Privacy Boost: Full Android 16 & 16KB page support with zero unnecessary permissions.
+v1.2.0 Update:
+• Redesigned Pomodoro Focus: 3x2 category grid, duration presets (15/25/45/60m), distinct task notes, ambient audio, and full-screen immersion.
+• Focus Insights Dashboard: Unified time filters (Today/Week/Month/All), trend charts with gap dots, and expandable category breakdowns with Top 5 tasks.
+• Peak Hours & Habit Analytics: Discover your golden focus windows with smart insights.
+• 100% Bilingual Polish: Seamless English & Simplified Chinese coverage throughout.
 ```
 
-### 2. 简体中文版 (zh-CN) — [247 / 500 字符]
+### 2. 简体中文版 (zh-CN) — [248 / 500 字符]
 ```text
-v1.1.0 更新说明：
-• 行程纪念小票：将日常通勤与旅途轨迹一键生成复古拟物热敏纸小票，逐站耗时、出行流速与装饰条形码一目了然。
-• 高清相册直存：支持一键保存超清 PNG 小票长图至系统相册，随时珍藏与分享。
-• 便捷文本分享：一键将小票明细格式化写入剪贴板，轻松粘贴至即时聊天与社交网络。
-• 全新矢量图标：纯矢量重绘莫比乌斯流动环与定位微标，视觉更细腻精致。
-• 系统架构与隐私升级：全面适配 Android 16 与 16KB 内存页面机制，彻底移除冗余读取权限，运行更丝滑更安全。
+v1.2.0 更新说明：
+• 番茄专注全新重构：3×2 分类大网格、15/25/45/60 分钟预设时长、任务名独立输入、背景环境白噪音与全屏沉浸防误触模式。
+• 专注分析多维升级：统一时间筛选（今天/本周/本月/全部）、趋势图精细标注与断档小圆点、6 大分类二级 Top 5 任务展开。
+• 黄金时段与习惯洞察：自动聚类四个时段，定位高产期并生成智能总结。
+• 双语全覆盖：深度优化英文模式图表刻度与界面文案。
 ```
 
 ---
@@ -193,5 +191,5 @@ TimeFlow（时光流）是一款精致、优雅且绝对尊重隐私的每日通
 
 | 文件类型 | 适用渠道 | 版本代码 (versionCode) | 目标 SDK | 输出文件路径 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Android App Bundle (.aab)** | **Google Play Console 生产发布轨道（必须格式）** | **`19`** | **`36` (Android 16)** | `android/app/build/outputs/bundle/release/app-release.aab`（脚本已自动复制至工程根目录：`timeflow-v1.1.0.aab`，39.90 MB） |
-| **Android APK (.apk)** | 开发者真机本地验证 / GitHub Release / 国内分发 | **`19`** | **`36` (Android 16)** | `android/app/build/outputs/apk/release/app-release.apk`（脚本已自动复制至工程根目录：`timeflow-v1.1.0.apk`，56.40 MB） |
+| **Android App Bundle (.aab)** | **Google Play Console 生产发布轨道（必须格式）** | **`21`** | **`36` (Android 16)** | `android/app/build/outputs/bundle/release/app-release.aab`（脚本已自动复制至工程根目录：`timeflow-v1.2.0.aab`） |
+| **Android APK (.apk)** | 开发者真机本地验证 / GitHub Release / 国内分发 | **`21`** | **`36` (Android 16)** | `android/app/build/outputs/apk/release/app-release.apk`（脚本已自动复制至工程根目录：`timeflow-v1.2.0.apk`，75.45 MB） |

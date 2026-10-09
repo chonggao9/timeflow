@@ -41,3 +41,6 @@ keystore.properties
 # 构建产物
 *.apk
 *.aab
+
+# 临时测试脚本
+test_*.js

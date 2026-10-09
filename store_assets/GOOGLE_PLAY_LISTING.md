@@ -209,6 +209,7 @@ Make your time visible. Track your journey with grace. Download TimeFlow today!
 | **Shot 03** | 探索拓扑与轨迹路线 (方案A工业点阵) | 1080 x 1920, PNG | [`store_assets/screenshot_3_route.png`](file:///d:/work/timeflow/store_assets/screenshot_3_route.png) | ✅ 已生成 (落地实景) |
 | **Shot 04** | 高频通勤与耗时洞察 (A→B分析与分布柱图) | 1080 x 1920, PNG | [`store_assets/screenshot_4_insights.png`](file:///d:/work/timeflow/store_assets/screenshot_4_insights.png) | ✅ 已生成 (落地实景) |
 | **Shot 05** | 个人中心与云端守护 (WebDAV加密零泄露) | 1080 x 1920, PNG | [`store_assets/screenshot_5_security.png`](file:///d:/work/timeflow/store_assets/screenshot_5_security.png) | ✅ 已生成 (落地实景) |
+| **Shot 06** | 全屏沉浸式番茄专注 (6大场景与治愈白噪音) | 1080 x 1920, PNG | [`store_assets/screenshot_6_pomodoro.png`](file:///d:/work/timeflow/store_assets/screenshot_6_pomodoro.png) | ✅ 已生成 (落地实景) |
 
 ### 3. 英文版宣传截图 (English Screenshots - en-US)
 | 截图序号 | 主题 (English Title & Subtitle) | 规格 | 对应文件路径 | 状态 |
@@ -218,6 +219,7 @@ Make your time visible. Track your journey with grace. Download TimeFlow today!
 | **Shot 03** | Route Topology & Trail (Industrial Blueprint Grid) | 1080 x 1920, PNG | [`store_assets/screenshot_3_route_en.png`](file:///d:/work/timeflow/store_assets/screenshot_3_route_en.png) | ✅ 纯英文原生页面 |
 | **Shot 04** | Commute Trends & Insights (Point A → B Route Analysis) | 1080 x 1920, PNG | [`store_assets/screenshot_4_insights_en.png`](file:///d:/work/timeflow/store_assets/screenshot_4_insights_en.png) | ✅ 纯英文原生页面 |
 | **Shot 05** | Privacy & WebDAV Cloud Sync (Zero-Knowledge Encryption) | 1080 x 1920, PNG | [`store_assets/screenshot_5_security_en.png`](file:///d:/work/timeflow/store_assets/screenshot_5_security_en.png) | ✅ 纯英文原生页面 |
+| **Shot 06** | Immersive Pomodoro Focus (Presets & Soundscapes) | 1080 x 1920, PNG | [`store_assets/screenshot_6_pomodoro_en.png`](file:///d:/work/timeflow/store_assets/screenshot_6_pomodoro_en.png) | ✅ 纯英文原生页面 |
 
 ---
 

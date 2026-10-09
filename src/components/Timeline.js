@@ -210,19 +210,29 @@ export default function Timeline({ records, estimate, onRename, onShowMap, onSho
             const durBelow = j < rev.length - 1 ? (r.timestamp - rev[j + 1].timestamp) / 1000 : null;
             const isHot = nodeType === 'current';
 
+            const isFocus = r.mode === 'focus';
+
             return (
               <View key={r.id}>
                 {/* 节点行 */}
                 <View style={styles.row}>
                   <View style={styles.lineCol}>
-                    <Node type={nodeType} styles={styles} />
+                    {isFocus ? (
+                      <View style={styles.nodeWrap}>
+                        <View style={styles.nodeFocus}>
+                          <Text style={{ fontSize: 9 }}>🍅</Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <Node type={nodeType} styles={styles} />
+                    )}
                   </View>
                   <View style={styles.info}>
                     <Text style={[styles.time, isHot && styles.timeCurrent]}>
                       {formatTime(r.timestamp)}
                     </Text>
                     <TouchableOpacity
-                      style={[styles.nameWrap, isHot && styles.nameWrapCurrent]}
+                      style={[styles.nameWrap, isHot && styles.nameWrapCurrent, isFocus && styles.nameWrapFocus]}
                       onPress={() => onRename && onRename(r)}
                       activeOpacity={0.7}
                     >
@@ -230,14 +240,20 @@ export default function Timeline({ records, estimate, onRename, onShowMap, onSho
                         style={[
                           styles.name,
                           isHot && styles.nameCurrent,
-                          isPlaceholderName(r.locationName) && styles.namePlaceholder,
+                          isFocus && styles.nameFocus,
+                          !isFocus && isPlaceholderName(r.locationName) && styles.namePlaceholder,
                         ]}
                         numberOfLines={1}
                       >
-                        {isPlaceholderName(r.locationName) ? t('common.unnamed') : r.locationName}
+                        {isFocus ? r.locationName : (isPlaceholderName(r.locationName) ? t('common.unnamed') : r.locationName)}
                       </Text>
+                      {isFocus && r.duration != null && (
+                        <View style={styles.focusDurBadge}>
+                          <Text style={styles.focusDurText}>{formatDuration(r.duration, lang)}</Text>
+                        </View>
+                      )}
                       <View style={styles.editBadge}>
-                        <Ionicons name="pencil" size={10} color={isHot ? colors.primaryStrong : colors.ink3} />
+                        <Ionicons name="pencil" size={10} color={isHot || isFocus ? colors.primaryStrong : colors.ink3} />
                       </View>
                     </TouchableOpacity>
                   </View>
@@ -611,5 +627,38 @@ const makeStyles = (colors) => StyleSheet.create({
     fontSize: 11,
     color: colors.primaryStrong,
     fontWeight: '600',
+  },
+  
+  nodeFocus: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.sm,
+  },
+  nameWrapFocus: {
+    backgroundColor: colors.surface,
+    borderColor: colors.primary + '60',
+    borderWidth: 1.5,
+    ...shadow.sm,
+  },
+  nameFocus: {
+    color: colors.primaryStrong,
+  },
+  focusDurBadge: {
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  focusDurText: {
+    fontSize: 11,
+    color: colors.primaryStrong,
+    fontWeight: '700',
   },
 });
