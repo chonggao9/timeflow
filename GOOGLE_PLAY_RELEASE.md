@@ -191,5 +191,5 @@ TimeFlow（时光流）是一款精致、优雅且绝对尊重隐私的每日通
 
 | 文件类型 | 适用渠道 | 版本代码 (versionCode) | 目标 SDK | 输出文件路径 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Android App Bundle (.aab)** | **Google Play Console 生产发布轨道（必须格式）** | **`21`** | **`36` (Android 16)** | `android/app/build/outputs/bundle/release/app-release.aab`（脚本已自动复制至工程根目录：`timeflow-v1.2.0.aab`） |
-| **Android APK (.apk)** | 开发者真机本地验证 / GitHub Release / 国内分发 | **`21`** | **`36` (Android 16)** | `android/app/build/outputs/apk/release/app-release.apk`（脚本已自动复制至工程根目录：`timeflow-v1.2.0.apk`，75.45 MB） |
+| **Android App Bundle (.aab)** | **Google Play Console 生产发布轨道（必须格式）** | **`22`** | **`36` (Android 16)** | `android/app/build/outputs/bundle/release/app-release.aab`（脚本已自动复制至工程根目录：`timeflow-v1.2.0.aab`，58.47 MB） |
+| **Android APK (.apk)** | 开发者真机本地验证 / GitHub Release / 国内分发 | **`22`** | **`36` (Android 16)** | `android/app/build/outputs/apk/release/app-release.apk`（脚本已自动复制至工程根目录：`timeflow-v1.2.0.apk`，75.45 MB） |

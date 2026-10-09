@@ -1,5 +1,5 @@
 ========================================
-TimeFlow v1.2.0 Release Notes (Google Play)
+TimeFlow v1.2.0 Release Notes (Google Play - versionCode: 22)
 ========================================
 
 【1. 简体中文版 (zh-CN) - 适用于 Google Play 更新说明，已严格控制在 500 字符以内】
