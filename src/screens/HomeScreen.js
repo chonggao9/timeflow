@@ -589,7 +589,7 @@ export default function HomeScreen() {
               <Ionicons
                 name="car-outline"
                 size={15}
-                color={scene === 'travel' ? '#B3302C' : '#5C4B43'}
+                color={scene === 'travel' ? colors.primaryStrong : colors.ink2}
               />
               <Text style={[styles.sceneToggleText, scene === 'travel' && styles.sceneToggleTextActive]}>
                 {t('home.sceneTravel', '行程轨迹').replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')}
@@ -604,7 +604,7 @@ export default function HomeScreen() {
               <Ionicons
                 name="timer-outline"
                 size={15}
-                color={scene === 'focus' ? '#B3302C' : '#5C4B43'}
+                color={scene === 'focus' ? colors.primaryStrong : colors.ink2}
               />
               <Text style={[styles.sceneToggleText, scene === 'focus' && styles.sceneToggleTextActive]}>
                 {t('home.sceneFocus', '室内专注').replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')}
@@ -721,7 +721,7 @@ export default function HomeScreen() {
                     }}
                     activeOpacity={0.7}
                   >
-                    <ModeIcon mode={m} size={20} color={isSelected ? '#B3302C' : '#4A3F39'} />
+                    <ModeIcon mode={m} size={20} color={isSelected ? colors.primaryStrong : colors.ink2} />
                     <Text style={[styles.modeBtnText, isSelected && styles.modeBtnTextActive]}>
                       {t('mode.' + m)}
                     </Text>
@@ -741,7 +741,7 @@ export default function HomeScreen() {
                 <Ionicons
                   name="ellipsis-horizontal"
                   size={20}
-                  color={MORE_MODES.includes(mode) ? '#B3302C' : '#4A3F39'}
+                  color={MORE_MODES.includes(mode) ? colors.primaryStrong : colors.ink2}
                 />
                 <Text
                   style={[
@@ -923,7 +923,7 @@ export default function HomeScreen() {
                         <Ionicons
                           name="location-outline"
                           size={12}
-                          color={isSelected ? '#B3302C' : '#5C4B43'}
+                          color={isSelected ? colors.primaryStrong : colors.ink2}
                         />
                         <Text style={[styles.quickChipText, isSelected && styles.quickChipTextActive]}>
                           {place}
@@ -970,7 +970,7 @@ export default function HomeScreen() {
                     onPress={() => setDraftMode(m)}
                     activeOpacity={0.7}
                   >
-                    <ModeIcon mode={m} size={15} color={isSelected ? '#B3302C' : '#5C4B43'} />
+                    <ModeIcon mode={m} size={15} color={isSelected ? colors.primaryStrong : colors.ink2} />
                     <Text style={[styles.dialogModeChipText, isSelected && styles.dialogModeChipTextActive]}>
                       {t('mode.' + m)}
                     </Text>
@@ -1021,7 +1021,7 @@ export default function HomeScreen() {
                     onPress={() => handleConfirmSegmentMode(m)}
                     activeOpacity={0.7}
                   >
-                    <ModeIcon mode={m} size={18} color={isCur ? '#B3302C' : '#5C4B43'} />
+                    <ModeIcon mode={m} size={18} color={isCur ? colors.primaryStrong : colors.ink2} />
                     <Text style={[styles.segModeText, isCur && styles.segModeTextActive]}>
                       {t('mode.' + m)}
                     </Text>
@@ -1055,7 +1055,7 @@ export default function HomeScreen() {
                     }}
                     activeOpacity={0.7}
                   >
-                    <ModeIcon mode={m} size={20} color={isCur ? '#B3302C' : '#5C4B43'} />
+                    <ModeIcon mode={m} size={20} color={isCur ? colors.primaryStrong : colors.ink2} />
                     <Text style={[styles.segModeText, isCur && styles.segModeTextActive]}>
                       {t('mode.' + m)}
                     </Text>
@@ -1095,7 +1095,7 @@ const makeStyles = (colors) =>
   StyleSheet.create({
     screen: {
       flex: 1,
-      backgroundColor: '#FBF4ED',
+      backgroundColor: colors.bg,
     },
     header: {
       flexDirection: 'row',
@@ -1110,18 +1110,18 @@ const makeStyles = (colors) =>
     title: {
       fontSize: 24,
       fontWeight: '800',
-      color: '#2B1F1A',
+      color: colors.ink,
       lineHeight: 28,
     },
     date: {
       fontSize: 12,
-      color: '#6F5F57',
+      color: colors.ink2,
       lineHeight: 16,
       marginTop: 2,
     },
     sceneToggleWrap: {
       flexDirection: 'row',
-      backgroundColor: '#F1E6DC',
+      backgroundColor: colors.chip,
       borderRadius: 14,
       padding: 3,
       gap: 2,
@@ -1136,8 +1136,8 @@ const makeStyles = (colors) =>
       gap: 5,
     },
     sceneToggleBtnActive: {
-      backgroundColor: '#fff',
-      shadowColor: '#502814',
+      backgroundColor: colors.surface,
+      shadowColor: colors.ink,
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.12,
       shadowRadius: 3,
@@ -1146,20 +1146,20 @@ const makeStyles = (colors) =>
     sceneToggleText: {
       fontSize: 13,
       fontWeight: '600',
-      color: '#5C4B43',
+      color: colors.ink2,
     },
     sceneToggleTextActive: {
       fontWeight: '700',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
     statsCard: {
       flexDirection: 'row',
       marginHorizontal: 16,
       marginBottom: 10,
       paddingVertical: 8,
-      backgroundColor: '#fff',
+      backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: '#EFE2D7',
+      borderColor: colors.line,
       borderRadius: 16,
     },
     statsCol: {
@@ -1170,17 +1170,17 @@ const makeStyles = (colors) =>
     statsColBorder: {
       borderLeftWidth: 1,
       borderRightWidth: 1,
-      borderColor: '#EFE2D7',
+      borderColor: colors.line,
     },
     statsValue: {
       fontSize: 18,
       fontWeight: '800',
-      color: '#2B1F1A',
+      color: colors.ink,
       lineHeight: 22,
     },
     statsLabel: {
       fontSize: 11,
-      color: '#6F5F57',
+      color: colors.ink2,
       marginTop: 2,
     },
     scroll: {
@@ -1191,11 +1191,11 @@ const makeStyles = (colors) =>
       paddingBottom: 16,
     },
     bottomComposer: {
-      backgroundColor: '#FBF4ED',
+      backgroundColor: colors.bg,
       paddingHorizontal: 12,
       paddingTop: 10,
       paddingBottom: Platform.OS === 'ios' ? 14 : 10,
-      shadowColor: '#784628',
+      shadowColor: colors.ink,
       shadowOffset: { width: 0, height: -6 },
       shadowOpacity: 0.07,
       shadowRadius: 14,
@@ -1211,22 +1211,22 @@ const makeStyles = (colors) =>
       height: 58,
       borderRadius: 14,
       borderWidth: 1.5,
-      borderColor: '#EADDD2',
-      backgroundColor: '#fff',
+      borderColor: colors.line2,
+      backgroundColor: colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
       gap: 3,
     },
     modeBtnActive: {
-      borderColor: '#D63B3B',
-      backgroundColor: '#FDE9E6',
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
     },
     modeBtnMore: {
       flex: 1,
       height: 58,
       borderRadius: 14,
       borderWidth: 1.5,
-      borderColor: '#CDBCAF',
+      borderColor: colors.ink3,
       borderStyle: 'dashed',
       backgroundColor: 'transparent',
       alignItems: 'center',
@@ -1236,11 +1236,11 @@ const makeStyles = (colors) =>
     modeBtnText: {
       fontSize: 12,
       fontWeight: '600',
-      color: '#4A3F39',
+      color: colors.ink2,
     },
     modeBtnTextActive: {
       fontWeight: '800',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
     actionBtnRow: {
       flexDirection: 'row',
@@ -1252,8 +1252,8 @@ const makeStyles = (colors) =>
       height: 60,
       borderRadius: 18,
       borderWidth: 1.5,
-      borderColor: '#E4D5C9',
-      backgroundColor: '#fff',
+      borderColor: colors.line2,
+      backgroundColor: colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
       gap: 2,
@@ -1261,16 +1261,16 @@ const makeStyles = (colors) =>
     backfillSquareText: {
       fontSize: 12,
       fontWeight: '800',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
     checkinMainBtn: {
       width: '100%',
       height: 60,
       borderRadius: 18,
-      backgroundColor: '#D63B3B',
+      backgroundColor: colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#D63B3B',
+      shadowColor: colors.primary,
       shadowOffset: { width: 0, height: 6 },
       shadowOpacity: 0.32,
       shadowRadius: 14,
@@ -1279,19 +1279,19 @@ const makeStyles = (colors) =>
       overflow: 'hidden',
     },
     checkinBtnEnded: {
-      backgroundColor: '#5C4B43',
-      shadowColor: '#5C4B43',
+      backgroundColor: colors.ink2,
+      shadowColor: colors.ink2,
     },
     checkinBtnSuccess: {
-      backgroundColor: '#2E9E6B',
-      shadowColor: '#2E9E6B',
+      backgroundColor: colors.success,
+      shadowColor: colors.success,
     },
     chargeFill: {
       position: 'absolute',
       top: 0,
       left: 0,
       bottom: 0,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: colors.surface,
       borderRadius: 18,
       zIndex: 1,
     },
@@ -1323,14 +1323,14 @@ const makeStyles = (colors) =>
     checkinBtnTitle: {
       fontSize: 20,
       fontWeight: '800',
-      color: '#fff',
+      color: colors.surface,
       letterSpacing: 4,
       lineHeight: 24,
     },
     checkinBtnSub: {
       fontSize: 11,
       fontWeight: '600',
-      color: '#fff',
+      color: colors.surface,
       opacity: 0.95,
       lineHeight: 14,
     },
@@ -1344,9 +1344,9 @@ const makeStyles = (colors) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: '#FDE9E6',
+      backgroundColor: colors.primarySoft,
       borderWidth: 1,
-      borderColor: '#D63B3B',
+      borderColor: colors.primary,
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderRadius: 10,
@@ -1354,7 +1354,7 @@ const makeStyles = (colors) =>
     timeDisplayText: {
       fontSize: 15,
       fontWeight: '800',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
     timeOffsetBtns: {
       flexDirection: 'row',
@@ -1363,15 +1363,15 @@ const makeStyles = (colors) =>
     timeOffsetBtn: {
       paddingHorizontal: 9,
       paddingVertical: 6,
-      backgroundColor: '#F8F1EA',
+      backgroundColor: colors.chip,
       borderWidth: 1,
-      borderColor: '#EADDD2',
+      borderColor: colors.line2,
       borderRadius: 8,
     },
     timeOffsetBtnText: {
       fontSize: 12,
       fontWeight: '700',
-      color: '#5C4B43',
+      color: colors.ink2,
     },
     focusContainer: {
       flex: 1,
@@ -1387,10 +1387,10 @@ const makeStyles = (colors) =>
       paddingHorizontal: 14,
       paddingVertical: 7,
       borderRadius: 20,
-      backgroundColor: '#fff',
+      backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: '#EFE2D7',
-      shadowColor: '#000',
+      borderColor: colors.line,
+      shadowColor: colors.ink,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.1,
       shadowRadius: 4,
@@ -1403,47 +1403,47 @@ const makeStyles = (colors) =>
     },
     capsuleTextPending: {
       fontSize: 12,
-      color: '#6F5F57',
+      color: colors.ink2,
     },
     capsuleTextDanger: {
       fontSize: 12,
-      color: '#D63B3B',
+      color: colors.primary,
       fontWeight: '600',
     },
     overlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.45)',
+      backgroundColor: colors.scrim,
       alignItems: 'center',
       justifyContent: 'center',
       padding: 20,
     },
     dialog: {
       width: '100%',
-      backgroundColor: '#fff',
+      backgroundColor: colors.surface,
       borderRadius: 20,
       padding: 20,
     },
     dialogTitle: {
       fontSize: 17,
       fontWeight: '800',
-      color: '#2B1F1A',
+      color: colors.ink,
       marginBottom: 6,
       textAlign: 'center',
     },
     dialogSub: {
       fontSize: 13,
-      color: '#6F5F57',
+      color: colors.ink2,
       marginBottom: 14,
       textAlign: 'center',
     },
     input: {
       height: 46,
       borderWidth: 1.5,
-      borderColor: '#EADDD2',
+      borderColor: colors.line2,
       borderRadius: 14,
       paddingHorizontal: 12,
       fontSize: 15,
-      color: '#2B1F1A',
+      color: colors.ink,
       marginBottom: 14,
     },
     quickPlaceWrap: {
@@ -1461,27 +1461,27 @@ const makeStyles = (colors) =>
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: 10,
-      backgroundColor: '#F8F1EA',
+      backgroundColor: colors.chip,
       borderWidth: 1,
-      borderColor: '#EADDD2',
+      borderColor: colors.line2,
     },
     quickChipActive: {
-      backgroundColor: '#FDE9E6',
-      borderColor: '#D63B3B',
+      backgroundColor: colors.primarySoft,
+      borderColor: colors.primary,
     },
     quickChipText: {
       fontSize: 12,
-      color: '#4A3F39',
+      color: colors.ink2,
       fontWeight: '600',
     },
     quickChipTextActive: {
-      color: '#B3302C',
+      color: colors.primaryStrong,
       fontWeight: '700',
     },
     dialogSectionLabel: {
       fontSize: 13,
       fontWeight: '700',
-      color: '#5C4B43',
+      color: colors.ink2,
       marginBottom: 8,
     },
     dialogModeScroll: {
@@ -1495,21 +1495,21 @@ const makeStyles = (colors) =>
       paddingHorizontal: 12,
       paddingVertical: 7,
       borderRadius: 12,
-      backgroundColor: '#F8F1EA',
+      backgroundColor: colors.chip,
       borderWidth: 1,
-      borderColor: '#EADDD2',
+      borderColor: colors.line2,
     },
     dialogModeChipActive: {
-      backgroundColor: '#FDE9E6',
-      borderColor: '#D63B3B',
+      backgroundColor: colors.primarySoft,
+      borderColor: colors.primary,
     },
     dialogModeChipText: {
       fontSize: 13,
-      color: '#4A3F39',
+      color: colors.ink2,
       fontWeight: '600',
     },
     dialogModeChipTextActive: {
-      color: '#B3302C',
+      color: colors.primaryStrong,
       fontWeight: '700',
     },
     dialogActionRow: {
@@ -1518,7 +1518,7 @@ const makeStyles = (colors) =>
       justifyContent: 'space-between',
       paddingVertical: 10,
       borderTopWidth: 1,
-      borderTopColor: '#F3E9E0',
+      borderTopColor: colors.line,
       marginBottom: 10,
     },
     endTripBtn: {
@@ -1528,7 +1528,7 @@ const makeStyles = (colors) =>
     },
     endTripBtnText: {
       fontSize: 13,
-      color: '#5C4B43',
+      color: colors.ink2,
       fontWeight: '600',
     },
     deleteLink: {
@@ -1538,7 +1538,7 @@ const makeStyles = (colors) =>
     },
     deleteLinkText: {
       fontSize: 13,
-      color: '#D63B3B',
+      color: colors.primary,
       fontWeight: '700',
     },
     dialogButtons: {
@@ -1549,7 +1549,7 @@ const makeStyles = (colors) =>
       flex: 1,
       height: 44,
       borderRadius: 14,
-      backgroundColor: '#F1E6DC',
+      backgroundColor: colors.chip,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -1557,7 +1557,7 @@ const makeStyles = (colors) =>
       width: '100%',
       height: 44,
       borderRadius: 14,
-      backgroundColor: '#F1E6DC',
+      backgroundColor: colors.chip,
       alignItems: 'center',
       justifyContent: 'center',
       marginTop: 10,
@@ -1565,20 +1565,20 @@ const makeStyles = (colors) =>
     dialogBtnCancelText: {
       fontSize: 14,
       fontWeight: '600',
-      color: '#5C4B43',
+      color: colors.ink2,
     },
     dialogBtnConfirm: {
       flex: 1,
       height: 44,
       borderRadius: 14,
-      backgroundColor: '#D63B3B',
+      backgroundColor: colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
     },
     dialogBtnConfirmText: {
       fontSize: 14,
       fontWeight: '700',
-      color: '#fff',
+      color: colors.surface,
     },
     segModeGrid: {
       flexDirection: 'row',
@@ -1591,24 +1591,24 @@ const makeStyles = (colors) =>
       height: 44,
       borderRadius: 12,
       borderWidth: 1.5,
-      borderColor: '#EADDD2',
-      backgroundColor: '#fff',
+      borderColor: colors.line2,
+      backgroundColor: colors.surface,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
     },
     segModeItemActive: {
-      borderColor: '#D63B3B',
-      backgroundColor: '#FDE9E6',
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
     },
     segModeText: {
       fontSize: 13,
       fontWeight: '600',
-      color: '#4A3F39',
+      color: colors.ink2,
     },
     segModeTextActive: {
-      color: '#B3302C',
+      color: colors.primaryStrong,
       fontWeight: '800',
     },
   });

@@ -167,7 +167,7 @@ export default function FocusHistoryModal({
                   activeOpacity={0.7}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Ionicons name="close" size={20} color="#5C4B43" />
+                  <Ionicons name="close" size={20} color={colors.ink2} />
                 </TouchableOpacity>
               </View>
 
@@ -339,7 +339,7 @@ export default function FocusHistoryModal({
                             activeOpacity={0.7}
                           >
                             <View style={[styles.catBtnDot, { backgroundColor: c.color }]} />
-                            <Text style={[styles.catBtnText, isCur && { fontWeight: '800', color: '#2B1F1A' }]}>
+                            <Text style={[styles.catBtnText, isCur && { fontWeight: '800', color: colors.ink }]}>
                               {t(c.key)}
                             </Text>
                             {isCur && <Ionicons name="checkmark" size={14} color={c.color} />}
@@ -355,14 +355,14 @@ export default function FocusHistoryModal({
                       value={draftName}
                       onChangeText={setDraftName}
                       placeholder={t('pomodoro.taskPlaceholder')}
-                      placeholderTextColor="#9A8A80"
+                      placeholderTextColor={colors.ink3}
                       returnKeyType="done"
                     />
 
                     {/* 按钮组 */}
                     <View style={styles.editBtnRow}>
                       <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-                        <Ionicons name="trash-outline" size={16} color="#D63B3B" />
+                        <Ionicons name="trash-outline" size={16} color={colors.primary} />
                         <Text style={styles.deleteBtnText}>{t('common.delete')}</Text>
                       </TouchableOpacity>
 
@@ -391,11 +391,11 @@ const makeStyles = (colors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: 'rgba(90, 74, 66, 0.65)',
+      backgroundColor: colors.scrim,
       justifyContent: 'flex-end',
     },
     sheet: {
-      backgroundColor: '#FBF4ED',
+      backgroundColor: colors.bg,
       borderTopLeftRadius: 28,
       borderTopRightRadius: 28,
       paddingHorizontal: 16,
@@ -407,7 +407,7 @@ const makeStyles = (colors) =>
       width: 40,
       height: 4,
       borderRadius: 2,
-      backgroundColor: '#D9CCC1',
+      backgroundColor: colors.line2,
       alignSelf: 'center',
       marginBottom: 12,
     },
@@ -420,13 +420,13 @@ const makeStyles = (colors) =>
     title: {
       fontSize: 20,
       fontWeight: '800',
-      color: '#2B1F1A',
+      color: colors.ink,
     },
     closeBtn: {
       width: 44,
       height: 44,
       borderRadius: 22,
-      backgroundColor: '#F1E6DC',
+      backgroundColor: colors.chip,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -439,24 +439,24 @@ const makeStyles = (colors) =>
       paddingHorizontal: 14,
       paddingVertical: 6,
       borderRadius: 16,
-      backgroundColor: '#F1E6DC',
+      backgroundColor: colors.chip,
     },
     rangeChipActive: {
-      backgroundColor: '#D63B3B',
+      backgroundColor: colors.primary,
     },
     rangeChipText: {
       fontSize: 13,
       fontWeight: '600',
-      color: '#6F5F57',
+      color: colors.ink2,
     },
     rangeChipTextActive: {
-      color: '#fff',
+      color: colors.surface,
     },
     summaryCard: {
       flexDirection: 'row',
-      backgroundColor: '#fff',
+      backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: '#EFE2D7',
+      borderColor: colors.line,
       borderRadius: 16,
       paddingVertical: 8,
       marginBottom: 12,
@@ -469,17 +469,17 @@ const makeStyles = (colors) =>
     sumColBorder: {
       borderLeftWidth: 1,
       borderRightWidth: 1,
-      borderColor: '#EFE2D7',
+      borderColor: colors.line,
     },
     sumValue: {
       fontSize: 18,
       fontWeight: '800',
-      color: '#2B1F1A',
+      color: colors.ink,
       lineHeight: 22,
     },
     sumLabel: {
       fontSize: 11,
-      color: '#6F5F57',
+      color: colors.ink2,
       marginTop: 2,
     },
     distWrap: {
@@ -510,7 +510,7 @@ const makeStyles = (colors) =>
     },
     legendText: {
       fontSize: 12,
-      color: '#4A3F39',
+      color: colors.ink2,
       fontWeight: '500',
     },
     listScroll: {
@@ -522,7 +522,7 @@ const makeStyles = (colors) =>
     },
     emptyText: {
       fontSize: 14,
-      color: '#9A8A80',
+      color: colors.ink3,
     },
     recordRow: {
       flexDirection: 'row',
@@ -536,7 +536,7 @@ const makeStyles = (colors) =>
       paddingTop: 14,
       fontSize: 13,
       fontWeight: '600',
-      color: '#4A3F39',
+      color: colors.ink2,
     },
     recordCard: {
       flex: 1,
@@ -545,14 +545,14 @@ const makeStyles = (colors) =>
       paddingHorizontal: 12,
     },
     recordCardNormal: {
-      backgroundColor: '#fff',
+      backgroundColor: colors.surface,
       borderWidth: 1.5,
-      borderColor: '#EFE2D7',
+      borderColor: colors.line,
     },
     recordCardPending: {
-      backgroundColor: '#F8F1EA',
+      backgroundColor: colors.chip,
       borderWidth: 1.5,
-      borderColor: '#CDBCAF',
+      borderColor: colors.ink3,
       borderStyle: 'dashed',
     },
     recordHeader: {
@@ -570,14 +570,14 @@ const makeStyles = (colors) =>
       flex: 1,
       fontSize: 15,
       fontWeight: '700',
-      color: '#2B1F1A',
+      color: colors.ink,
     },
     recordTitlePending: {
       fontStyle: 'italic',
-      color: '#6F5F57',
+      color: colors.ink2,
     },
     pendingBadge: {
-      backgroundColor: '#FDE7E5',
+      backgroundColor: colors.primarySoft,
       borderRadius: 8,
       paddingHorizontal: 7,
       paddingVertical: 2,
@@ -585,17 +585,17 @@ const makeStyles = (colors) =>
     pendingBadgeText: {
       fontSize: 11,
       fontWeight: '700',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
     recordDuration: {
       fontSize: 15,
       fontWeight: '800',
-      color: '#2B1F1A',
+      color: colors.ink,
     },
     progressBg: {
       height: 5,
       borderRadius: 3,
-      backgroundColor: '#F3E4DB',
+      backgroundColor: colors.chip,
       marginTop: 6,
       overflow: 'hidden',
     },
@@ -605,28 +605,28 @@ const makeStyles = (colors) =>
     },
     editOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.45)',
+      backgroundColor: colors.scrim,
       alignItems: 'center',
       justifyContent: 'center',
       padding: 20,
     },
     editDialog: {
       width: '100%',
-      backgroundColor: '#fff',
+      backgroundColor: colors.surface,
       borderRadius: 20,
       padding: 20,
     },
     editTitle: {
       fontSize: 17,
       fontWeight: '800',
-      color: '#2B1F1A',
+      color: colors.ink,
       marginBottom: 14,
       textAlign: 'center',
     },
     editSectionLabel: {
       fontSize: 13,
       fontWeight: '700',
-      color: '#5C4B43',
+      color: colors.ink2,
       marginBottom: 8,
     },
     catGrid: {
@@ -640,8 +640,8 @@ const makeStyles = (colors) =>
       height: 40,
       borderRadius: 12,
       borderWidth: 1.5,
-      borderColor: '#EADDD2',
-      backgroundColor: '#fff',
+      borderColor: colors.line2,
+      backgroundColor: colors.surface,
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 10,
@@ -656,16 +656,16 @@ const makeStyles = (colors) =>
       flex: 1,
       fontSize: 13,
       fontWeight: '600',
-      color: '#4A3F39',
+      color: colors.ink2,
     },
     editInput: {
       height: 44,
       borderWidth: 1.5,
-      borderColor: '#EADDD2',
+      borderColor: colors.line2,
       borderRadius: 12,
       paddingHorizontal: 12,
       fontSize: 14,
-      color: '#2B1F1A',
+      color: colors.ink,
       marginBottom: 18,
     },
     editBtnRow: {
@@ -682,29 +682,29 @@ const makeStyles = (colors) =>
     },
     deleteBtnText: {
       fontSize: 13,
-      color: '#D63B3B',
+      color: colors.primary,
       fontWeight: '700',
     },
     cancelBtn: {
       paddingVertical: 10,
       paddingHorizontal: 14,
       borderRadius: 12,
-      backgroundColor: '#F1E6DC',
+      backgroundColor: colors.chip,
     },
     cancelBtnText: {
       fontSize: 14,
       fontWeight: '600',
-      color: '#5C4B43',
+      color: colors.ink2,
     },
     saveBtn: {
       paddingVertical: 10,
       paddingHorizontal: 18,
       borderRadius: 12,
-      backgroundColor: '#D63B3B',
+      backgroundColor: colors.primary,
     },
     saveBtnText: {
       fontSize: 14,
       fontWeight: '700',
-      color: '#fff',
+      color: colors.surface,
     },
   });

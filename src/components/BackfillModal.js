@@ -100,7 +100,7 @@ export default function BackfillModal({
                   activeOpacity={0.7}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Ionicons name="close" size={20} color="#5C4B43" />
+                  <Ionicons name="close" size={20} color={colors.ink2} />
                 </TouchableOpacity>
               </View>
 
@@ -142,7 +142,7 @@ export default function BackfillModal({
                       <Ionicons
                         name="location-outline"
                         size={14}
-                        color={isSelected ? '#B3302C' : '#6F5F57'}
+                        color={isSelected ? colors.primaryStrong : colors.ink2}
                       />
                       <Text
                         style={[styles.placePillText, isSelected && styles.placePillTextActive]}
@@ -168,19 +168,19 @@ export default function BackfillModal({
               {/* 自定义地点输入框 */}
               {isCustomMode && (
                 <View style={styles.customInputWrap}>
-                  <Ionicons name="search-outline" size={16} color="#6F5F57" />
+                  <Ionicons name="search-outline" size={16} color={colors.ink2} />
                   <TextInput
                     style={styles.customInput}
                     value={customInput}
                     onChangeText={setCustomInput}
                     placeholder={t('backfill.customPlacePlaceholder')}
-                    placeholderTextColor="#9A8A80"
+                    placeholderTextColor={colors.ink3}
                     autoFocus
                     returnKeyType="done"
                   />
                   {customInput.length > 0 && (
                     <TouchableOpacity onPress={() => setCustomInput('')}>
-                      <Ionicons name="close-circle" size={16} color="#9A8A80" />
+                      <Ionicons name="close-circle" size={16} color={colors.ink3} />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -194,12 +194,12 @@ export default function BackfillModal({
               >
                 <Text style={styles.modeLabel}>{t('backfill.modeDesc')}</Text>
                 <View style={styles.modeRightRow}>
-                  <ModeIcon mode={currentMode} size={16} color="#B3302C" />
+                  <ModeIcon mode={currentMode} size={16} color={colors.primaryStrong} />
                   <Text style={styles.modeValText}>{t('mode.' + currentMode)}</Text>
                   <Ionicons
                     name={showModePicker ? 'chevron-up' : 'chevron-down'}
                     size={14}
-                    color="#9A8A80"
+                    color={colors.ink3}
                   />
                 </View>
               </TouchableOpacity>
@@ -220,7 +220,7 @@ export default function BackfillModal({
                           }}
                           activeOpacity={0.7}
                         >
-                          <ModeIcon mode={m} size={15} color={isCur ? '#B3302C' : '#5C4B43'} />
+                          <ModeIcon mode={m} size={15} color={isCur ? colors.primaryStrong : colors.ink2} />
                           <Text style={[styles.modePickerText, isCur && styles.modePickerTextActive]}>
                             {t('mode.' + m)}
                           </Text>
@@ -253,11 +253,11 @@ const makeStyles = (colors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: 'rgba(90, 74, 66, 0.65)',
+      backgroundColor: colors.scrim,
       justifyContent: 'flex-end',
     },
     sheet: {
-      backgroundColor: '#FBF4ED',
+      backgroundColor: colors.bg,
       borderTopLeftRadius: 28,
       borderTopRightRadius: 28,
       paddingHorizontal: 16,
@@ -268,7 +268,7 @@ const makeStyles = (colors) =>
       width: 40,
       height: 4,
       borderRadius: 2,
-      backgroundColor: '#D9CCC1',
+      backgroundColor: colors.line2,
       alignSelf: 'center',
       marginBottom: 14,
     },
@@ -281,20 +281,20 @@ const makeStyles = (colors) =>
     title: {
       fontSize: 20,
       fontWeight: '800',
-      color: '#2B1F1A',
+      color: colors.ink,
     },
     closeBtn: {
       width: 44,
       height: 44,
       borderRadius: 22,
-      backgroundColor: '#F1E6DC',
+      backgroundColor: colors.chip,
       alignItems: 'center',
       justifyContent: 'center',
     },
     sectionLabel: {
       fontSize: 13,
       fontWeight: '700',
-      color: '#5C4B43',
+      color: colors.ink2,
       marginBottom: 8,
     },
     labelRow: {
@@ -306,7 +306,7 @@ const makeStyles = (colors) =>
     sectionSub: {
       fontSize: 12,
       fontWeight: '500',
-      color: '#6F5F57',
+      color: colors.ink2,
     },
     pillsRow: {
       flexDirection: 'row',
@@ -319,23 +319,23 @@ const makeStyles = (colors) =>
       paddingHorizontal: 16,
       borderRadius: 14,
       borderWidth: 1.5,
-      borderColor: '#EADDD2',
-      backgroundColor: '#fff',
+      borderColor: colors.line2,
+      backgroundColor: colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
     },
     pillBtnActive: {
-      borderColor: '#D63B3B',
-      backgroundColor: '#FDE9E6',
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
     },
     pillText: {
       fontSize: 14,
       fontWeight: '600',
-      color: '#4A3F39',
+      color: colors.ink2,
     },
     pillTextActive: {
       fontWeight: '800',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
     placePillsWrap: {
       flexDirection: 'row',
@@ -348,23 +348,23 @@ const makeStyles = (colors) =>
       paddingHorizontal: 14,
       borderRadius: 14,
       borderWidth: 1.5,
-      borderColor: '#EADDD2',
-      backgroundColor: '#fff',
+      borderColor: colors.line2,
+      backgroundColor: colors.surface,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
       maxWidth: '48%',
     },
     placePillActive: {
-      borderColor: '#D63B3B',
-      backgroundColor: '#FDE9E6',
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
     },
     placePillDashed: {
       height: 44,
       paddingHorizontal: 14,
       borderRadius: 14,
       borderWidth: 1.5,
-      borderColor: '#CDBCAF',
+      borderColor: colors.ink3,
       borderStyle: 'dashed',
       backgroundColor: 'transparent',
       alignItems: 'center',
@@ -373,19 +373,19 @@ const makeStyles = (colors) =>
     placePillText: {
       fontSize: 14,
       fontWeight: '600',
-      color: '#4A3F39',
+      color: colors.ink2,
     },
     placePillTextActive: {
       fontWeight: '800',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
     customInputWrap: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-      backgroundColor: '#fff',
+      backgroundColor: colors.surface,
       borderWidth: 1.5,
-      borderColor: '#D63B3B',
+      borderColor: colors.primary,
       borderRadius: 14,
       paddingHorizontal: 12,
       height: 46,
@@ -394,16 +394,16 @@ const makeStyles = (colors) =>
     customInput: {
       flex: 1,
       fontSize: 14,
-      color: '#2B1F1A',
+      color: colors.ink,
       padding: 0,
     },
     modeCard: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: '#fff',
+      backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: '#EFE2D7',
+      borderColor: colors.line,
       borderRadius: 14,
       paddingHorizontal: 14,
       height: 48,
@@ -411,7 +411,7 @@ const makeStyles = (colors) =>
     },
     modeLabel: {
       fontSize: 13,
-      color: '#6F5F57',
+      color: colors.ink2,
     },
     modeRightRow: {
       flexDirection: 'row',
@@ -421,13 +421,13 @@ const makeStyles = (colors) =>
     modeValText: {
       fontSize: 14,
       fontWeight: '800',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
     modePickerContainer: {
-      backgroundColor: '#fff',
+      backgroundColor: colors.surface,
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: '#EFE2D7',
+      borderColor: colors.line,
       paddingVertical: 8,
       paddingHorizontal: 6,
       marginBottom: 16,
@@ -445,29 +445,29 @@ const makeStyles = (colors) =>
       paddingVertical: 6,
       borderRadius: 10,
       borderWidth: 1,
-      borderColor: '#EFE2D7',
-      backgroundColor: '#F8F1EA',
+      borderColor: colors.line,
+      backgroundColor: colors.chip,
     },
     modePickerItemActive: {
-      borderColor: '#D63B3B',
-      backgroundColor: '#FDE9E6',
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
     },
     modePickerText: {
       fontSize: 12,
-      color: '#5C4B43',
+      color: colors.ink2,
       fontWeight: '600',
     },
     modePickerTextActive: {
-      color: '#B3302C',
+      color: colors.primaryStrong,
       fontWeight: '700',
     },
     submitBtn: {
       height: 56,
       borderRadius: 18,
-      backgroundColor: '#D63B3B',
+      backgroundColor: colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#D63B3B',
+      shadowColor: colors.primary,
       shadowOffset: { width: 0, height: 6 },
       shadowOpacity: 0.3,
       shadowRadius: 14,
@@ -476,7 +476,7 @@ const makeStyles = (colors) =>
     submitBtnText: {
       fontSize: 17,
       fontWeight: '800',
-      color: '#fff',
+      color: colors.surface,
       letterSpacing: 0.5,
     },
   });

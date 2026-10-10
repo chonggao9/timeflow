@@ -52,7 +52,7 @@ export default function Timeline({
     return (
       <View style={styles.empty}>
         <View style={styles.emptyRing}>
-          <Ionicons name="location" size={32} color="#D63B3B" />
+          <Ionicons name="location" size={32} color={colors.primary} />
         </View>
         <Text style={styles.emptyText}>{t('timeline.empty.title')}</Text>
         <Text style={styles.emptyHint}>{t('timeline.empty.hint')}</Text>
@@ -144,7 +144,7 @@ export default function Timeline({
           {isCollapsed ? (
             <View style={styles.expandTrigger}>
               <Text style={styles.expandTriggerText}>{t('home.tripExpand', '展开')}</Text>
-              <Ionicons name="chevron-down" size={15} color="#B3302C" />
+              <Ionicons name="chevron-down" size={15} color={colors.primaryStrong} />
             </View>
           ) : (
             <View style={styles.tripActionsRow}>
@@ -155,7 +155,7 @@ export default function Timeline({
                   activeOpacity={0.7}
                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
-                  <Ionicons name="receipt-outline" size={13} color="#B3302C" />
+                  <Ionicons name="receipt-outline" size={13} color={colors.primaryStrong} />
                   <Text style={styles.ghostBtnText}>{t('receipt.btn', '小票')}</Text>
                 </TouchableOpacity>
               )}
@@ -166,7 +166,7 @@ export default function Timeline({
                 activeOpacity={0.7}
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
-                <Ionicons name="map-outline" size={13} color={coordsCount < 2 ? '#B9A99D' : '#B3302C'} />
+                <Ionicons name="map-outline" size={13} color={coordsCount < 2 ? colors.ink3 : colors.primaryStrong} />
                 <Text style={[styles.ghostBtnText, coordsCount < 2 && styles.ghostBtnTextDisabled]}>
                   {t('timeline.mapBtn', '轨迹')}
                 </Text>
@@ -250,7 +250,7 @@ export default function Timeline({
                       <Ionicons
                         name="chevron-forward"
                         size={14}
-                        color={isCurrent ? '#8E2420' : '#9A8A80'}
+                        color={isCurrent ? colors.primaryStrong : colors.ink3}
                       />
                     </TouchableOpacity>
                   </View>
@@ -268,11 +268,11 @@ export default function Timeline({
                           onPress={() => onChangeSegmentMode && onChangeSegmentMode(r)}
                           activeOpacity={0.7}
                         >
-                          <ModeIcon mode={r.mode || 'walk'} size={13} color="#B3302C" />
+                          <ModeIcon mode={r.mode || 'walk'} size={13} color={colors.primaryStrong} />
                           <Text style={styles.segmentPillText}>
                             {t('mode.' + (r.mode || 'walk'))} · {formatDuration(durBelow, lang)}
                           </Text>
-                          <Ionicons name="chevron-down" size={11} color="#B3302C" />
+                          <Ionicons name="chevron-down" size={11} color={colors.primaryStrong} />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -303,7 +303,7 @@ const makeStyles = (colors) =>
       width: 64,
       height: 64,
       borderRadius: 32,
-      backgroundColor: '#FDE9E6',
+      backgroundColor: colors.primarySoft,
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 14,
@@ -311,17 +311,17 @@ const makeStyles = (colors) =>
     emptyText: {
       fontSize: 16,
       fontWeight: '700',
-      color: '#2B1F1A',
+      color: colors.ink,
       marginBottom: 6,
     },
     emptyHint: {
       fontSize: 13,
-      color: '#6F5F57',
+      color: colors.ink2,
     },
     tripCard: {
-      backgroundColor: '#fff',
+      backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: '#EFE2D7',
+      borderColor: colors.line,
       borderRadius: 20,
       overflow: 'hidden',
       marginBottom: 10,
@@ -333,7 +333,7 @@ const makeStyles = (colors) =>
       paddingHorizontal: 14,
       paddingVertical: 10,
       borderBottomWidth: 1,
-      borderBottomColor: '#F3E9E0',
+      borderBottomColor: colors.line,
     },
     tripHeaderLeft: {
       flex: 1,
@@ -347,13 +347,13 @@ const makeStyles = (colors) =>
     tripTitleText: {
       fontSize: 15,
       fontWeight: '800',
-      color: '#2B1F1A',
+      color: colors.ink,
     },
     badgeOngoing: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      backgroundColor: '#FDE9E6',
+      backgroundColor: colors.primarySoft,
       borderRadius: 8,
       paddingHorizontal: 7,
       paddingVertical: 2,
@@ -362,15 +362,15 @@ const makeStyles = (colors) =>
       width: 6,
       height: 6,
       borderRadius: 3,
-      backgroundColor: '#D63B3B',
+      backgroundColor: colors.primary,
     },
     badgeOngoingText: {
       fontSize: 11,
       fontWeight: '700',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
     badgeEnded: {
-      backgroundColor: '#F1E6DC',
+      backgroundColor: colors.chip,
       borderRadius: 8,
       paddingHorizontal: 7,
       paddingVertical: 2,
@@ -378,22 +378,22 @@ const makeStyles = (colors) =>
     badgeEndedText: {
       fontSize: 11,
       fontWeight: '600',
-      color: '#5C4B43',
+      color: colors.ink2,
     },
     tripSubCollapsed: {
       fontSize: 12,
-      color: '#6F5F57',
+      color: colors.ink2,
       marginTop: 2,
     },
     tripSubExpanded: {
       fontSize: 13,
       fontWeight: '700',
-      color: '#4A3F39',
+      color: colors.ink2,
       marginTop: 2,
     },
     tripSubDur: {
       fontWeight: '500',
-      color: '#6F5F57',
+      color: colors.ink2,
     },
     expandTrigger: {
       flexDirection: 'row',
@@ -403,7 +403,7 @@ const makeStyles = (colors) =>
     expandTriggerText: {
       fontSize: 13,
       fontWeight: '700',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
     tripActionsRow: {
       flexDirection: 'row',
@@ -414,22 +414,22 @@ const makeStyles = (colors) =>
       height: 34,
       paddingHorizontal: 10,
       borderRadius: 10,
-      backgroundColor: '#FDEEEC',
+      backgroundColor: colors.primarySoft,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
     },
     ghostBtnDisabled: {
       opacity: 0.55,
-      backgroundColor: '#F8F1EA',
+      backgroundColor: colors.chip,
     },
     ghostBtnText: {
       fontSize: 12,
       fontWeight: '700',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
     ghostBtnTextDisabled: {
-      color: '#9A8A80',
+      color: colors.ink3,
     },
     trackContainer: {
       paddingHorizontal: 12,
@@ -445,11 +445,11 @@ const makeStyles = (colors) =>
       textAlign: 'right',
       fontSize: 13,
       fontWeight: '600',
-      color: '#4A3F39',
+      color: colors.ink2,
     },
     nodeTimeCurrent: {
       fontWeight: '800',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
     lineCol: {
       width: 16,
@@ -461,7 +461,7 @@ const makeStyles = (colors) =>
       width: 16,
       height: 16,
       borderRadius: 8,
-      backgroundColor: '#FBD9D6',
+      backgroundColor: colors.primarySoft,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -469,28 +469,28 @@ const makeStyles = (colors) =>
       width: 10,
       height: 10,
       borderRadius: 5,
-      backgroundColor: '#D63B3B',
+      backgroundColor: colors.primary,
     },
     startDot: {
       width: 10,
       height: 10,
       borderRadius: 5,
-      backgroundColor: '#fff',
+      backgroundColor: colors.surface,
       borderWidth: 2,
-      borderColor: '#B9A99D',
+      borderColor: colors.ink3,
     },
     normalDot: {
       width: 8,
       height: 8,
       borderRadius: 4,
-      backgroundColor: '#B9A99D',
+      backgroundColor: colors.ink3,
     },
     verticalLine: {
       position: 'absolute',
       top: 16,
       bottom: -20,
       width: 2,
-      backgroundColor: '#EBD9CF',
+      backgroundColor: colors.line2,
     },
     pointCard: {
       flex: 1,
@@ -500,35 +500,35 @@ const makeStyles = (colors) =>
       alignItems: 'center',
       paddingHorizontal: 12,
       gap: 8,
-      backgroundColor: '#fff',
+      backgroundColor: colors.surface,
       borderWidth: 1.5,
-      borderColor: '#EFE2D7',
+      borderColor: colors.line,
       borderRadius: 14,
     },
     pointCardCurrent: {
-      backgroundColor: '#FDE7E5',
-      borderColor: '#F0B3AF',
+      backgroundColor: colors.primarySoft,
+      borderColor: colors.primaryStrong,
     },
     pointCardStart: {
-      backgroundColor: '#F8F1EA',
-      borderColor: '#EADDD2',
+      backgroundColor: colors.chip,
+      borderColor: colors.line2,
     },
     pointName: {
       flex: 1,
       fontSize: 15,
       fontWeight: '700',
-      color: '#2B1F1A',
+      color: colors.ink,
     },
     pointNameCurrent: {
       fontSize: 16,
       fontWeight: '800',
-      color: '#8E2420',
+      color: colors.primaryStrong,
     },
     pointNameStart: {
-      color: '#2B1F1A',
+      color: colors.ink,
     },
     pillCurrent: {
-      backgroundColor: '#D63B3B',
+      backgroundColor: colors.primary,
       borderRadius: 8,
       paddingHorizontal: 8,
       paddingVertical: 3,
@@ -536,10 +536,10 @@ const makeStyles = (colors) =>
     pillCurrentText: {
       fontSize: 11,
       fontWeight: '700',
-      color: '#fff',
+      color: colors.surface,
     },
     pillStart: {
-      backgroundColor: '#EADDD2',
+      backgroundColor: colors.line2,
       borderRadius: 8,
       paddingHorizontal: 8,
       paddingVertical: 3,
@@ -547,7 +547,7 @@ const makeStyles = (colors) =>
     pillStartText: {
       fontSize: 11,
       fontWeight: '700',
-      color: '#5C4B43',
+      color: colors.ink2,
     },
     segmentRow: {
       flexDirection: 'row',
@@ -563,7 +563,7 @@ const makeStyles = (colors) =>
     segmentVerticalLine: {
       flex: 1,
       width: 2,
-      backgroundColor: '#EBD9CF',
+      backgroundColor: colors.line2,
     },
     segmentContent: {
       flex: 1,
@@ -574,7 +574,7 @@ const makeStyles = (colors) =>
       height: 28,
       paddingHorizontal: 9,
       borderRadius: 10,
-      backgroundColor: '#FDEEEC',
+      backgroundColor: colors.primarySoft,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 5,
@@ -582,6 +582,6 @@ const makeStyles = (colors) =>
     segmentPillText: {
       fontSize: 12,
       fontWeight: '700',
-      color: '#B3302C',
+      color: colors.primaryStrong,
     },
   });
