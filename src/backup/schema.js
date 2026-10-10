@@ -56,4 +56,11 @@ export async function restorePreferences(prefs) {
       else await AsyncStorage.setItem(key, val);
     } catch (e) { /* 单键失败不阻塞整体恢复 */ }
   }
+  // 行程时间戳不属于备份内容：若恢复了行程 id，把时间戳置为现在，
+  // 否则下次打卡会因缺时间戳的兼容分支并入可能已过去数周的旧行程。
+  try {
+    if (prefs['timeflow_current_trip'] != null) {
+      await AsyncStorage.setItem('timeflow_last_checkin_ts', String(Date.now()));
+    }
+  } catch (e) { /* 失败不阻塞恢复；下次打卡最多新开一条行程 */ }
 }
