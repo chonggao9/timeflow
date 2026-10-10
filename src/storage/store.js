@@ -84,8 +84,8 @@ async function migrateLegacy(db) {
   await db.withTransactionAsync(async () => {
     for (const r of records) {
       await db.runAsync(
-        'INSERT OR IGNORE INTO records (id, timestamp, location_name, lat, lng, mode, trip_id, duration, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        r.id, r.timestamp, r.locationName ?? null, r.lat ?? null, r.lng ?? null, r.mode ?? null, r.tripId ?? null, r.duration ?? null, r.category ?? null
+        'INSERT OR IGNORE INTO records (id, timestamp, location_name, lat, lng, mode, trip_id, duration, category, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        r.id, r.timestamp, r.locationName ?? null, r.lat ?? null, r.lng ?? null, r.mode ?? null, r.tripId ?? null, r.duration ?? null, r.category ?? null, r.note ?? null
       );
     }
   });
@@ -228,7 +228,8 @@ export function deleteRecord(id) {
 export async function clearAll() {
   const db = await getDb();
   await db.runAsync('DELETE FROM records');
-  await AsyncStorage.multiRemove([TRIP_KEY, RECORDS_KEY, LAST_CHECKIN_TS_KEY]);
+  // 连同修订号一起清掉：即使下面的 bumpRevision 写盘失败，也不会残留旧指纹
+  await AsyncStorage.multiRemove([TRIP_KEY, RECORDS_KEY, LAST_CHECKIN_TS_KEY, RECORDS_REV_KEY]);
   await bumpRevision();
 }
 
@@ -259,8 +260,8 @@ export async function importRecords(records) {
   await db.withTransactionAsync(async () => {
     for (const r of list) {
       await db.runAsync(
-        'INSERT OR IGNORE INTO records (id, timestamp, location_name, lat, lng, mode, trip_id, duration, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        r.id, r.timestamp ?? null, r.locationName ?? null, r.lat ?? null, r.lng ?? null, r.mode ?? null, r.tripId ?? null, r.duration ?? null, r.category ?? null
+        'INSERT OR IGNORE INTO records (id, timestamp, location_name, lat, lng, mode, trip_id, duration, category, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        r.id, r.timestamp ?? null, r.locationName ?? null, r.lat ?? null, r.lng ?? null, r.mode ?? null, r.tripId ?? null, r.duration ?? null, r.category ?? null, r.note ?? null
       );
     }
   });
