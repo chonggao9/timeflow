@@ -1,10 +1,12 @@
 // 历史数据分析：端到端 A→B 行程查询（含中间停靠）、地点清单、耗时直方图。
-import { placeKey, median, UNNAMED, isPlaceholderName, TRIP_TIMEOUT_MS } from './stats';
+import { placeKey, median, UNNAMED, isPlaceholderName, TRIP_TIMEOUT_MS, isTravelRecord } from './stats';
 
 // 地点清单：placeKey → { key, name, count }（按次数降序），供 A→B 选择器用
+// 只统计行程记录：专注目标的名称不是地点，混进来会污染地点选择器。
 export function getPlaceOptions(records) {
   const map = new Map();
-  for (const r of records) {
+  for (const r of (records || [])) {
+    if (!isTravelRecord(r)) continue;
     const key = placeKey(r);
     if (!map.has(key)) map.set(key, { key, names: {}, count: 0 });
     const e = map.get(key);
@@ -35,11 +37,12 @@ function weekStart(ts) {
 // 端到端 A→B 行程查询：A→A1→A2→B 算一次 A→B（含中间停靠，door-to-door）。
 // 同行程多次往返 → 多次采样。没走过返回 null。
 export function queryJourney(records, fromKey, toKey) {
-  const nameMap = new Map(getPlaceOptions(records).map(o => [o.key, o.name]));
+  const travelRecords = (records || []).filter(isTravelRecord); // 专注记录不参与行程查询
+  const nameMap = new Map(getPlaceOptions(travelRecords).map(o => [o.key, o.name]));
 
   // 按行程分组、按时间排序
   const byTrip = new Map();
-  for (const r of records) {
+  for (const r of travelRecords) {
     const t = r.tripId || 'legacy';
     if (!byTrip.has(t)) byTrip.set(t, []);
     byTrip.get(t).push(r);
@@ -70,7 +73,7 @@ export function queryJourney(records, fromKey, toKey) {
   }
 
   // 补充跨行程但时间连续（<=90分钟内直接相邻打卡）的样本，避免误触结束行程导致通勤样本断裂
-  const allSorted = [...records].sort((a, b) => a.timestamp - b.timestamp);
+  const allSorted = [...travelRecords].sort((a, b) => a.timestamp - b.timestamp);
   for (let i = 0; i < allSorted.length - 1; i++) {
     const s = allSorted[i], e = allSorted[i + 1];
     if (placeKey(s) === fromKey && placeKey(e) === toKey) {
@@ -186,9 +189,11 @@ export function buildDurationHistogram(minutes) {
 // ---- 历史行程 ----
 // 按 tripId 分组 → 行程摘要列表（按开始时间倒序）。
 // 每项：records(升序)、startTs、endTs、durationMs、route(去重相邻地名序列)、mode(主方式)、count。
+// 只统计行程记录：专注记录没有真实地点，混进来会渲染成空标题、时长为 — 的假行程。
 export function groupTrips(records) {
   const byTrip = new Map();
-  for (const r of records) {
+  for (const r of (records || [])) {
+    if (!isTravelRecord(r)) continue;
     // 无 tripId 的旧数据按自然日归组，避免坍缩成一个跨月的巨型行程
     const d = new Date(r.timestamp);
     d.setHours(0, 0, 0, 0);

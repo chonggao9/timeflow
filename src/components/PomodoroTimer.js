@@ -52,6 +52,7 @@ export default function PomodoroTimer({
   todayFocusCount = 0,
   todayFocusSec = 0,
   todayFocusRecords = [],
+  allFocusRecords,
   onUpdateRecord,
   onDeleteRecord,
   onGoInsights,
@@ -93,6 +94,8 @@ export default function PomodoroTimer({
 
   // 计算今日专注总时长与各分类占比
   const todayFocusRecordsList = todayFocusRecords || [];
+  // 专注历史弹窗的数据源：优先用跨天的全量专注记录，缺省回退到今日
+  const focusHistoryRecords = allFocusRecords || todayFocusRecordsList;
   const totalFocusSecCalculated = todayFocusSec || todayFocusRecordsList.reduce((s, r) => s + (Number(r.duration) || 0), 0);
   const totalFocusCountCalculated = todayFocusCount || todayFocusRecordsList.length;
 
@@ -931,7 +934,7 @@ export default function PomodoroTimer({
       <FocusHistoryModal
         visible={showHistoryModal}
         onClose={() => setShowHistoryModal(false)}
-        records={todayFocusRecordsList}
+        records={focusHistoryRecords}
         onUpdateRecord={onUpdateRecord}
         onDeleteRecord={onDeleteRecord}
       />

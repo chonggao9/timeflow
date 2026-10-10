@@ -439,7 +439,7 @@ export default function InsightsScreen() {
       </View>
 
       {view === 'history' ? (
-        <HistoryView records={records} onShowMap={setMapTrip} onShowReceipt={setReceiptTrip} />
+        <HistoryView records={records.filter(r => r.mode !== 'focus')} onShowMap={setMapTrip} onShowReceipt={setReceiptTrip} />
       ) : view === 'focus' ? (
             <>
               {/* 顶部时间范围筛选器 */}

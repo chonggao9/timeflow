@@ -37,7 +37,7 @@ import {
   setLastMode,
   getRecordsFingerprint,
 } from '../storage/store';
-import { computePathStats, placeKey, UNNAMED, isPlaceholderName, formatDuration, formatTime } from '../utils/stats';
+import { computePathStats, placeKey, UNNAMED, isPlaceholderName, formatDuration, formatTime, isFocusRecord } from '../utils/stats';
 import { getPlaceOptions } from '../utils/analytics';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
@@ -64,6 +64,7 @@ export default function HomeScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [records, setRecords] = useState([]);
+  const [allFocusRecords, setAllFocusRecords] = useState([]); // 全部专注记录，供专注历史弹窗跨天查看
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [scene, setScene] = useState('travel'); // 'travel' | 'focus'
@@ -120,7 +121,7 @@ export default function HomeScreen() {
     const trip = await getCurrentTripId();
     setHasActiveTrip(!!trip);
 
-    // 常用地点快选（Top 5 最高频地名）
+    // 常用地点快选（Top 5 最高频地名；专注目标名不是地点，getPlaceOptions 内部已剔除）
     try {
       const all = await getRecords();
       const options = getPlaceOptions(all);
@@ -129,6 +130,8 @@ export default function HomeScreen() {
         .filter((nm) => nm && !isPlaceholderName(nm) && nm !== UNNAMED)
         .slice(0, 5);
       setCommonPlaces(topPlaces);
+      // 全部专注记录：专注历史弹窗需要跨天查看，而 records 只装今日
+      setAllFocusRecords(all.filter(isFocusRecord));
     } catch (e) {}
     return sorted;
   }, []);
@@ -184,7 +187,7 @@ export default function HomeScreen() {
 
   // 预估到达计算
   useEffect(() => {
-    const travelRecs = records.filter((r) => r.mode !== 'focus');
+    const travelRecs = records.filter((r) => !isFocusRecord(r));
     if (travelRecs.length < 1) {
       setEstimate(null);
       return;
@@ -194,7 +197,7 @@ export default function HomeScreen() {
       let stats = pathStatsCacheRef.current.stats;
       if (pathStatsCacheRef.current.fp !== fp || !stats.length) {
         const all = await getRecords();
-        stats = computePathStats(all);
+        stats = computePathStats(all); // 内部已剔除专注记录
         pathStatsCacheRef.current = { fp, stats };
       }
       if (!stats.length) {
@@ -495,7 +498,6 @@ export default function HomeScreen() {
     const tnow = Date.now();
     try {
       await AsyncStorage.removeItem('timeflow_active_focus');
-      const tripId = await ensureTrip();
       const id = makeId();
       await saveRecord({
         id,
@@ -504,7 +506,7 @@ export default function HomeScreen() {
         lat: null,
         lng: null,
         mode: 'focus',
-        tripId,
+        tripId: null,
         duration: data.duration,
         category: data.category,
         note: data.note,
@@ -535,7 +537,7 @@ export default function HomeScreen() {
 
   // 1. 行程轨迹专属数据（严格排除 focus）
   const travelRecords = useMemo(
-    () => records.filter((r) => r.mode !== 'focus'),
+    () => records.filter((r) => !isFocusRecord(r)),
     [records]
   );
   const travelCount = travelRecords.length;
@@ -558,7 +560,7 @@ export default function HomeScreen() {
 
   // 2. 室内专注专属数据
   const focusRecords = useMemo(
-    () => records.filter((r) => r.mode === 'focus'),
+    () => records.filter(isFocusRecord),
     [records]
   );
   const focusCount = focusRecords.length;
@@ -870,6 +872,7 @@ export default function HomeScreen() {
             todayFocusCount={focusCount}
             todayFocusSec={todayFocusSec}
             todayFocusRecords={focusRecords}
+            allFocusRecords={allFocusRecords}
             onUpdateRecord={handleUpdateFocusRecord}
             onDeleteRecord={handleDeleteFocusRecord}
             onGoInsights={() => navigation.navigate('Insights')}

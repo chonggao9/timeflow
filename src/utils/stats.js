@@ -23,6 +23,17 @@ export const TRIP_TIMEOUT_MS = 90 * 60 * 1000; // 90分钟无打卡自动断开�
 export const TRIP_TIMEOUT_SEC = 90 * 60;       // 5400秒
 // 引用 store 里的 legacy 常量，避免循环依赖：这里直接用字符串标记
 const LEGACY_TRIP = 'legacy';
+
+// ---- 数据域隔离 ----
+// records 是单表，用 mode 软隔离两个域：'focus' 是室内专注域，其余方式属于行程轨迹域。
+// 统计函数必须在入口剔除专注记录：否则专注的目标名会被当作地名、两次专注的间隔会被当成路段时长；
+// 而且专注记录不带 tripId，会和无 tripId 的旧行程记录在 90 分钟内互相「串线」。
+export const MODE_FOCUS = 'focus';
+export const isFocusRecord = (r) => r?.mode === MODE_FOCUS;
+export const isTravelRecord = (r) => !isFocusRecord(r);
+export const getTravelRecords = (records) => (records || []).filter(isTravelRecord);
+export const getFocusRecords = (records) => (records || []).filter(isFocusRecord);
+
 export function isPlaceholderName(name) {
   return !name || name === UNNAMED || name === '未知位置' || name === 'Unnamed' || name === 'Unknown';
 }
@@ -53,6 +64,7 @@ function pickLabel(counter) {
 // records: 所有打卡记录
 // 返回: { fromName, toName, fromKey, toKey, mode, medianSec, minSec, maxSec, sampleCount }[]
 export function computePathStats(allRecords) {
+  const travelRecords = getTravelRecords(allRecords); // 专注记录不参与路段统计
   const pathMap = {};
   const placeNames = {}; // placeKey -> { 地名: 次数 }
 
@@ -64,7 +76,7 @@ export function computePathStats(allRecords) {
 
   // 按行程分组：同一条行程内相邻点才算路段，不同行程断开不串线
   const byTrip = {};
-  for (const r of allRecords) {
+  for (const r of travelRecords) {
     const trip = r.tripId || LEGACY_TRIP;
     if (!byTrip[trip]) byTrip[trip] = [];
     byTrip[trip].push(r);
@@ -90,7 +102,7 @@ export function computePathStats(allRecords) {
   }
 
   // 补充跨行程但时间紧邻（<=90分钟内相邻打卡）的路段，避免误触结束行程导致通勤数据丢失
-  const allSorted = [...allRecords].sort((a, b) => a.timestamp - b.timestamp);
+  const allSorted = [...travelRecords].sort((a, b) => a.timestamp - b.timestamp);
   for (let i = 0; i < allSorted.length - 1; i++) {
     const from = allSorted[i], to = allSorted[i + 1];
     const tripFrom = from.tripId || LEGACY_TRIP;

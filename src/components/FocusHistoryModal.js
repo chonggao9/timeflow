@@ -14,7 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
-import { formatDuration, formatTime, UNNAMED, isPlaceholderName } from '../utils/stats';
+import { formatDuration, formatTime, UNNAMED, isPlaceholderName, isFocusRecord } from '../utils/stats';
 
 // 6 大分类与设计稿保持色彩一致
 export const FOCUS_CATEGORIES = [
@@ -47,7 +47,7 @@ export function getCategoryMeta(catKey, t) {
 export default function FocusHistoryModal({
   visible,
   onClose,
-  records = [], // 仅今日 focus 记录
+  records = [], // 专注记录（默认今日；传入全部则按范围筛选）
   onUpdateRecord,
   onDeleteRecord,
 }) {
@@ -55,14 +55,27 @@ export default function FocusHistoryModal({
   const { t, lang } = useI18n();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
+  const [range, setRange] = useState('today'); // 'today' | 'week' | 'month' | 'all'
   const [editItem, setEditItem] = useState(null);
   const [draftCat, setDraftCat] = useState(null);
   const [draftName, setDraftName] = useState('');
 
-  // 1. 过滤并倒序排序今日 focus 记录
+  // 1. 按时间范围筛选专注记录并倒序排序（数据域隔离：只认 mode==='focus'）
   const sortedRecords = useMemo(() => {
-    return [...records].sort((a, b) => b.timestamp - a.timestamp);
-  }, [records]);
+    const focusOnly = (records || []).filter(isFocusRecord);
+    const now = new Date();
+    const todayZero = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const dayOfWeek = now.getDay() || 7; // 1(一) .. 7(日)
+    const weekZero = todayZero - (dayOfWeek - 1) * 86400000;
+    const monthZero = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const start =
+      range === 'today' ? todayZero :
+      range === 'week' ? weekZero :
+      range === 'month' ? monthZero : -Infinity;
+    return focusOnly
+      .filter(r => (r.timestamp || 0) >= start)
+      .sort((a, b) => b.timestamp - a.timestamp);
+  }, [records, range]);
 
   // 2. 统计数据：总次数、总时长、最长一次
   const totalCount = sortedRecords.length;
@@ -156,6 +169,30 @@ export default function FocusHistoryModal({
                 >
                   <Ionicons name="close" size={20} color="#5C4B43" />
                 </TouchableOpacity>
+              </View>
+
+              {/* 时间范围筛选 */}
+              <View style={styles.rangeRow}>
+                {[
+                  { key: 'today', label: t('insights.rangeToday', '今天') },
+                  { key: 'week', label: t('insights.rangeWeek', '本周') },
+                  { key: 'month', label: t('insights.rangeMonth', '本月') },
+                  { key: 'all', label: t('insights.rangeAll', '全部') },
+                ].map(opt => {
+                  const isCur = range === opt.key;
+                  return (
+                    <TouchableOpacity
+                      key={'range-' + opt.key}
+                      style={[styles.rangeChip, isCur && styles.rangeChipActive]}
+                      onPress={() => setRange(opt.key)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.rangeChipText, isCur && styles.rangeChipTextActive]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               {/* 1. 汇总卡片 (3 列) */}
@@ -392,6 +429,28 @@ const makeStyles = (colors) =>
       backgroundColor: '#F1E6DC',
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    rangeRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 12,
+    },
+    rangeChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderRadius: 16,
+      backgroundColor: '#F1E6DC',
+    },
+    rangeChipActive: {
+      backgroundColor: '#D63B3B',
+    },
+    rangeChipText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: '#6F5F57',
+    },
+    rangeChipTextActive: {
+      color: '#fff',
     },
     summaryCard: {
       flexDirection: 'row',
