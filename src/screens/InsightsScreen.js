@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords, clearAll, getRecordsFingerprint, updateRecord } from '../storage/store';
-import { computePathStats, formatDuration } from '../utils/stats';
+import { computePathStats, formatDuration, isFocusRecord } from '../utils/stats';
 import { getPlaceOptions, queryJourney, buildDurationHistogram } from '../utils/analytics';
 import { radius, shadow } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
@@ -144,7 +144,7 @@ export default function InsightsScreen() {
   }, []);
 
   // 基础专注数据衍生与过滤
-  const allFocusRecords = useMemo(() => records.filter(r => r.mode === 'focus'), [records]);
+  const allFocusRecords = useMemo(() => records.filter(isFocusRecord), [records]);
 
   const { focusRecords, prevFocusRecords, daysCount, daysLabel } = useMemo(() => {
     const now = new Date();
@@ -408,7 +408,7 @@ export default function InsightsScreen() {
     const newName = draftName.trim();
     if (newName !== renameTarget) {
       const allRecords = await getRecords();
-      const toUpdate = allRecords.filter(r => r.mode === 'focus' && (r.goalName === renameTarget || (!r.goalName && renameTarget === t('home.unnamedFocus'))));
+      const toUpdate = allRecords.filter(r => isFocusRecord(r) && (r.goalName === renameTarget || (!r.goalName && renameTarget === t('home.unnamedFocus'))));
       for (const r of toUpdate) {
         await updateRecord(r.id, { goalName: newName, locationName: newName });
       }
@@ -439,7 +439,7 @@ export default function InsightsScreen() {
       </View>
 
       {view === 'history' ? (
-        <HistoryView records={records.filter(r => r.mode !== 'focus')} onShowMap={setMapTrip} onShowReceipt={setReceiptTrip} />
+        <HistoryView records={records.filter(r => !isFocusRecord(r))} onShowMap={setMapTrip} onShowReceipt={setReceiptTrip} />
       ) : view === 'focus' ? (
             <>
               {/* 顶部时间范围筛选器 */}
