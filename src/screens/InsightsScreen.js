@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords, clearAll, getRecordsFingerprint, updateRecord } from '../storage/store';
-import { computePathStats, formatDuration, isFocusRecord } from '../utils/stats';
+import { computePathStats, formatDuration, isFocusRecord, getTravelRecords } from '../utils/stats';
 import { getPlaceOptions, queryJourney, buildDurationHistogram } from '../utils/analytics';
 import { radius, shadow } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
@@ -109,7 +109,9 @@ export default function InsightsScreen() {
 
   const fromPlace = placeOptions.find(o => o.key === fromKey);
   const toPlace = placeOptions.find(o => o.key === toKey);
-  const noData = records.length === 0;
+  // 行程域记录：专注记录不属于行程，总览看板与下面的历史列表都只看各自域
+  const travelRecords = useMemo(() => getTravelRecords(records), [records]);
+  const noData = travelRecords.length === 0;
 
   // 结果派生
   const hist = result ? buildDurationHistogram(result.durations) : null;
@@ -408,9 +410,12 @@ export default function InsightsScreen() {
     const newName = draftName.trim();
     if (newName !== renameTarget) {
       const allRecords = await getRecords();
-      const toUpdate = allRecords.filter(r => isFocusRecord(r) && (r.goalName === renameTarget || (!r.goalName && renameTarget === t('home.unnamedFocus'))));
+      // 专注目标名存在 location_name 列（表里没有 goal_name 列）；比较时用与统计一致的“有效任务名”，
+      // 这样未命名专注（占位名）与具名任务都能被正确匹配。
+      const focusName = (r) => (r.goalName || r.locationName || '').trim() || t('home.unnamedFocus');
+      const toUpdate = allRecords.filter(r => isFocusRecord(r) && focusName(r) === renameTarget);
       for (const r of toUpdate) {
-        await updateRecord(r.id, { goalName: newName, locationName: newName });
+        await updateRecord(r.id, { locationName: newName });
       }
       lastFingerprintRef.current = null;
       loadData();
@@ -787,7 +792,7 @@ export default function InsightsScreen() {
               {/* 出行总览指标看板 */}
               <View style={styles.overviewGrid}>
             <View style={styles.overviewCard}>
-              <Text style={styles.overviewNum}>{records.length}</Text>
+              <Text style={styles.overviewNum}>{travelRecords.length}</Text>
               <Text style={styles.overviewLabel}>{t('insights.totalRecords')}</Text>
             </View>
             <View style={styles.overviewCard}>
