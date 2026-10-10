@@ -21,7 +21,7 @@ export function TimeFlowWidget({ data, colors, strings }) {
   const isFocusing = !!activeFocus;
 
   const place = isFocusing
-    ? (activeFocus.goalName && activeFocus.goalName !== '专注' ? activeFocus.goalName : strings.focusUnnamed)
+    ? (activeFocus.goalName && activeFocus.goalName !== strings.focusUnnamed ? activeFocus.goalName : strings.focusUnnamed)
     : (maybeLatest
       ? (maybeLatest.locationName && maybeLatest.locationName !== strings.unnamed
           ? maybeLatest.locationName
