@@ -155,7 +155,13 @@ export default function HomeScreen() {
         if (today && today.length) {
           const latest = today[today.length - 1];
           const age = Date.now() - latest.timestamp;
-          if ((latest.lat == null || latest.lng == null) && age < 10 * 60 * 1000) {
+          // 只给行程打卡补坐标：专注记录/跨天的补记记录都不应被回前台时的定位污染
+          if (
+            !isFocusRecord(latest) &&
+            latest.tripId != null &&
+            (latest.lat == null || latest.lng == null) &&
+            age < 10 * 60 * 1000
+          ) {
             fillLocation(latest.id);
           }
         }
@@ -295,6 +301,12 @@ export default function HomeScreen() {
 
       const current = await getRecordById(id);
       if (!current) {
+        if (!isStale()) setLocStatus(null);
+        return;
+      }
+
+      // 双重防护：目标记录若已被改成专注记录（或本就不带行程），不写入坐标
+      if (isFocusRecord(current) || current.tripId == null) {
         if (!isStale()) setLocStatus(null);
         return;
       }
