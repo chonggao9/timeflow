@@ -17,7 +17,6 @@ export default function CheckInButton({ onPress, onLongPress, loading, success }
   const pressScale = useRef(new Animated.Value(1)).current;
   const chargeProgress = useRef(new Animated.Value(0)).current;
   const bounceAnim = useRef(new Animated.Value(1)).current;
-  const isChargingRef = useRef(false);
 
   // 成功/结程状态变化时的微弹簧弹跳
   useEffect(() => {
@@ -32,7 +31,6 @@ export default function CheckInButton({ onPress, onLongPress, loading, success }
   // 按下：开始充能并产生物理下潜感
   const handlePressIn = () => {
     if (loading || isSuccess) return;
-    isChargingRef.current = true;
 
     // 物理下潜
     Animated.spring(pressScale, {
@@ -54,8 +52,6 @@ export default function CheckInButton({ onPress, onLongPress, loading, success }
 
   // 抬手：重置缩放与充能进度
   const handlePressOut = () => {
-    isChargingRef.current = false;
-
     // 平滑回弹
     Animated.spring(pressScale, {
       toValue: 1,
