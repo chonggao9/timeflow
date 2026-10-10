@@ -16,6 +16,7 @@ import {
   Animated,
   Easing,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -55,6 +56,15 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 const PRIMARY_MODES = ['walk', 'bike', 'drive', 'taxi', 'subway'];
 const MORE_MODES = ['transit', 'train', 'flight', 'boat'];
+// 底部横向滑动条：格宽取「可用宽度 / 4.4」而非 /5，让第 5 格只露出一截，
+// 作为「还能左滑」的视觉提示；9 种方式全部排在一行里，冷门方式一个手势直达。
+const MODE_PEEK_SLOTS = 4.4;
+// 横条外层（bottomComposer）的水平内边距；格宽按 winWidth 减去两侧留白推算
+const MODE_STRIP_PADDING = 12;
+// 格间距。不折进单格宽度，而是与宽度并列成「名义槽宽 slot = itemW + gap」，
+// 于是第 n 格左边界恰好是 n × slot，滚动定位用一次乘法即可。
+const MODE_GAP = 6;
+const ALL_MODES = [...PRIMARY_MODES, ...MORE_MODES];
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -62,6 +72,21 @@ export default function HomeScreen() {
   const { t, formatDate, lang } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // 出行方式横条的几何：window 变化（旋转/折叠屏）时重算，故不缓存到常量。
+  const { width: winWidth } = useWindowDimensions();
+  const modeGeo = useMemo(() => {
+    const avail = winWidth - MODE_STRIP_PADDING * 2;
+    const slot = avail / MODE_PEEK_SLOTS;      // 含一个间隙的「名义槽宽」
+    return { slot, itemW: slot - MODE_GAP };
+  }, [winWidth]);
+  const modeStripRef = useRef(null);
+  // 横条当前滚动位置。放 ref 而不是 state：它只服务于「选中项要不要滚」这一个判断，
+  // 进 state 会让整页在每次滑动时重渲染。
+  const modeStripXRef = useRef(0);
+  // 横条可视宽度反过来要进 state：选中项靠它判断是否已可见，且它只在
+  // 首次布局与旋转/折叠时变化，重渲染代价可以忽略。
+  const [modeStripW, setModeStripW] = useState(0);
 
   const [records, setRecords] = useState([]);
   const [allFocusRecords, setAllFocusRecords] = useState([]); // 全部专注记录，供专注历史弹窗跨天查看
@@ -80,6 +105,23 @@ export default function HomeScreen() {
   }, [isFocusRunning, navigation]);
 
   const [mode, setMode] = useState('walk');
+
+  // 选中项滑进视野：从持久化偏好恢复出冷门方式时（如上次选了「轮船」），
+  // 横条初始位置会把它藏在屏幕外，选中态看似丢失。等一帧布局完成后再滚。
+  // 只在真正看不见时才滚——否则用户每点一次都会把横条拽一下，手感很跳。
+  useEffect(() => {
+    const idx = ALL_MODES.indexOf(mode);
+    if (idx < 0 || !modeStripW) return;
+    const left = MODE_STRIP_PADDING + idx * modeGeo.slot; // 格子在内容坐标系里的位置
+    const right = left + modeGeo.itemW;
+    const x = modeStripXRef.current;
+    if (left >= x - 1 && right <= x + modeStripW + 1) return; // 已完整可见
+    const timer = setTimeout(() => {
+      modeStripRef.current?.scrollTo({ x: Math.max(0, idx * modeGeo.slot), animated: true });
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [mode, modeGeo.slot, modeGeo.itemW, modeStripW]);
+
   const [estimate, setEstimate] = useState(null);
   const [hasActiveTrip, setHasActiveTrip] = useState(false);
   const [locStatus, setLocStatus] = useState(null);
@@ -103,9 +145,6 @@ export default function HomeScreen() {
 
   // 补卡相关状态
   const [backfillVisible, setBackfillVisible] = useState(false);
-
-  // 更多出行方式弹窗
-  const [showMoreModes, setShowMoreModes] = useState(false);
 
   // 路段出行方式修改弹窗
   const [segmentTarget, setSegmentTarget] = useState(null);
@@ -719,14 +758,27 @@ export default function HomeScreen() {
 
           {/* 底部操作区：出行方式 + 补记 + 打卡 */}
           <View style={styles.bottomComposer}>
-            {/* 出行方式 6 宫格 */}
-            <View style={styles.modesGrid}>
-              {PRIMARY_MODES.map((m) => {
+            {/* 出行方式横滑条：9 种方式一行排开，左右滑动取用 */}
+            <ScrollView
+              ref={modeStripRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.modesStrip}
+              contentContainerStyle={styles.modesStripContent}
+              scrollEventThrottle={16}
+              onScroll={(e) => { modeStripXRef.current = e.nativeEvent.contentOffset.x; }}
+              onLayout={(e) => setModeStripW(e.nativeEvent.layout.width)}
+            >
+              {ALL_MODES.map((m) => {
                 const isSelected = mode === m;
                 return (
                   <TouchableOpacity
                     key={'mode-btn-' + m}
-                    style={[styles.modeBtn, isSelected && styles.modeBtnActive]}
+                    style={[
+                      styles.modeBtn,
+                      { width: modeGeo.itemW },
+                      isSelected && styles.modeBtnActive,
+                    ]}
                     onPress={async () => {
                       setMode(m);
                       await setLastMode(m);
@@ -740,31 +792,7 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 );
               })}
-
-              {/* 第 6 个：更多 */}
-              <TouchableOpacity
-                style={[
-                  styles.modeBtnMore,
-                  MORE_MODES.includes(mode) && styles.modeBtnActive,
-                ]}
-                onPress={() => setShowMoreModes(true)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name="ellipsis-horizontal"
-                  size={20}
-                  color={MORE_MODES.includes(mode) ? colors.primaryStrong : colors.ink2}
-                />
-                <Text
-                  style={[
-                    styles.modeBtnText,
-                    MORE_MODES.includes(mode) && styles.modeBtnTextActive,
-                  ]}
-                >
-                  {MORE_MODES.includes(mode) ? t('mode.' + mode) : t('home.moreModes')}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            </ScrollView>
 
             {/* 核心操作行：[+ 补记] 与 [打卡] */}
             <View style={styles.actionBtnRow}>
@@ -973,7 +1001,7 @@ export default function HomeScreen() {
             {/* 修改出行方式 */}
             <Text style={styles.dialogSectionLabel}>{t('home.editMode')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dialogModeScroll}>
-              {[...PRIMARY_MODES, ...MORE_MODES].map((m) => {
+              {ALL_MODES.map((m) => {
                 const isSelected = draftMode === m;
                 return (
                   <TouchableOpacity
@@ -1024,7 +1052,7 @@ export default function HomeScreen() {
           <View style={styles.dialog}>
             <Text style={styles.dialogTitle}>{t('home.changeSegmentMode')}</Text>
             <View style={styles.segModeGrid}>
-              {[...PRIMARY_MODES, ...MORE_MODES].map((m) => {
+              {ALL_MODES.map((m) => {
                 const isCur = (segmentTarget?.mode || 'walk') === m;
                 return (
                   <TouchableOpacity
@@ -1042,40 +1070,6 @@ export default function HomeScreen() {
               })}
             </View>
             <TouchableOpacity style={styles.dialogBtnCancelFull} onPress={() => setSegmentTarget(null)}>
-              <Text style={styles.dialogBtnCancelText}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 更多出行方式弹窗 */}
-      <Modal visible={showMoreModes} transparent animationType="fade" onRequestClose={() => setShowMoreModes(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('home.moreModesTitle')}</Text>
-            <View style={styles.segModeGrid}>
-              {MORE_MODES.map((m) => {
-                const isCur = mode === m;
-                return (
-                  <TouchableOpacity
-                    key={'more-mode-' + m}
-                    style={[styles.segModeItem, isCur && styles.segModeItemActive]}
-                    onPress={async () => {
-                      setMode(m);
-                      await setLastMode(m);
-                      setShowMoreModes(false);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <ModeIcon mode={m} size={20} color={isCur ? colors.primaryStrong : colors.ink2} />
-                    <Text style={[styles.segModeText, isCur && styles.segModeTextActive]}>
-                      {t('mode.' + m)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <TouchableOpacity style={styles.dialogBtnCancelFull} onPress={() => setShowMoreModes(false)}>
               <Text style={styles.dialogBtnCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
@@ -1213,13 +1207,18 @@ const makeStyles = (colors) =>
       shadowRadius: 14,
       elevation: 8,
     },
-    modesGrid: {
-      flexDirection: 'row',
-      gap: 6,
+    modesStrip: {
       marginBottom: 10,
+      // 反向抵消 bottomComposer 的水平内边距：横条本身通铺到屏幕两侧，
+      // 首格靠 contentContainerStyle 的 paddingHorizontal 退回来与下方按钮对齐，
+      // 而右侧的下一格可以被屏幕边缘自然裁掉，露出「还能滑」的一截。
+      marginHorizontal: -MODE_STRIP_PADDING,
+    },
+    modesStripContent: {
+      paddingHorizontal: MODE_STRIP_PADDING,
+      gap: MODE_GAP,
     },
     modeBtn: {
-      flex: 1,
       height: 58,
       borderRadius: 14,
       borderWidth: 1.5,
@@ -1232,18 +1231,6 @@ const makeStyles = (colors) =>
     modeBtnActive: {
       borderColor: colors.primary,
       backgroundColor: colors.primarySoft,
-    },
-    modeBtnMore: {
-      flex: 1,
-      height: 58,
-      borderRadius: 14,
-      borderWidth: 1.5,
-      borderColor: colors.ink3,
-      borderStyle: 'dashed',
-      backgroundColor: 'transparent',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 3,
     },
     modeBtnText: {
       fontSize: 12,
