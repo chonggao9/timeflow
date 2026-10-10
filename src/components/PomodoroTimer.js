@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Animated, PanResponder, Pressable, Vibration, E
 import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import { radius, shadow } from '../theme';
@@ -376,6 +377,12 @@ export default function PomodoroTimer({
     setShowAbandonModal(true);
   };
 
+  // 计时会话结束（放弃 / 无保存结束 / 已保存）时统一清理活跃专注标记，
+  // 否则未保存的会话会让 widget 一直显示"专注中"。
+  const clearActiveFocus = useCallback(() => {
+    AsyncStorage.removeItem('timeflow_active_focus').catch(() => {});
+  }, []);
+
   const confirmAbandon = () => {
     setShowAbandonModal(false);
     Vibration.vibrate(30);
@@ -388,6 +395,7 @@ export default function PomodoroTimer({
     setTimeLeft(durationSec);
     setOvertimeSec(0);
     progressAnim.setValue(1);
+    clearActiveFocus();
   };
 
   const handleFinish = () => {
@@ -405,6 +413,9 @@ export default function PomodoroTimer({
       setPostCategory(category);
       setPostNote('');
       setShowPostFocus(true);
+    } else {
+      // 太短不保存，直接清掉活跃标记
+      clearActiveFocus();
     }
 
     setFlowMode(false);
@@ -423,6 +434,7 @@ export default function PomodoroTimer({
     }
     pendingSaveRef.current = null;
     setShowPostFocus(false);
+    clearActiveFocus();
   };
 
   const handleDurationPreset = (mins) => {
@@ -545,6 +557,54 @@ export default function PomodoroTimer({
               </Text>
             </TouchableOpacity>
           </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // 专注结束后弹出（确认分类/备注）。必须在 running 与 idle 两个渲染分支都挂载：
+  // handleFinish 会先 setRunning(false)，弹窗若只挂在 running 分支就会被卸载，导致永远无法保存。
+  const renderPostFocusModal = () => (
+    <Modal visible={showPostFocus} transparent animationType="slide">
+      <View style={styles.modalBg}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>{t('pomodoro.postTitle', '🎉 专注完成！')}</Text>
+          <Text style={styles.postDuration}>{formatShortDur(pendingSaveRef.current?.duration || 0)}</Text>
+
+          <Text style={styles.postLabel}>{t('pomodoro.postCatLabel', '确认分类')}</Text>
+          <View style={styles.postCatGrid}>
+            {CATEGORY_ITEMS.map(item => {
+              const isSelected = postCategory === item.key;
+              // 去除可能自带的 emoji 前缀，保证只显示单个大图标与纯文本
+              const cleanLabel = t(item.key).replace(/^[^\w\u4e00-\u9fa5]+\s*/, '');
+              return (
+                <TouchableOpacity
+                  key={item.key}
+                  style={[styles.postCatBtn, isSelected && { borderColor: item.color, borderWidth: 2 }]}
+                  onPress={() => setPostCategory(item.key)}
+                >
+                  <Text style={styles.postCatIcon}>{item.icon}</Text>
+                  <Text style={[styles.postCatText, isSelected && { fontWeight: '700' }]}>{cleanLabel}</Text>
+                  {isSelected && <Ionicons name="checkmark-circle" size={16} color={item.color} style={{ position: 'absolute', top: 4, right: 4 }} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={styles.postLabel}>{t('pomodoro.postNoteLabel', '补充备注（选填）')}</Text>
+          <TextInput
+            style={styles.postNoteInput}
+            value={postNote}
+            onChangeText={setPostNote}
+            placeholder={t('pomodoro.postNotePlaceholder', '这次专注做了什么？')}
+            placeholderTextColor={colors.ink3}
+            maxLength={100}
+            multiline
+          />
+
+          <TouchableOpacity style={styles.modalClose} onPress={confirmPostFocus}>
+            <Text style={styles.modalCloseText}>{t('pomodoro.postConfirm', '确认保存')}</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -679,50 +739,7 @@ export default function PomodoroTimer({
           {t('pomodoro.runningNotice', '专注中隐藏底部导航。点「放弃」会再确认一次，避免误触。')}
         </Text>
 
-        {/* Post-Focus Modal */}
-        <Modal visible={showPostFocus} transparent animationType="slide">
-          <View style={styles.modalBg}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>{t('pomodoro.postTitle', '🎉 专注完成！')}</Text>
-              <Text style={styles.postDuration}>{formatShortDur(pendingSaveRef.current?.duration || 0)}</Text>
-
-              <Text style={styles.postLabel}>{t('pomodoro.postCatLabel', '确认分类')}</Text>
-              <View style={styles.postCatGrid}>
-                {CATEGORY_ITEMS.map(item => {
-                  const isSelected = postCategory === item.key;
-                  // 去除可能自带的 emoji 前缀，保证只显示单个大图标与纯文本
-                  const cleanLabel = t(item.key).replace(/^[^\w\u4e00-\u9fa5]+\s*/, '');
-                  return (
-                    <TouchableOpacity
-                      key={item.key}
-                      style={[styles.postCatBtn, isSelected && { borderColor: item.color, borderWidth: 2 }]}
-                      onPress={() => setPostCategory(item.key)}
-                    >
-                      <Text style={styles.postCatIcon}>{item.icon}</Text>
-                      <Text style={[styles.postCatText, isSelected && { fontWeight: '700' }]}>{cleanLabel}</Text>
-                      {isSelected && <Ionicons name="checkmark-circle" size={16} color={item.color} style={{ position: 'absolute', top: 4, right: 4 }} />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <Text style={styles.postLabel}>{t('pomodoro.postNoteLabel', '补充备注（选填）')}</Text>
-              <TextInput
-                style={styles.postNoteInput}
-                value={postNote}
-                onChangeText={setPostNote}
-                placeholder={t('pomodoro.postNotePlaceholder', '这次专注做了什么？')}
-                placeholderTextColor={colors.ink3}
-                maxLength={100}
-                multiline
-              />
-
-              <TouchableOpacity style={styles.modalClose} onPress={confirmPostFocus}>
-                <Text style={styles.modalCloseText}>{t('pomodoro.postConfirm', '确认保存')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+        {renderPostFocusModal()}
 
         {/* Ambient Picker Modal (Running) */}
         {renderAmbientModal()}
@@ -906,6 +923,9 @@ export default function PomodoroTimer({
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Post-Focus Modal（handleFinish 后 running 已置 false，这里才是实际承载保存弹窗的分支） */}
+      {renderPostFocusModal()}
 
       {/* FocusHistoryModal 弹窗 */}
       <FocusHistoryModal
