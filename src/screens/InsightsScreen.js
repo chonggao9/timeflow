@@ -39,10 +39,18 @@ export default function InsightsScreen() {
   const [toKey, setToKey] = useState(null);
   const [pickerFor, setPickerFor] = useState(null); // 'from' | 'to' | null
   const [result, setResult] = useState(null);
-  const [view, setView] = useState('travel'); // 'travel' | 'focus' | 'history'
+  const [view, setView] = useState('travel'); // 'travel' | 'focus'
+  const [travelRange, setTravelRange] = useState('7d'); // '7d' | '30d' | 'all'
+  const [showRangeModal, setShowRangeModal] = useState(false);
   const [focusRange, setFocusRange] = useState('week'); // 'today' | 'week' | 'month' | 'all'
   const [selectedBarIndex, setSelectedBarIndex] = useState(null);
   const [selectedBar, setSelectedBar] = useState(null);
+
+  const rangeLabel = useMemo(() => {
+    if (travelRange === '30d') return t('insights.range30Days');
+    if (travelRange === 'all') return t('insights.rangeAll');
+    return t('insights.range7Days');
+  }, [travelRange, t]);
   const [expandedCats, setExpandedCats] = useState({});
   const [mapTrip, setMapTrip] = useState(null); // 当前查看地图的行程
   const [receiptTrip, setReceiptTrip] = useState(null); // 当前查看小票的行程
@@ -409,27 +417,45 @@ export default function InsightsScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
-        <Text style={styles.title}>{t('insights.title')}</Text>
-        <Text style={styles.subtitle}>{t('insights.subtitle')}</Text>
-      </View>
-
-      {/* 分段切换 */}
-      <View style={styles.seg}>
-        <TouchableOpacity style={[styles.segBtn, view === 'travel' && styles.segBtnActive]} onPress={() => setView('travel')} activeOpacity={0.8}>
-          <Text style={[styles.segText, view === 'travel' && styles.segTextActive]}>{t('insights.segTravel', '🚗 行程')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.segBtn, view === 'focus' && styles.segBtnActive]} onPress={() => setView('focus')} activeOpacity={0.8}>
-          <Text style={[styles.segText, view === 'focus' && styles.segTextActive]}>{t('insights.segFocus', '🍅 专注')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.segBtn, view === 'history' && styles.segBtnActive]} onPress={() => setView('history')} activeOpacity={0.8}>
-          <Text style={[styles.segText, view === 'history' && styles.segTextActive]}>🕒 {t('insights.history')}</Text>
+      <View style={[styles.headerRow, { paddingTop: insets.top + 4 }]}>
+        <View style={styles.headerTextWrap}>
+          <Text style={styles.title}>{t('insights.title')}</Text>
+          <Text style={styles.subtitle}>{t('insights.subtitle')}</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.pillBtn}
+          onPress={() => setShowRangeModal(true)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+        >
+          <Text style={styles.pillBtnText}>{rangeLabel}</Text>
+          <Ionicons name="chevron-down" size={14} color={colors.ink} />
         </TouchableOpacity>
       </View>
 
-      {view === 'history' ? (
-        <HistoryView records={records} onShowMap={setMapTrip} onShowReceipt={setReceiptTrip} />
-      ) : view === 'focus' ? (
+      {/* 顶部 Tab 切换（专注 / 行程） */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tabButton, view === 'focus' && styles.tabButtonActive]}
+          onPress={() => setView('focus')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabButtonText, view === 'focus' && styles.tabButtonTextActive]}>
+            {t('insights.tabFocus')}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabButton, view === 'travel' && styles.tabButtonActive]}
+          onPress={() => setView('travel')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabButtonText, view === 'travel' && styles.tabButtonTextActive]}>
+            {t('insights.tabTravel')}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {view === 'focus' ? (
             <>
               {/* 顶部时间范围筛选器 */}
               <View style={styles.rangeFilterWrap}>
@@ -772,21 +798,21 @@ export default function InsightsScreen() {
             </View>
           ) : (
             <>
-              {/* 出行总览指标看板 */}
-              <View style={styles.overviewGrid}>
-            <View style={styles.overviewCard}>
-              <Text style={styles.overviewNum}>{travelRecords.length}</Text>
-              <Text style={styles.overviewLabel}>{t('insights.totalRecords')}</Text>
-            </View>
-            <View style={styles.overviewCard}>
-              <Text style={styles.overviewNum}>{placeOptions.length}</Text>
-              <Text style={styles.overviewLabel}>{t('insights.totalPlaces')}</Text>
-            </View>
-            <View style={styles.overviewCard}>
-              <Text style={[styles.overviewNum, { color: colors.primary }]}>{paths.length}</Text>
-              <Text style={styles.overviewLabel}>{t('insights.totalPaths')}</Text>
-            </View>
-          </View>
+              {/* 出行总览三个统计指标卡片 */}
+              <View style={styles.statsGrid}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNum}>{travelRecords.length}</Text>
+                  <Text style={styles.statLabel}>{t('insights.totalRecords')}</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNum}>{placeOptions.length}</Text>
+                  <Text style={styles.statLabel}>{t('insights.totalPlaces')}</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={[styles.statNum, { color: colors.primaryStrong }]}>{paths.length}</Text>
+                  <Text style={styles.statLabel}>{t('insights.totalPaths')}</Text>
+                </View>
+              </View>
 
           {/* 高频通勤快捷查看标签 */}
           {paths.length > 0 && (
@@ -940,6 +966,9 @@ export default function InsightsScreen() {
             ))
           )}
 
+          {/* 历史出行记录（已合并入行程主页） */}
+          <HistoryView records={travelRecords} onShowMap={setMapTrip} onShowReceipt={setReceiptTrip} />
+
           <TouchableOpacity style={styles.clearBtn} onPress={handleClear}>
             <Text style={styles.clearText}>{t('profile.clear')}</Text>
           </TouchableOpacity>
@@ -1062,6 +1091,42 @@ export default function InsightsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 时间范围选择弹窗 */}
+      <Modal visible={showRangeModal} transparent animationType="fade" onRequestClose={() => setShowRangeModal(false)}>
+        <TouchableOpacity
+          style={styles.rangeOverlay}
+          activeOpacity={1}
+          onPress={() => setShowRangeModal(false)}
+        >
+          <View style={styles.rangeDialog}>
+            <Text style={styles.rangeDialogTitle}>{t('insights.timeRange')}</Text>
+            {[
+              { key: '7d', label: t('insights.range7Days') },
+              { key: '30d', label: t('insights.range30Days') },
+              { key: 'all', label: t('insights.rangeAll') },
+            ].map(opt => {
+              const isSelected = travelRange === opt.key;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[styles.rangeOption, isSelected && styles.rangeOptionActive]}
+                  onPress={() => {
+                    setTravelRange(opt.key);
+                    setShowRangeModal(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.rangeOptionText, isSelected && styles.rangeOptionTextActive]}>
+                    {opt.label}
+                  </Text>
+                  {isSelected && <Ionicons name="checkmark" size={18} color={colors.primaryStrong} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   );
 }
@@ -1070,9 +1135,153 @@ const makeStyles = (colors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 40 },
 
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  headerTextWrap: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: colors.ink,
+    letterSpacing: -0.5,
+    lineHeight: 32,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: colors.ink2,
+    marginTop: 4,
+  },
+  pillBtn: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#EADFD7',
+    backgroundColor: colors.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    ...shadow.sm,
+  },
+  pillBtnText: {
+    fontSize: 13,
+    color: colors.ink,
+    fontWeight: '600',
+  },
+
+  tabsContainer: {
+    flexDirection: 'row',
+    gap: 4,
+    padding: 4,
+    backgroundColor: colors.chip,
+    borderRadius: 16,
+    marginBottom: 14,
+  },
+  tabButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  tabButtonActive: {
+    backgroundColor: colors.surface,
+    ...shadow.sm,
+  },
+  tabButtonText: {
+    fontSize: 14,
+    color: colors.ink2,
+    fontWeight: '600',
+  },
+  tabButtonTextActive: {
+    color: colors.primaryStrong,
+    fontWeight: '700',
+  },
+
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadow.card,
+  },
+  statNum: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.ink,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: colors.ink2,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+
+  rangeOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  rangeDialog: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: 16,
+    ...shadow.float,
+  },
+  rangeDialogTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.ink,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  rangeOption: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: colors.chip,
+    marginBottom: 8,
+  },
+  rangeOptionActive: {
+    backgroundColor: colors.primarySoft,
+  },
+  rangeOptionText: {
+    fontSize: 14,
+    color: colors.ink,
+    fontWeight: '500',
+  },
+  rangeOptionTextActive: {
+    color: colors.primaryStrong,
+    fontWeight: '700',
+  },
+
   header: { paddingHorizontal: 4, marginBottom: 16 },
-  title: { fontSize: 26, fontWeight: '800', color: colors.ink, letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, color: colors.ink2, marginTop: 4 },
   seg: {
     flexDirection: 'row', backgroundColor: colors.chip, borderRadius: radius.sm,
     padding: 3, marginBottom: 16,

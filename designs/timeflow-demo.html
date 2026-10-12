@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>timeflow · 行程页（合并版 demo）</title>
+<!--
+=====================================================================
+给 AI Code 的说明（请先读）
+---------------------------------------------------------------------
+这是「洞察 > 行程」合并页的【视觉与交互参考】，不是要交付的代码。
+- 请用项目现有技术栈原生实现，不要照搬本文件的 DOM 结构或 CSS。
+- 本文件里的数据全是示例（见底部 DATA），实际请接入现有统计与历史查询。
+
+设计令牌 Design tokens
+  背景 bg        #FBF4EE      卡片 card      #FFFFFF
+  文字 ink       #2A2220      次要文字 muted  #766A64
+  主色 accent    #C62F35      图表高亮 mid    #EF5350
+  浅主色 soft    #FDE8E6      图表弱化色      #F6BDB6 / #F2A39B
+  分割线 line    #F3EAE4      无数据柱色      #F0E6DE
+  卡片圆角 20 / 小卡 16 / chip 22(胶囊) / 页面左右边距 16 / 卡片间距 14
+  触控区域 >= 44px
+
+页面结构（自上而下）
+  页头 → Tab(行程/专注) → 三个统计卡 → 近7天出行 → 路线洞察
+  → 未命名地点提示 → 出行记录(搜索 + 方式筛选 + 按日分组列表) → 底部导航
+  另有「行程详情」页（点"查看最近一次"进入）
+
+交互
+  - 路线 chips：只切换"路线洞察"卡片
+  - 方式 chips + 搜索：只过滤"出行记录"列表，无结果显示空状态
+  - 样本数 < 2 的路线：不显示大字耗时的"通常"含义，改提示"样本不足"
+  - 列表行右侧三态：有耗时 / 未命名(命名按钮) / 无耗时(—)
+=====================================================================
+-->
+<style>
+:root{--bg:#FBF4EE;--card:#fff;--ink:#2A2220;--muted:#766A64;--accent:#C62F35;--mid:#EF5350;--soft:#FDE8E6;--line:#F3EAE4;--shadow:0 2px 10px rgba(120,70,50,.07)}
+*{box-sizing:border-box}
+html{background:#E9DFD7}
+body{margin:0;font-family:'PingFang SC','Noto Sans SC','Microsoft YaHei',system-ui,sans-serif;color:var(--ink)}
+button{font-family:inherit;cursor:pointer}
+.phone{max-width:430px;margin:0 auto;min-height:100vh;background:var(--bg);display:flex;flex-direction:column;position:relative}
+.view{display:none;flex:1;flex-direction:column}
+.view.on{display:flex}
+.body{flex:1;padding:20px 16px 24px;display:flex;flex-direction:column;gap:14px}
+h1,h2,p{margin:0}
+.card{background:var(--card);border-radius:20px;padding:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px}
+.row{display:flex;justify-content:space-between;align-items:baseline}
+.muted{color:var(--muted);font-size:12px}
+.pill-btn{min-height:44px;padding:0 12px;border:1px solid #EADFD7;background:#fff;border-radius:22px;font-size:13px;color:var(--ink);display:flex;align-items:center;gap:6px}
+.tabs{display:flex;gap:4px;padding:4px;background:#F3E9E1;border-radius:16px}
+.tabs button{flex:1;min-height:44px;border:none;border-radius:12px;background:transparent;color:var(--muted);font-size:14px}
+.tabs button.on{background:#fff;color:var(--accent);font-weight:700;box-shadow:0 1px 4px rgba(120,70,50,.12)}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.stat{background:#fff;border-radius:16px;padding:14px 8px;text-align:center;box-shadow:var(--shadow)}
+.stat b{display:block;font-size:24px}
+.stat span{font-size:12px;color:var(--muted)}
+.week{display:flex;gap:6px}
+.wcol{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.wbar{height:76px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;font-size:11px;color:var(--muted)}
+.wbar i{display:block;width:100%;max-width:26px;border-radius:6px}
+.share{display:flex;gap:3px}
+.share i{height:10px;border-radius:5px;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:#4A3F3A}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend em{width:9px;height:9px;border-radius:3px;display:block}
+.chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;min-height:44px;padding:0 16px;border-radius:22px;font-size:13px;background:#fff;border:1.5px solid #EADFD7;color:#4A3F3A}
+.chip.on{background:var(--soft);border-color:var(--mid);color:#9E2429;font-weight:700}
+.rchip{flex:none;min-height:44px;padding:4px 14px;border-radius:22px;background:#fff;border:1.5px solid #EADFD7;color:var(--ink);display:flex;flex-direction:column;align-items:flex-start;justify-content:center;white-space:nowrap;text-align:left}
+.rchip.on{background:var(--soft);border-color:var(--mid);color:#9E2429}
+.rchip b{font-size:13px}.rchip small{font-size:11px;opacity:.8}
+.big{display:flex;align-items:baseline;gap:4px;color:var(--accent)}
+.big b{font-size:44px;font-weight:800;line-height:1.1}.big span{font-size:16px;font-weight:700}
+.tip{background:var(--soft);border-radius:12px;padding:10px 12px;font-size:13px;color:#4A3F3A;line-height:1.5}
+.tip.gray{background:#F5EEE8}
+.chart-t{font-size:12px;font-weight:700;color:#4A3F3A;margin-bottom:6px}
+.bars{display:flex;align-items:flex-end}
+.bars i{flex:1;border-radius:3px;display:block}
+.axis{display:flex;font-size:11px;color:var(--muted);margin-top:6px}
+.banner{background:var(--soft);border-radius:16px;padding:12px 12px 12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.banner button{flex:none;min-height:44px;padding:0 16px;border:none;border-radius:22px;background:var(--accent);color:#fff;font-size:13px;font-weight:700}
+.search{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;background:#fff;border-radius:22px;box-shadow:var(--shadow)}
+.search input{flex:1;border:none;outline:none;background:transparent;font-size:14px;font-family:inherit;color:var(--ink)}
+.day{display:flex;flex-direction:column;gap:8px}
+.day-h{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px}
+.day-h b{font-size:13px;color:#4A3F3A}
+.list{background:#fff;border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.trip{display:flex;align-items:center;gap:12px;padding:10px 12px}
+.trip+.trip{border-top:1px solid var(--line)}
+.ico{flex:none;width:36px;height:36px;border-radius:18px;background:#FDEDEA;color:var(--accent);display:flex;align-items:center;justify-content:center}
+.tmid{flex:1;min-width:0}
+.tmid b{font-size:15px}
+.badge{font-size:11px;color:var(--accent);background:#FDEDEA;border-radius:8px;padding:1px 7px;margin-left:6px;white-space:nowrap}
+.tmid div{font-size:12px;color:var(--muted);margin-top:3px}
+.tright{flex:none;text-align:right}
+.tright b{display:block;font-size:15px;color:var(--accent)}
+.tright small{font-size:11px;color:var(--muted)}
+.name-btn{min-height:44px;padding:0 12px;border:1px solid #F0C9C5;background:#fff;border-radius:22px;font-size:12px;font-weight:600;color:var(--accent)}
+.empty{background:#fff;border-radius:16px;padding:28px 16px;text-align:center;font-size:13px;color:var(--muted)}
+.nav{flex:none;height:64px;background:#fff;border-top:1px solid #F0E6DE;display:flex;position:sticky;bottom:0}
+.nav button{flex:1;border:none;background:transparent;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px}
+.nav button.on{color:var(--accent);font-weight:700}
+.link{background:none;border:none;color:var(--accent);font-size:13px;font-weight:600;min-height:44px}
+.top{display:flex;align-items:center;gap:4px;padding:12px 16px 0}
+.back{width:44px;height:44px;border:none;background:none;display:flex;align-items:center;justify-content:center;color:var(--ink)}
+.tl{display:flex;gap:12px}
+.tl .rail{width:14px;display:flex;flex-direction:column;align-items:center}
+.tl .rail .dot{width:12px;height:12px;border-radius:6px;margin-top:4px;box-sizing:border-box}
+.tl .rail .ln{flex:1;width:2px;background:#F2B8B2}
+.tl .cont{flex:1;padding-bottom:14px}
+.tl .cont .r1{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700}
+.tl .cont .r1 span{color:var(--muted);font-weight:400}
+.cmp{display:flex;align-items:center;gap:10px;font-size:12px}
+.cmp .t{width:52px;color:var(--muted)}.cmp .tr{flex:1;height:12px;background:#F5EEE8;border-radius:6px}
+.cmp .tr i{display:block;height:12px;border-radius:6px}.cmp .v{width:44px;text-align:right;color:var(--muted)}
+.cmp.cur .t,.cmp.cur .v{color:var(--ink);font-weight:700}
+.actions{display:flex;gap:10px}
+.actions button{flex:1;min-height:48px;border-radius:24px;font-size:14px;font-weight:700}
+.actions .p{border:none;background:var(--accent);color:#fff}
+.actions .s{border:1.5px solid #EADFD7;background:#fff;color:var(--ink);font-weight:600}
+</style>
+</head>
+<body>
+<div class="phone">
+
+<!-- ============ 主页：洞察 > 行程（合并版）============ -->
+<section class="view on" id="v-main">
+<div class="body">
+  <div class="row" style="align-items:flex-start">
+    <div><h1 style="font-size:26px;font-weight:700;line-height:1.2">洞察</h1><p class="muted" style="font-size:13px;margin-top:4px">你的出行路线与耗时规律</p></div>
+    <button class="pill-btn">近 7 天 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+  </div>
+
+  <div class="tabs"><button>专注</button><button class="on">行程</button></div>
+
+  <div class="stats">
+    <div class="stat"><b>25</b><span>打卡总数</span></div>
+    <div class="stat"><b>10</b><span>常去地点</span></div>
+    <div class="stat"><b style="color:var(--accent)">2</b><span>已发现路线</span></div>
+  </div>
+
+  <div class="card">
+    <div class="row"><h2 style="font-size:15px">近 7 天出行</h2><span class="muted">共 <b id="weekTotal" style="color:var(--ink);font-size:15px"></b></span></div>
+    <div class="week" id="week"></div>
+    <div><div class="share" id="share"></div><div class="legend" id="legend" style="margin-top:8px"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="align-items:center"><h2 style="font-size:15px">路线洞察</h2><button class="link" onclick="go('detail')">查看最近一次 ›</button></div>
+    <div class="chips" id="routeChips"></div>
+    <div id="routeBody" style="display:flex;flex-direction:column;gap:14px"></div>
+  </div>
+
+  <div class="banner">
+    <div><b style="font-size:14px">还有 4 个未命名地点</b><div style="font-size:12px;color:#4A3F3A;margin-top:2px;line-height:1.4">命名后会自动归入路线，洞察更准</div></div>
+    <button>去命名</button>
+  </div>
+
+  <div class="row" style="margin-top:4px"><h2 style="font-size:17px">出行记录</h2><span class="muted" id="count"></span></div>
+  <label class="search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#766A64" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" type="text" placeholder="搜索地名"></label>
+  <div class="chips" id="modeChips"></div>
+  <div id="days" style="display:flex;flex-direction:column;gap:14px"></div>
+</div>
+<nav class="nav">
+  <button><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>打卡</button>
+  <button class="on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 20V11M12 20V4M18 20v-6"/></svg>洞察</button>
+  <button><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>我的</button>
+</nav>
+</section>
+
+<!-- ============ 行程详情 ============ -->
+<section class="view" id="v-detail">
+<div class="top"><button class="back" aria-label="返回" onclick="go('main')"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><h1 style="font-size:18px;font-weight:700">行程详情</h1></div>
+<div class="body" style="padding-top:8px">
+  <div class="card" style="padding:0;overflow:hidden;gap:0">
+    <svg viewBox="0 0 358 168" width="100%" role="img" aria-label="家到公司的路线示意图" style="display:block">
+      <rect width="358" height="168" fill="#F6EDE5"/>
+      <path d="M0 120 C60 110 90 150 160 130 S280 90 358 100" stroke="#EADBCF" stroke-width="14" fill="none"/>
+      <path d="M120 0 C130 50 100 90 130 168" stroke="#EADBCF" stroke-width="10" fill="none"/>
+      <path d="M44 128 C84 118 96 82 138 76 S210 100 244 70 S300 42 316 40" stroke="#EF5350" stroke-width="4" stroke-linecap="round" fill="none"/>
+      <circle cx="44" cy="128" r="8" fill="#C62F35" stroke="#fff" stroke-width="3"/>
+      <circle cx="138" cy="76" r="6" fill="#fff" stroke="#C62F35" stroke-width="3"/>
+      <circle cx="244" cy="70" r="6" fill="#fff" stroke="#C62F35" stroke-width="3"/>
+      <circle cx="316" cy="40" r="8" fill="#2A2220" stroke="#fff" stroke-width="3"/>
+      <text x="44" y="152" font-size="11" fill="#4A3F3A" text-anchor="middle">家</text>
+      <text x="316" y="24" font-size="11" fill="#4A3F3A" text-anchor="middle">公司</text>
+      <text x="344" y="160" font-size="10" fill="#766A64" text-anchor="end">示意路线</text>
+    </svg>
+  </div>
+  <div class="card" style="gap:12px">
+    <div class="row" style="align-items:flex-start">
+      <div><div style="font-size:20px;font-weight:800">家 → 公司</div><div class="muted" style="margin-top:4px">10月12日 · 周一 · 骑行</div></div>
+      <div style="text-align:right"><div class="muted">耗时</div><div style="font-size:30px;font-weight:800;color:var(--accent);line-height:1.1">34<span style="font-size:14px"> 分钟</span></div></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="badge" style="margin:0;font-size:12px;padding:4px 10px">4 站</span><span class="badge" style="margin:0;font-size:12px;padding:4px 10px">经 2 处中转</span><span class="badge" style="margin:0;font-size:12px;padding:4px 10px">已发现路线</span></div>
+    <div class="tip gray">和这条路线的通常耗时一致，在 28 – 41 分钟的波动范围内。</div>
+  </div>
+  <div class="card" style="gap:12px">
+    <h2 style="font-size:15px">途经站点</h2>
+    <div id="timeline"></div>
+  </div>
+  <div class="card" style="gap:12px">
+    <div class="row"><h2 style="font-size:15px">同路线对比</h2><span class="muted">共 3 次</span></div>
+    <div class="cmp cur"><span class="t">10月12日</span><div class="tr"><i style="width:83%;background:var(--accent)"></i></div><span class="v">34 分</span></div>
+    <div class="cmp"><span class="t">10月8日</span><div class="tr"><i style="width:100%;background:#F2A39B"></i></div><span class="v">41 分</span></div>
+    <div class="cmp"><span class="t">10月6日</span><div class="tr"><i style="width:68%;background:#F2A39B"></i></div><span class="v">28 分</span></div>
+  </div>
+  <div class="actions"><button class="p">给中转点命名</button><button class="s">编辑行程</button></div>
+</div>
+</section>
+
+</div>
+
+<script>
+/* ===================== DATA（示例数据，实际请接入真实查询）===================== */
+var ICONS = {
+  '自驾':'<path d="M5 13l1.5-4.5A2 2 0 0 1 8.4 7h7.2a2 2 0 0 1 1.9 1.5L19 13"/><rect x="3" y="13" width="18" height="5" rx="2"/><circle cx="7.5" cy="15.5" r=".8"/><circle cx="16.5" cy="15.5" r=".8"/>',
+  '骑行':'<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-7h5l3 7M10 9l3 7M9 6h3"/>',
+  '步行':'<circle cx="13" cy="4.5" r="1.8"/><path d="M10 21l2-6-2-3 1-4 3 2 2 3M10 12l-3 2"/>',
+  '地铁':'<rect x="5" y="3" width="14" height="15" rx="3"/><path d="M5 12h14M9 21l2-3M15 21l-2-3"/><circle cx="9" cy="15" r=".8"/><circle cx="15" cy="15" r=".8"/>'
+};
+var WEEK = [{l:'二',m:28},{l:'三',m:0},{l:'四',m:48},{l:'五',m:10},{l:'六',m:37},{l:'日',m:0},{l:'今天',m:34}];
+var SHARES = [{n:'自驾',p:56,c:'#B3262C'},{n:'骑行',p:22,c:'#EF6B63'},{n:'步行',p:11,c:'#F7B9B2'},{n:'地铁',p:11,c:'#8A7D76'}];
+var H0 = new Array(24).fill(0); H0[8]=50; H0[14]=100;
+var H1 = new Array(24).fill(0); H1[17]=100;
+var ROUTES = [
+  {name:'家 → 公司',mode:'骑行',typical:34,transfer:'含 2 处中转',range:'28 – 41 分钟',sample:3,hour:'14 时',
+   note:'最近一次比上周快 3 分钟，耗时在慢慢变短。',dist:[8,22,45,100,55,24,10],labels:['28','30','32','34','36','38','41'],hours:H0,weeks:[0,0,0,0,0,100,92,85]},
+  {name:'八八八八 → 地铁大石',mode:'自驾',typical:37,transfer:'含 1 处中转',range:'37 – 37 分钟',sample:1,hour:'17 时',
+   note:'',dist:[0,0,0,100,0,0,0],labels:['','','','37','','',''],hours:H1,weeks:[0,0,0,0,0,0,0,100]}
+];
+var DAYS = [
+ {l:'10月12日 · 周一',s:'2 次 · 34 分钟',t:[
+  {m:'骑行',n:'家 → 公司',meta:'14:50 · 4 站',dur:'34 分钟',note:'经 2 处中转',found:1},
+  {m:'步行',n:'公司',meta:'09:15 · 1 站'}]},
+ {l:'10月11日 · 周日',s:'1 次',t:[{m:'自驾',n:'未命名',meta:'08:38 · 1 站'}]},
+ {l:'10月10日 · 周六',s:'3 次 · 37 分钟',t:[
+  {m:'自驾',n:'未命名',meta:'23:04 · 1 站'},
+  {m:'自驾',n:'八八八八 → 地铁大石',meta:'17:19 · 3 站',dur:'37 分钟',note:'经 1 处中转',found:1},
+  {m:'地铁',n:'未命名',meta:'14:25 · 1 站'}]},
+ {l:'10月9日 · 周五',s:'1 次 · 10 分钟',t:[{m:'自驾',n:'未命名',meta:'20:27 · 1 站',dur:'10 分钟',note:''}]}
+];
+var MODES = ['全部','步行','骑行','自驾','打车','地铁','公交','高铁','飞机'];
+var STOPS = [
+  {n:'家',t:'14:50 出发',seg:'骑行 8 分钟',first:1},
+  {n:'中转 1 · 未命名',t:'14:58',seg:'骑行 12 分钟',name:1},
+  {n:'中转 2 · 未命名',t:'15:10',seg:'骑行 14 分钟',name:1},
+  {n:'公司',t:'15:24 到达',last:1}
+];
+
+/* ===================== STATE & RENDER ===================== */
+var S = {mode:'全部', route:0, q:''};
+function $(id){return document.getElementById(id)}
+function svg(m,sz){return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="'+m+'">'+ICONS[m]+'</svg>'}
+function bars(arr,maxH,gap){
+  var peak=Math.max.apply(null,arr);
+  return arr.map(function(v){
+    var h=v>0?Math.max(5,Math.round(v/100*maxH)):3;
+    var bg=v<=0?'#F0E6DE':(v===peak?'#EF5350':'#F6BDB6');
+    return '<i style="height:'+h+'px;background:'+bg+'"></i>';
+  }).join('');
+}
+function renderWeek(){
+  var total=0;
+  $('week').innerHTML=WEEK.map(function(d,i){
+    total+=d.m; var today=i===6;
+    var h=d.m>0?Math.max(6,Math.round(d.m/48*52)):3;
+    var c=d.m===0?'#F0E6DE':(today?'#C62F35':'#F2A39B');
+    return '<div class="wcol"><div class="wbar"><span>'+(d.m||'')+'</span><i style="height:'+h+'px;background:'+c+'"></i></div><span style="font-size:11px;color:'+(today?'#C62F35':'#766A64')+';font-weight:'+(today?700:400)+'">'+d.l+'</span></div>';
+  }).join('');
+  $('weekTotal').textContent=Math.floor(total/60)+' 小时 '+(total%60)+' 分';
+  $('share').innerHTML=SHARES.map(function(x){return '<i style="flex:'+x.p+' 1 0;background:'+x.c+'"></i>'}).join('');
+  $('legend').innerHTML=SHARES.map(function(x){return '<span><em style="background:'+x.c+'"></em>'+x.n+' '+x.p+'%</span>'}).join('');
+}
+function renderRoute(){
+  $('routeChips').innerHTML=ROUTES.map(function(r,i){
+    return '<button class="rchip'+(i===S.route?' on':'')+'" data-i="'+i+'"><b>'+r.name+'</b><small>'+r.mode+'</small></button>';
+  }).join('');
+  var r=ROUTES[S.route], low=r.sample<2;
+  $('routeBody').innerHTML=
+   '<div class="row" style="align-items:flex-end"><div><div class="muted">'+(low?'参考耗时':'通常耗时')+'</div>'+
+   '<div class="big"><b>'+r.typical+'</b><span>分钟</span></div><div class="muted">'+r.transfer+'</div></div>'+
+   '<div class="muted" style="text-align:right;line-height:1.7"><div>波动 <b style="color:var(--ink)">'+r.range+'</b></div><div>样本 <b style="color:var(--ink)">'+r.sample+' 次</b></div><div>通常出发 <b style="color:var(--ink)">'+r.hour+'</b></div></div></div>'+
+   (r.note?'<div class="tip">'+r.note+'</div>':'')+
+   (low?'<div class="tip gray">样本不足：再走几次，耗时规律会更准。</div>':'')+
+   '<div><div class="chart-t">耗时分布（分钟）</div><div class="bars" style="height:64px;gap:6px">'+bars(r.dist,64)+'</div><div class="axis" style="gap:6px">'+r.labels.map(function(t){return '<span style="flex:1;text-align:center">'+t+'</span>'}).join('')+'</div></div>'+
+   '<div><div class="chart-t">通常出发时段</div><div class="bars" style="height:56px;gap:2px">'+bars(r.hours,56)+'</div><div class="axis" style="justify-content:space-between"><span>0</span><span>6</span><span>12</span><span>18</span><span>24 时</span></div></div>'+
+   '<div><div class="chart-t">近 8 周趋势</div><div class="bars" style="height:56px;gap:6px">'+bars(r.weeks,56)+'</div><div class="axis" style="justify-content:space-between"><span>8 周前</span><span>本周</span></div></div>';
+}
+function renderModes(){
+  $('modeChips').innerHTML=MODES.map(function(m){return '<button class="chip'+(m===S.mode?' on':'')+'" data-m="'+m+'">'+m+'</button>'}).join('');
+}
+function renderList(){
+  var n=0, html='';
+  DAYS.forEach(function(d){
+    var list=d.t.filter(function(t){return (S.mode==='全部'||t.m===S.mode)&&(!S.q||t.n.indexOf(S.q)>-1)});
+    if(!list.length) return; n+=list.length;
+    html+='<div class="day"><div class="day-h"><b>'+d.l+'</b><span class="muted">'+d.s+'</span></div><div class="list">'+
+    list.map(function(t){
+      var right = t.dur ? '<b>'+t.dur+'</b><small>'+(t.note||'')+'</small>'
+                : (t.n==='未命名' ? '<button class="name-btn">命名</button>' : '<span style="font-size:15px;color:var(--muted)">—</span>');
+      return '<div class="trip"><div class="ico">'+svg(t.m,20)+'</div><div class="tmid"><b>'+t.n+'</b>'+(t.found?'<span class="badge">已发现路线</span>':'')+'<div>'+t.meta+'</div></div><div class="tright">'+right+'</div></div>';
+    }).join('')+'</div></div>';
+  });
+  $('days').innerHTML=html||'<div class="empty">没有符合条件的记录</div>';
+  $('count').textContent=n+' 条';
+}
+function renderTimeline(){
+  $('timeline').innerHTML=STOPS.map(function(s){
+    var dot=s.first?'background:#C62F35':(s.last?'background:#2A2220':'background:#fff;border:2.5px solid #C62F35');
+    return '<div class="tl"><div class="rail"><div class="dot" style="'+dot+'"></div>'+(s.last?'':'<div class="ln"></div>')+'</div><div class="cont"><div class="r1"><span style="color:var(--ink);font-weight:700">'+s.n+'</span><span>'+s.t+'</span></div>'+
+      (s.seg?'<div class="row" style="align-items:center;margin-top:2px"><span class="muted">'+s.seg+'</span>'+(s.name?'<button class="link" style="font-size:12px">命名</button>':'')+'</div>':'')+'</div></div>';
+  }).join('');
+}
+function go(v){
+  $('v-main').classList.toggle('on',v==='main');
+  $('v-detail').classList.toggle('on',v==='detail');
+  window.scrollTo(0,0);
+}
+
+$('routeChips').addEventListener('click',function(e){var b=e.target.closest('[data-i]');if(b){S.route=+b.dataset.i;renderRoute()}});
+$('modeChips').addEventListener('click',function(e){var b=e.target.closest('[data-m]');if(b){S.mode=b.dataset.m;renderModes();renderList()}});
+$('q').addEventListener('input',function(e){S.q=e.target.value.trim();renderList()});
+
+renderWeek();renderRoute();renderModes();renderList();renderTimeline();
+</script>
+</body>
+</html>

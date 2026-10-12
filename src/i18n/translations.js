@@ -230,6 +230,11 @@ export const translations = {
 
     // 洞察
     'insights.title': '洞察',
+    'insights.timeRange': '选择时间范围',
+    'insights.tabFocus': '专注',
+    'insights.tabTravel': '行程',
+    'insights.range7Days': '近 7 天',
+    'insights.range30Days': '近 30 天',
     'insights.segTravel': '🚗 行程',
     'insights.segFocus': '🍅 专注',
     'insights.focusBreakdown': '专注分布',
@@ -810,6 +815,11 @@ export const translations = {
     'timeline.mapBtn': 'Map',
 
     'insights.title': 'Insights',
+    'insights.timeRange': 'Select Time Range',
+    'insights.tabFocus': 'Focus',
+    'insights.tabTravel': 'Trips',
+    'insights.range7Days': 'Last 7 Days',
+    'insights.range30Days': 'Last 30 Days',
     'insights.segTravel': '🚗 Travel',
     'insights.segFocus': '🍅 Focus',
     'insights.focusBreakdown': 'Focus Breakdown',
