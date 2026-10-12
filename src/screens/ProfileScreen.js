@@ -549,7 +549,14 @@ export default function ProfileScreen() {
       />
 
       {/* 隐私协议 */}
-      <PrivacyAgreement visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
+      <Modal
+        visible={showPrivacy}
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setShowPrivacy(false)}
+      >
+        <PrivacyAgreement onClose={() => setShowPrivacy(false)} />
+      </Modal>
 
       {/* 语言选择 Modal */}
       <Modal visible={showLang} transparent animationType="fade" onRequestClose={() => setShowLang(false)}>
