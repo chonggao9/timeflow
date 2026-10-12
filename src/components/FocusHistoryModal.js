@@ -14,42 +14,20 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
-import { formatDuration, formatTime, UNNAMED, isPlaceholderName, isFocusRecord } from '../utils/stats';
-
-// 6 大分类与设计稿保持色彩一致
-export const FOCUS_CATEGORIES = [
-  { key: 'pomodoro.helpWork', label: '工作', color: '#3B6FD6' },
-  { key: 'pomodoro.helpStudy', label: '学习', color: '#D63B3B' },
-  { key: 'pomodoro.helpCreate', label: '创作', color: '#E58A1F' },
-  { key: 'pomodoro.helpBodyMind', label: '身心', color: '#2E9E6B' },
-  { key: 'pomodoro.helpLife', label: '生活', color: '#2B8FB5' },
-  { key: 'pomodoro.helpPlan', label: '规划复盘', color: '#7B5BC4' },
-];
-
-export const UNNAMED_COLOR = '#B9A99D';
-
-export function getCategoryMeta(catKey, t) {
-  const match = FOCUS_CATEGORIES.find(c => c.key === catKey || c.label === catKey);
-  if (match) {
-    return {
-      color: match.color,
-      name: t ? t(match.key) : match.label,
-      key: match.key,
-    };
-  }
-  return {
-    color: UNNAMED_COLOR,
-    name: t ? t('common.unnamed') : '未命名',
-    key: null,
-  };
-}
+import { formatDuration, formatTime, isPlaceholderName } from '../utils/stats';
+import {
+  FOCUS_CATEGORIES,
+  UNCATEGORIZED,
+  getCategoryMeta,
+  normalizeCategory,
+} from '../utils/focusCategories';
 
 export default function FocusHistoryModal({
   visible,
   onClose,
-  records = [], // 专注记录（默认今日；传入全部则按范围筛选）
-  onUpdateRecord,
-  onDeleteRecord,
+  focusSessions = [],
+  onUpdateFocusSession,
+  onDeleteFocusSession,
 }) {
   const { colors } = useTheme();
   const { t, lang } = useI18n();
@@ -60,9 +38,8 @@ export default function FocusHistoryModal({
   const [draftCat, setDraftCat] = useState(null);
   const [draftName, setDraftName] = useState('');
 
-  // 1. 按时间范围筛选专注记录并倒序排序（数据域隔离：只认 mode==='focus'）
+  // 1. 按时间范围筛选专注记录并倒序排序（focus_sessions 只含专注数据）
   const sortedRecords = useMemo(() => {
-    const focusOnly = (records || []).filter(isFocusRecord);
     const now = new Date();
     const todayZero = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const dayOfWeek = now.getDay() || 7; // 1(一) .. 7(日)
@@ -72,10 +49,10 @@ export default function FocusHistoryModal({
       range === 'today' ? todayZero :
       range === 'week' ? weekZero :
       range === 'month' ? monthZero : -Infinity;
-    return focusOnly
+    return (focusSessions || [])
       .filter(r => (r.timestamp || 0) >= start)
       .sort((a, b) => b.timestamp - a.timestamp);
-  }, [records, range]);
+  }, [focusSessions, range]);
 
   // 2. 统计数据：总次数、总时长、最长一次
   const totalCount = sortedRecords.length;
@@ -87,9 +64,9 @@ export default function FocusHistoryModal({
     if (!totalSec) return [];
     const map = {};
     for (const r of sortedRecords) {
-      const catKey = r.category || (isPlaceholderName(r.locationName) ? null : r.locationName);
-      const meta = getCategoryMeta(catKey, t);
-      const key = meta.key || 'unnamed';
+      const rawKey = r.category ? normalizeCategory(r.category) : null;
+      const meta = getCategoryMeta(rawKey, t);
+      const key = meta.key || UNCATEGORIZED.key;
       if (!map[key]) {
         map[key] = {
           name: meta.name,
@@ -102,7 +79,8 @@ export default function FocusHistoryModal({
     return Object.values(map)
       .map(item => ({
         ...item,
-        percent: Math.max(3, Math.round((item.sec / totalSec) * 100)),
+        // 保留真实百分比，避免多个小分类被抬高后总和超过 100%
+        percent: Math.round((item.sec / totalSec) * 100),
       }))
       .sort((a, b) => b.sec - a.sec);
   }, [sortedRecords, totalSec, t]);
@@ -110,7 +88,7 @@ export default function FocusHistoryModal({
   const openEdit = (record) => {
     setEditItem(record);
     setDraftCat(record.category || null);
-    setDraftName(isPlaceholderName(record.locationName) ? '' : record.locationName || '');
+    setDraftName(isPlaceholderName(record.goalName || record.locationName) ? '' : (record.goalName || record.locationName || ''));
   };
 
   const closeEdit = () => {
@@ -122,13 +100,13 @@ export default function FocusHistoryModal({
   const handleSaveEdit = async () => {
     if (!editItem) return;
     const catItem = FOCUS_CATEGORIES.find(c => c.key === draftCat);
-    const catName = catItem ? t(catItem.key) : null;
+    const catName = catItem ? t(catItem.i18nKey) : null;
     const fallbackName = draftName.trim() || catName || t('common.unnamed');
 
-    if (onUpdateRecord) {
-      await onUpdateRecord(editItem.id, {
+    if (onUpdateFocusSession) {
+      await onUpdateFocusSession(editItem.id, {
         category: draftCat || null,
-        locationName: fallbackName,
+        goalName: fallbackName,
       });
     }
     closeEdit();
@@ -142,7 +120,7 @@ export default function FocusHistoryModal({
         text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
-          if (onDeleteRecord) await onDeleteRecord(editItem.id);
+          if (onDeleteFocusSession) await onDeleteFocusSession(editItem.id);
           closeEdit();
         },
       },
@@ -221,7 +199,8 @@ export default function FocusHistoryModal({
                       <View
                         key={'dist-bar-' + idx}
                         style={{
-                          width: `${d.percent}%`,
+                          // 真实百分比保留在 percent 上；条宽给 3% 下限，避免极小分类不可见
+                          width: `${Math.max(d.percent, 3)}%`,
                           backgroundColor: d.color,
                           height: '100%',
                         }}
@@ -250,12 +229,11 @@ export default function FocusHistoryModal({
                 ) : (
                   sortedRecords.map((r) => {
                     const durSec = Number(r.duration) || 0;
-                    const catMeta = getCategoryMeta(r.category, t);
-                    const isPending = !r.category && isPlaceholderName(r.locationName);
+                    // 旧数据可能存的是 'pomodoro.helpWork' 这类旧 key，先归一化再取元数据
+                    const catMeta = getCategoryMeta(normalizeCategory(r.category), t);
+                    const isPending = !r.category;
                     const barWidth = Math.max(4, Math.round((durSec / maxSec) * 100));
-                    const displayName = isPending
-                      ? t('focusHistory.unnamedFocus')
-                      : (isPlaceholderName(r.locationName) ? catMeta.name : r.locationName);
+                    const displayName = (r.goalName || r.locationName || '').trim() || catMeta.name;
 
                     return (
                       <View key={r.id} style={styles.recordRow}>
@@ -272,9 +250,12 @@ export default function FocusHistoryModal({
                             <View
                               style={[
                                 styles.recordDot,
-                                { backgroundColor: isPending ? UNNAMED_COLOR : catMeta.color },
+                                { backgroundColor: catMeta.color },
                               ]}
                             />
+                            {!!catMeta.emoji && displayName !== catMeta.name && (
+                              <Text style={styles.recordEmoji}>{catMeta.emoji}</Text>
+                            )}
                             <Text
                               style={[
                                 styles.recordTitle,
@@ -305,7 +286,7 @@ export default function FocusHistoryModal({
                                 styles.progressBar,
                                 {
                                   width: `${barWidth}%`,
-                                  backgroundColor: isPending ? UNNAMED_COLOR : catMeta.color,
+                                  backgroundColor: catMeta.color,
                                 },
                               ]}
                             />
@@ -340,7 +321,7 @@ export default function FocusHistoryModal({
                           >
                             <View style={[styles.catBtnDot, { backgroundColor: c.color }]} />
                             <Text style={[styles.catBtnText, isCur && { fontWeight: '800', color: colors.ink }]}>
-                              {t(c.key)}
+                              {t(c.i18nKey)}
                             </Text>
                             {isCur && <Ionicons name="checkmark" size={14} color={c.color} />}
                           </TouchableOpacity>
@@ -565,6 +546,10 @@ const makeStyles = (colors) =>
       width: 9,
       height: 9,
       borderRadius: 5,
+    },
+    recordEmoji: {
+      fontSize: 14,
+      lineHeight: 18,
     },
     recordTitle: {
       flex: 1,

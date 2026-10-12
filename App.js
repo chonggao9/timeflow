@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, Linking, Platform, View, Text, Modal, TouchableOpacity, StyleSheet, BackHandler } from 'react-native';
+import { Alert, Linking, Platform, View, Text, Modal, TouchableOpacity, StyleSheet, BackHandler, ScrollView } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as NavigationBar from 'expo-navigation-bar';
 import HomeScreen from './src/screens/HomeScreen';
@@ -26,22 +28,27 @@ function TabNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        tabBarShowLabel: true,
         tabBarActiveTintColor: colors.primaryStrong,
-        tabBarInactiveTintColor: colors.ink3,
+        tabBarInactiveTintColor: colors.ink2,
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.line,
           borderTopWidth: 1,
           height: 58 + insets.bottom,
-          paddingTop: 6,
-          paddingBottom: Math.max(insets.bottom, 6),
+          paddingTop: 5,
+          paddingBottom: Math.max(insets.bottom, 5),
           elevation: 4,
           shadowColor: colors.ink,
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.04,
           shadowRadius: 6,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '700', marginTop: 2 },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: 2,
+        },
         sceneStyle: { backgroundColor: colors.bg },
       }}
     >
@@ -51,7 +58,7 @@ function TabNavigator() {
         options={{
           tabBarLabel: t('tab.checkin'),
           tabBarIcon: ({ focused }) => (
-            <Ionicons name={focused ? 'time' : 'time-outline'} size={23} color={focused ? colors.primaryStrong : colors.ink3} />
+            <Ionicons name={focused ? 'time' : 'time-outline'} size={23} color={focused ? colors.primaryStrong : colors.ink2} />
           ),
         }}
       />
@@ -61,7 +68,7 @@ function TabNavigator() {
         options={{
           tabBarLabel: t('tab.insights'),
           tabBarIcon: ({ focused }) => (
-            <Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={23} color={focused ? colors.primaryStrong : colors.ink3} />
+            <Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={23} color={focused ? colors.primaryStrong : colors.ink2} />
           ),
         }}
       />
@@ -71,7 +78,7 @@ function TabNavigator() {
         options={{
           tabBarLabel: t('tab.profile'),
           tabBarIcon: ({ focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={23} color={focused ? colors.primaryStrong : colors.ink3} />
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={23} color={focused ? colors.primaryStrong : colors.ink2} />
           ),
         }}
       />
@@ -202,7 +209,7 @@ const privacyStyles = StyleSheet.create({
 
 function AppInner() {
   const { t } = useI18n();
-  const { isDark } = useTheme();
+  const { isDark, colors } = useTheme();
   const [privacyAgreed, setPrivacyAgreed] = useState(null); // null=检查中, false=待同意, true=已同意
 
   useEffect(() => {
@@ -235,8 +242,23 @@ function AppInner() {
     runBackupIfDue().catch(() => {});
   }, [privacyAgreed, t]);
 
+  const navTheme = React.useMemo(() => {
+    const base = isDark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        background: colors.bg,
+        card: colors.surface,
+        text: colors.ink,
+        border: colors.line,
+        primary: colors.primary,
+      },
+    };
+  }, [isDark, colors]);
+
   return (
-    <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
+    <NavigationContainer theme={navTheme}>
       <TabNavigator />
       <PrivacyModal visible={privacyAgreed === false} onAgree={handleAgree} />
     </NavigationContainer>
@@ -260,10 +282,10 @@ function Root() {
   if (!hydrated) return null;
 
   return (
-    <>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={colors.bg} />
       <AppInner />
-    </>
+    </View>
   );
 }
 
@@ -271,7 +293,7 @@ function Root() {
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -280,24 +302,48 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error('[ErrorBoundary caught error]', error, errorInfo);
+    this.setState({ errorInfo });
   }
+
+  handleCopy = async () => {
+    try {
+      const err = this.state.error;
+      const text = `Error: ${err?.name || 'Error'}: ${err?.message || 'unknown'}\n\nStack:\n${err?.stack || 'no stack'}\n\nComponentStack:\n${this.state.errorInfo?.componentStack || 'none'}`;
+      await Clipboard.setStringAsync(text);
+      Alert.alert('已复制', '异常详细信息已复制到剪贴板');
+    } catch (e) {}
+  };
 
   render() {
     if (this.state.hasError) {
+      const errorMsg = this.state.error?.message || '组件渲染发生未知错误';
+      const stack = this.state.error?.stack || '';
       return (
         <View style={errStyles.container}>
           <Ionicons name="alert-circle" size={54} color="#FF6B6B" style={errStyles.icon} />
           <Text style={errStyles.title}>界面加载异常</Text>
-          <Text style={errStyles.msg} numberOfLines={3}>
-            {this.state.error?.message || '组件渲染发生未知错误'}
-          </Text>
-          <TouchableOpacity
-            style={errStyles.btn}
-            onPress={() => this.setState({ hasError: false, error: null })}
-            activeOpacity={0.8}
-          >
-            <Text style={errStyles.btnText}>重新加载</Text>
-          </TouchableOpacity>
+          <Text style={errStyles.msg}>{errorMsg}</Text>
+          {!!stack && (
+            <ScrollView style={errStyles.stackBox} contentContainerStyle={errStyles.stackBoxContent}>
+              <Text style={errStyles.stackText}>{stack}</Text>
+            </ScrollView>
+          )}
+          <View style={errStyles.btnRow}>
+            <TouchableOpacity
+              style={[errStyles.btn, errStyles.btnSecondary]}
+              onPress={this.handleCopy}
+              activeOpacity={0.8}
+            >
+              <Text style={errStyles.btnSecondaryText}>复制错误信息</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={errStyles.btn}
+              onPress={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+              activeOpacity={0.8}
+            >
+              <Text style={errStyles.btnText}>重新加载</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       );
     }
@@ -310,11 +356,11 @@ const errStyles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
+    padding: 24,
     backgroundColor: '#FAF7F4',
   },
   icon: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   title: {
     fontSize: 18,
@@ -323,17 +369,50 @@ const errStyles = StyleSheet.create({
     marginBottom: 8,
   },
   msg: {
-    fontSize: 13,
-    color: '#78716C',
+    fontSize: 14,
+    color: '#D33A3A',
     textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 24,
+    lineHeight: 20,
+    marginBottom: 12,
+    fontWeight: '600',
+  },
+  stackBox: {
+    maxHeight: 140,
+    width: '100%',
+    backgroundColor: '#F3EFEA',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E6E0D8',
+    marginBottom: 20,
+  },
+  stackBoxContent: {
+    padding: 10,
+  },
+  stackText: {
+    fontSize: 11,
+    color: '#78716C',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    lineHeight: 16,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: 12,
   },
   btn: {
     backgroundColor: '#FF6B6B',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnSecondary: {
+    backgroundColor: '#EBE5DE',
+  },
+  btnSecondaryText: {
+    color: '#44403C',
+    fontWeight: '600',
+    fontSize: 14,
   },
   btnText: {
     color: '#FFFFFF',
@@ -344,14 +423,16 @@ const errStyles = StyleSheet.create({
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <ErrorBoundary>
-        <ThemeProvider>
-          <LanguageProvider>
-            <Root />
-          </LanguageProvider>
-        </ThemeProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ErrorBoundary>
+          <ThemeProvider>
+            <LanguageProvider>
+              <Root />
+            </LanguageProvider>
+          </ThemeProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

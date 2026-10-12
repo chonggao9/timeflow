@@ -37,6 +37,7 @@ keystore.properties
 # 本地私密环境变量（令牌等，勿提交）
 .env*
 !.env.example
+.claude/
 
 # 构建产物
 *.apk

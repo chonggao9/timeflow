@@ -24,16 +24,6 @@ export const TRIP_TIMEOUT_SEC = 90 * 60;       // 5400秒
 // 引用 store 里的 legacy 常量，避免循环依赖：这里直接用字符串标记
 const LEGACY_TRIP = 'legacy';
 
-// ---- 数据域隔离 ----
-// records 是单表，用 mode 软隔离两个域：'focus' 是室内专注域，其余方式属于行程轨迹域。
-// 统计函数必须在入口剔除专注记录：否则专注的目标名会被当作地名、两次专注的间隔会被当成路段时长；
-// 而且专注记录不带 tripId，会和无 tripId 的旧行程记录在 90 分钟内互相「串线」。
-export const MODE_FOCUS = 'focus';
-export const isFocusRecord = (r) => r?.mode === MODE_FOCUS;
-export const isTravelRecord = (r) => !isFocusRecord(r);
-export const getTravelRecords = (records) => (records || []).filter(isTravelRecord);
-export const getFocusRecords = (records) => (records || []).filter(isFocusRecord);
-
 export function isPlaceholderName(name) {
   return !name || name === UNNAMED || name === '未知位置' || name === 'Unnamed' || name === 'Unknown';
 }
@@ -61,6 +51,10 @@ function pickLabel(counter) {
 }
 
 // ---- 路段统计 ----
+function getTravelRecords(records) {
+  return records.filter(r => r.mode !== 'focus');
+}
+
 // records: 所有打卡记录
 // 返回: { fromName, toName, fromKey, toKey, mode, medianSec, minSec, maxSec, sampleCount }[]
 export function computePathStats(allRecords) {

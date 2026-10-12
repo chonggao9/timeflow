@@ -18,7 +18,6 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 import * as Location from 'expo-location';
@@ -37,8 +36,13 @@ import {
   getLastMode,
   setLastMode,
   getRecordsFingerprint,
+  saveFocusSession,
+  getFocusSessions,
+  getTodayFocusSessions,
+  updateFocusSession,
+  deleteFocusSession,
 } from '../storage/store';
-import { computePathStats, placeKey, UNNAMED, isPlaceholderName, formatDuration, formatTime, isFocusRecord } from '../utils/stats';
+import { computePathStats, placeKey, UNNAMED, isPlaceholderName, formatDuration, formatTime } from '../utils/stats';
 import { getPlaceOptions } from '../utils/analytics';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
@@ -70,8 +74,8 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { t, formatDate, lang } = useI18n();
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
   // 出行方式横条的几何：window 变化（旋转/折叠屏）时重算，故不缓存到常量。
   const { width: winWidth } = useWindowDimensions();
@@ -89,10 +93,11 @@ export default function HomeScreen() {
   const [modeStripW, setModeStripW] = useState(0);
 
   const [records, setRecords] = useState([]);
-  const [allFocusRecords, setAllFocusRecords] = useState([]); // 全部专注记录，供专注历史弹窗跨天查看
+  const [focusSessions, setFocusSessions] = useState([]); // 今日专注记录
+  const [allFocusSessions, setAllFocusSessions] = useState([]); // 全部专注记录，供专注历史弹窗跨天查看
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [scene, setScene] = useState('travel'); // 'travel' | 'focus'
+  const [scene, setScene] = useState('focus'); // 'travel' | 'focus'
   const [isFocusRunning, setIsFocusRunning] = useState(false);
 
   useEffect(() => {
@@ -154,13 +159,14 @@ export default function HomeScreen() {
   const [receiptTrip, setReceiptTrip] = useState(null);
 
   const loadToday = useCallback(async () => {
-    const today = await getTodayRecords();
-    const sorted = today.sort((a, b) => a.timestamp - b.timestamp);
+    const [today, todayFocus] = await Promise.all([getTodayRecords(), getTodayFocusSessions()])
+    const sorted = [...today].sort((a, b) => a.timestamp - b.timestamp);
     setRecords(sorted);
+    setFocusSessions([...todayFocus].sort((a, b) => a.timestamp - b.timestamp));
     const trip = await getCurrentTripId();
     setHasActiveTrip(!!trip);
 
-    // 常用地点快选（Top 5 最高频地名；专注目标名不是地点，getPlaceOptions 内部已剔除）
+    // 常用地点快选（Top 5 最高频地名）
     try {
       const all = await getRecords();
       const options = getPlaceOptions(all);
@@ -169,10 +175,11 @@ export default function HomeScreen() {
         .filter((nm) => nm && !isPlaceholderName(nm) && nm !== UNNAMED)
         .slice(0, 5);
       setCommonPlaces(topPlaces);
-      // 全部专注记录：专注历史弹窗需要跨天查看，而 records 只装今日
-      setAllFocusRecords(all.filter(isFocusRecord));
+      // 全部专注记录：专注历史弹窗需要跨天查看
+      const allFocus = await getFocusSessions();
+      setAllFocusSessions([...allFocus].sort((a, b) => a.timestamp - b.timestamp));
     } catch (e) {}
-    return sorted;
+    return { today: sorted, focus: todayFocus };
   }, []);
 
   // 初始化上次出行方式
@@ -190,13 +197,11 @@ export default function HomeScreen() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (nextState) => {
       if (nextState === 'active') {
-        const today = await loadToday();
+        const { today } = await loadToday();
         if (today && today.length) {
           const latest = today[today.length - 1];
           const age = Date.now() - latest.timestamp;
-          // 只给行程打卡补坐标：专注记录/跨天的补记记录都不应被回前台时的定位污染
           if (
-            !isFocusRecord(latest) &&
             latest.tripId != null &&
             (latest.lat == null || latest.lng == null) &&
             age < 10 * 60 * 1000
@@ -232,8 +237,7 @@ export default function HomeScreen() {
 
   // 预估到达计算
   useEffect(() => {
-    const travelRecs = records.filter((r) => !isFocusRecord(r));
-    if (travelRecs.length < 1) {
+    if (records.length < 1) {
       setEstimate(null);
       return;
     }
@@ -242,14 +246,14 @@ export default function HomeScreen() {
       let stats = pathStatsCacheRef.current.stats;
       if (pathStatsCacheRef.current.fp !== fp || !stats.length) {
         const all = await getRecords();
-        stats = computePathStats(all); // 内部已剔除专注记录
+        stats = computePathStats(all);
         pathStatsCacheRef.current = { fp, stats };
       }
       if (!stats.length) {
         setEstimate(null);
         return;
       }
-      const last = travelRecs[travelRecs.length - 1];
+      const last = records[records.length - 1];
       const key = placeKey(last);
       const match = stats.find((s) => s.fromKey === key);
       if (match) {
@@ -344,8 +348,8 @@ export default function HomeScreen() {
         return;
       }
 
-      // 双重防护：目标记录若已被改成专注记录（或本就不带行程），不写入坐标
-      if (isFocusRecord(current) || current.tripId == null) {
+      // 双重防护：目标记录若本就不带行程，不写入坐标
+      if (current.tripId == null) {
         if (!isStale()) setLocStatus(null);
         return;
       }
@@ -493,7 +497,6 @@ export default function HomeScreen() {
     checkingInRef.current = true;
     const tCheckin = Date.now() - data.offsetMin * 60 * 1000;
     try {
-      const tripId = await ensureTrip();
       const id = makeId();
       await saveRecord({
         id,
@@ -502,7 +505,6 @@ export default function HomeScreen() {
         lat: null,
         lng: null,
         mode: data.mode,
-        tripId,
       });
       Vibration.vibrate(25);
       setBackfillVisible(false);
@@ -533,14 +535,8 @@ export default function HomeScreen() {
   // ---- 室内专注处理 ----
   const handleStartFocus = async (data) => {
     try {
-      await AsyncStorage.setItem(
-        'timeflow_active_focus',
-        JSON.stringify({
-          startTs: Date.now(),
-          durationSec: data.durationSec,
-          goalName: data.goalName,
-        })
-      );
+      // 专注会话的完整持久化上下文由 PomodoroTimer 自行维护，
+      // 这里只负责触发桌面小部件刷新。
       refreshWidget();
     } catch (e) {}
   };
@@ -548,16 +544,13 @@ export default function HomeScreen() {
   const handleSaveFocus = async (data) => {
     const tnow = Date.now();
     try {
-      await AsyncStorage.removeItem('timeflow_active_focus');
+      // timeflow_active_focus 由 PomodoroTimer 自行维护，保存成功后由它清理；
+      // 这里直接落库并刷新今日数据。
       const id = makeId();
-      await saveRecord({
+      await saveFocusSession({
         id,
         timestamp: tnow,
-        locationName: data.goalName,
-        lat: null,
-        lng: null,
-        mode: 'focus',
-        tripId: null,
+        goalName: data.goalName,
         duration: data.duration,
         category: data.category,
         note: data.note,
@@ -571,14 +564,14 @@ export default function HomeScreen() {
     }
   };
 
-  const handleUpdateFocusRecord = async (id, patch) => {
-    await updateRecord(id, patch);
+  const handleUpdateFocusSession = async (id, patch) => {
+    await updateFocusSession(id, patch);
     await loadToday();
     refreshWidget();
   };
 
-  const handleDeleteFocusRecord = async (id) => {
-    await deleteRecord(id);
+  const handleDeleteFocusSession = async (id) => {
+    await deleteFocusSession(id);
     await loadToday();
     refreshWidget();
   };
@@ -586,11 +579,8 @@ export default function HomeScreen() {
   // ---- 数据分离与统计 ----
   const dateStr = formatDate(new Date());
 
-  // 1. 行程轨迹专属数据（严格排除 focus）
-  const travelRecords = useMemo(
-    () => records.filter((r) => !isFocusRecord(r)),
-    [records]
-  );
+  // 1. 行程轨迹专属数据
+  const travelRecords = records;
   const travelCount = travelRecords.length;
 
   const travelTripsCount = useMemo(() => {
@@ -610,10 +600,7 @@ export default function HomeScreen() {
   }, [travelRecords]);
 
   // 2. 室内专注专属数据
-  const focusRecords = useMemo(
-    () => records.filter(isFocusRecord),
-    [records]
-  );
+  const focusRecords = focusSessions;
   const focusCount = focusRecords.length;
   const todayFocusSec = useMemo(
     () => focusRecords.reduce((sum, r) => sum + (Number(r.duration) || 0), 0),
@@ -630,23 +617,8 @@ export default function HomeScreen() {
             <Text style={styles.date}>{dateStr}</Text>
           </View>
 
-          {/* 右侧：模式切换分段器 (🚗 行程轨迹 vs ⏱ 室内专注) */}
+          {/* 右侧：模式切换分段控件 (⏱ 室内专注 vs 🚗 行程轨迹) */}
           <View style={styles.sceneToggleWrap}>
-            <TouchableOpacity
-              style={[styles.sceneToggleBtn, scene === 'travel' && styles.sceneToggleBtnActive]}
-              onPress={() => setScene('travel')}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name="car-outline"
-                size={15}
-                color={scene === 'travel' ? colors.primaryStrong : colors.ink2}
-              />
-              <Text style={[styles.sceneToggleText, scene === 'travel' && styles.sceneToggleTextActive]}>
-                {t('home.sceneTravel', '行程轨迹').replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')}
-              </Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={[styles.sceneToggleBtn, scene === 'focus' && styles.sceneToggleBtnActive]}
               onPress={() => setScene('focus')}
@@ -654,11 +626,26 @@ export default function HomeScreen() {
             >
               <Ionicons
                 name="timer-outline"
-                size={15}
-                color={scene === 'focus' ? colors.primaryStrong : colors.ink2}
+                size={14}
+                color={scene === 'focus' ? colors.primaryStrong : (isDark ? colors.ink2 : '#5E4F44')}
               />
               <Text style={[styles.sceneToggleText, scene === 'focus' && styles.sceneToggleTextActive]}>
                 {t('home.sceneFocus', '室内专注').replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.sceneToggleBtn, scene === 'travel' && styles.sceneToggleBtnActive]}
+              onPress={() => setScene('travel')}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="car-outline"
+                size={14}
+                color={scene === 'travel' ? colors.primaryStrong : (isDark ? colors.ink2 : '#5E4F44')}
+              />
+              <Text style={[styles.sceneToggleText, scene === 'travel' && styles.sceneToggleTextActive]}>
+                {t('home.sceneTravel', '行程轨迹').replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -899,22 +886,18 @@ export default function HomeScreen() {
           </View>
         </>
       ) : (
-        /* 室内专注模式 */
-        <View
-          style={[
-            styles.focusContainer,
-            isFocusRunning && { paddingTop: insets.top, paddingBottom: insets.bottom, flex: 1 },
-          ]}
-        >
+        /* 室内专注模式。沉浸式专注页自己按 insets 留白并铺满整屏，
+           这里不再额外加 padding，否则专注页背景色与外层底色之间会露出上下两条色带。 */
+        <View style={styles.focusContainer}>
           <PomodoroTimer
             onStartFocus={handleStartFocus}
             onSaveFocus={handleSaveFocus}
             todayFocusCount={focusCount}
             todayFocusSec={todayFocusSec}
             todayFocusRecords={focusRecords}
-            allFocusRecords={allFocusRecords}
-            onUpdateRecord={handleUpdateFocusRecord}
-            onDeleteRecord={handleDeleteFocusRecord}
+            allFocusRecords={allFocusSessions}
+            onUpdateFocusSession={handleUpdateFocusSession}
+            onDeleteFocusSession={handleDeleteFocusSession}
             onGoInsights={() => navigation.navigate('Insights')}
             onRunningChange={setIsFocusRunning}
           />
@@ -1080,7 +1063,7 @@ export default function HomeScreen() {
       {mapTrip && (
         <RouteMapScreen
           visible={!!mapTrip}
-          trip={mapTrip}
+          tripRecords={mapTrip?.records || []}
           onClose={() => setMapTrip(null)}
         />
       )}
@@ -1097,7 +1080,7 @@ export default function HomeScreen() {
   );
 }
 
-const makeStyles = (colors) =>
+const makeStyles = (colors, isDark) =>
   StyleSheet.create({
     screen: {
       flex: 1,
@@ -1127,15 +1110,15 @@ const makeStyles = (colors) =>
     },
     sceneToggleWrap: {
       flexDirection: 'row',
-      backgroundColor: colors.chip,
-      borderRadius: 14,
+      backgroundColor: isDark ? '#2D241C' : '#EFE7DD',
+      borderRadius: 999,
       padding: 3,
-      gap: 2,
+      alignItems: 'center',
     },
     sceneToggleBtn: {
-      height: 40,
+      height: 34,
       paddingHorizontal: 12,
-      borderRadius: 11,
+      borderRadius: 999,
       backgroundColor: 'transparent',
       flexDirection: 'row',
       alignItems: 'center',
@@ -1144,15 +1127,15 @@ const makeStyles = (colors) =>
     sceneToggleBtnActive: {
       backgroundColor: colors.surface,
       shadowColor: colors.ink,
-      shadowOffset: { width: 0, height: 1 },
+      shadowOffset: { width: 0, height: 1.5 },
       shadowOpacity: 0.12,
       shadowRadius: 3,
       elevation: 2,
     },
     sceneToggleText: {
       fontSize: 13,
-      fontWeight: '600',
-      color: colors.ink2,
+      fontWeight: '500',
+      color: isDark ? colors.ink2 : '#5E4F44',
     },
     sceneToggleTextActive: {
       fontWeight: '700',

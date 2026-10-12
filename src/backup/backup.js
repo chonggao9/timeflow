@@ -2,9 +2,9 @@
 // 载体是 getRecords() 的 JSON 明文 → 加密成 envelope → 写 documentDirectory/timeflow-backups/。
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { getRecords, importRecords } from '../storage/store';
+import { getTrips, getRecords, getFocusSessions, importRecords } from '../storage/store';
 import { encrypt, decrypt, BadPassphraseError } from './crypto';
-import { collectPreferences, buildPlaintext, validatePlaintext, restorePreferences } from './schema';
+import { collectPreferences, buildPlaintext, validatePlaintext, restorePreferences, SCHEMA_RECORDS_V2 } from './schema';
 
 const BACKUP_DIR = `${FileSystem.documentDirectory}timeflow-backups/`;
 const KEEP_LOCAL = 5; // 本地目录只保留最近 N 份，避免无限堆积
@@ -18,9 +18,9 @@ export function makeBackupFilename(date = new Date()) {
 
 // 生成加密备份文件，返回本地 uri（含写入前建目录 + 写入后清理旧档）。
 export async function makeLocalBackup({ passphrase }) {
-  const records = await getRecords();
+  const [trips, records, focusSessions] = await Promise.all([getTrips(), getRecords(), getFocusSessions()]);
   const prefs = await collectPreferences();
-  const plaintext = buildPlaintext(records, prefs);
+  const plaintext = buildPlaintext({ trips, records, focusSessions }, prefs);
   const envelope = encrypt(passphrase, plaintext);
   try {
     await FileSystem.makeDirectoryAsync(BACKUP_DIR, { intermediates: true });
@@ -53,9 +53,14 @@ export async function readAndRestoreFromRaw(raw, passphrase) {
   const plaintext = decrypt(passphrase, envelope); // 先验 HMAC，错口令抛 BadPassphraseError
   if (!validatePlaintext(plaintext)) throw new BadPassphraseError('invalid backup format');
 
-  const { imported, skipped } = await importRecords(plaintext.records);
+  let result;
+  if (plaintext.schema === SCHEMA_RECORDS_V2) {
+    result = await importRecords(plaintext.data || { trips: [], records: plaintext.data?.records || [], focusSessions: [] });
+  } else {
+    result = await importRecords(plaintext.records);
+  }
   await restorePreferences(plaintext.preferences);
-  return { imported, skipped };
+  return result;
 }
 
 // content://（document-picker）不能直读，拷贝到 cache 后返回本地 uri。

@@ -1,0 +1,27 @@
+# Dependencies & Package Managers
+node_modules/
+package-lock.json
+
+# Builds & Native Artifacts
+android/
+ios/
+.expo/
+dist/
+web-build/
+*.apk
+*.aab
+*.log
+npm-debug.*
+
+# Large Design Prototypes & Images (防止几兆的 HTML 原型与图片被全量读入上下文)
+designs/**/*.html
+designs/**/*.png
+designs/**/*.jpg
+
+# Static Media & Assets
+assets/
+store_assets/
+
+# Git & Cache
+.git/
+.gradle/

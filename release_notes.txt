@@ -1,19 +1,20 @@
 ========================================
-TimeFlow v1.2.1 Release Notes (Google Play - versionCode: 23)
+TimeFlow v1.2.4 Release Notes (Google Play - versionCode: 26)
 ========================================
 
 【1. 简体中文版 (zh-CN) - 适用于 Google Play 更新说明，已严格控制在 500 字符以内】
-v1.2.1 更新说明：
-• 🚀 首页全新架构改版：行程轨迹与室内专注深度模式隔离，界面独立纯粹；顶部统计卡片实时呈现。
-• 🚗 行程轨迹交互升级：进行中行程默认展开，历史行程优雅折叠；路段胶囊支持一键修改出行方式；打卡卡片支持地名、时间与方式微调。
-• 🔘 智能打卡与防误触：长按结程增加 650ms 环形充能进度与物理下潜反馈；底部独立「+补记」抽屉面板，快速回溯遗漏打卡。
-• 🍅 室内专注体验革新：待开始页新增「今日专注」卡片与多彩用途分布条；点开即可查看并补充历史用途；8款治愈白噪音陪伴。
-• 🌐 100% 中英双语对称，零网络依赖，数据纯本地安全隐私。
+v1.2.4 更新说明：
+• 🍅 番茄专注交互革新：转盘手势丝滑调节时长，番茄视觉放大居中，档位下移至拇指热区，单手操作更顺畅。
+• 🚀 首页架构与模式重构：默认优先「室内专注」；模式切换升级为精致分段控件；行程与专注数据深度隔离。
+• ✨ 启动页全新设计与零色差：原生窗口、状态栏与首页底色数学级对齐，冷启动零闪变；自适应中英文品牌副标；兼容 Android 12+。
+• 🚗 行程轨迹与打卡优化：支持出行方式横滑选择，长按充能结程防误触，补记抽屉快速回溯。
+• 📊 洞察统计与数据安全：修复分类重命名与计数统计，优化前台重入定位拦截，提升本地备份稳定性。
 
 【2. 英文版 (en-US) - For Google Play Console "What's new", within 500 characters】
-v1.2.1 What's New:
-• 🚀 Redesigned Home: Complete separation between Travel Trips & Indoor Focus modes with focused top stats.
-• 🚗 Interactive Travel Timeline: Ongoing trips auto-expanded; tap segment pills to edit transport mode; edit place name, time & mode directly.
-• 🔘 Hold-to-End Safety: Check-in button features 650ms circular charging ring; new Backfill drawer for rapid past check-ins.
-• 🍅 Reimagined Focus: Top daily focus summary card with color breakdown bar; interactive session log drawer; 8 ambient soundscapes.
-• 🌐 100% Bilingual polish & 100% offline local privacy.
+v1.2.4 What's New:
+• 🍅 Focus Upgrade: Smooth circular dial gesture for timer adjustment, enlarged hero tomato, thumb-friendly presets.
+• 🚀 Home Redesign: Default to Indoor Focus; refined segmented mode control; full data isolation between trips & focus.
+• ✨ Seamless Splash Screen: 100% matched color palette across Android window & home for zero-flicker launch; localized taglines; Android 12+ ready.
+• 📊 Insights & Stability: Fixed category rename, refined stats, safer local backups.
+
+

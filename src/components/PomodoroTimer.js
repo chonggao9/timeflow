@@ -1,29 +1,73 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, Animated, PanResponder, Pressable, Vibration, Easing, TouchableOpacity, ScrollView, TextInput, Modal, Alert, AppState } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+  Modal,
+  AppState,
+  Platform,
+  AccessibilityInfo,
+  BackHandler,
+  Animated,
+  Easing as RNEasing,
+  useWindowDimensions,
+} from 'react-native';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withRepeat,
+  withSequence,
+  runOnJS,
+  Easing as ReanimatedEasing,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Ellipse, Path } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
+import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
-import { radius, shadow } from '../theme';
-
 import { formatDuration } from '../utils/stats';
+import {
+  FOCUS_CATEGORIES,
+  getCategoryMeta,
+  normalizeCategory,
+} from '../utils/focusCategories';
 import FocusHistoryModal from './FocusHistoryModal';
 
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+// 时长与手势参数
+const DEFAULT_DURATION_MIN = 25;
+const MIN_MIN = 5;
+const MAX_MIN = 120; // 支持 5~120 分钟
+const STEP_MIN = 5;
+const STEP_PX = 10;
+const HOLD_MS = 1000; // 约 1 秒按住
+const ABANDON_CONFIRM_MS = 3000;
+const REST_DURATION_MIN = 5;
+const REST_DURATION_SEC = REST_DURATION_MIN * 60;
 
-// 6 大类的 i18n key 和对应的彩色色值（严格与设计稿色彩保持一致）
-const CATEGORY_ITEMS = [
-  { key: 'pomodoro.helpWork', icon: '💼', color: '#3B6FD6' },
-  { key: 'pomodoro.helpStudy', icon: '📚', color: '#D63B3B' },
-  { key: 'pomodoro.helpCreate', icon: '🎨', color: '#E58A1F' },
-  { key: 'pomodoro.helpBodyMind', icon: '🧘', color: '#2E9E6B' },
-  { key: 'pomodoro.helpLife', icon: '🧹', color: '#2B8FB5' },
-  { key: 'pomodoro.helpPlan', icon: '💡', color: '#7B5BC4' },
+// 时长快捷档位：5 / 15 / 25 / 45 / 60，升序排列，统一不带单位
+const DURATION_PRESETS = [5, 15, 25, 45, 60];
+
+// 收获态 8 个彩点散开参数（提取自 Interactive.dc.html）
+const BURST_PARTICLES = [
+  { dx: -120, dy: -110, color: '#D93A2B', delay: 0 },
+  { dx: 0, dy: -150, color: '#E9A23B', delay: 50 },
+  { dx: 120, dy: -110, color: '#4E8F4A', delay: 100 },
+  { dx: 150, dy: 0, color: '#E9A23B', delay: 0 },
+  { dx: 120, dy: 110, color: '#D93A2B', delay: 50 },
+  { dx: -150, dy: 0, color: '#4E8F4A', delay: 100 },
+  { dx: -120, dy: 110, color: '#D93A2B', delay: 50 },
+  { dx: 0, dy: 140, color: '#E9A23B', delay: 0 },
 ];
-
-const DURATION_PRESETS = [15, 25, 45, 60];
 
 const AMBIENT_OPTIONS = [
   { key: 'none', icon: 'volume-mute-outline', label: 'pomodoro.ambient_none' },
@@ -46,6 +90,109 @@ const AMBIENT_SOUND_FILES = {
   stream: require('../../assets/sounds/stream.mp3'),
 };
 
+const STORAGE_KEY_ACTIVE = 'timeflow_active_focus';
+const STORAGE_KEY_LAST_CATEGORY = 'timeflow_last_focus_category';
+const STORAGE_KEY_SLID_ADJUST = 'timeflow_pomodoro_has_slid';
+
+const CATEGORY_DESC_KEYS = {
+  work: 'pomodoro.helpWorkDesc',
+  study: 'pomodoro.helpStudyDesc',
+  create: 'pomodoro.helpCreateDesc',
+  wellbeing: 'pomodoro.helpBodyMindDesc',
+  life: 'pomodoro.helpLifeDesc',
+  review: 'pomodoro.helpPlanDesc',
+};
+
+const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+
+const hapticImpact = (style) => {
+  try {
+    Haptics.impactAsync(style).catch(() => {});
+  } catch (e) {}
+};
+
+const hapticNotify = (type) => {
+  try {
+    Haptics.notificationAsync(type).catch(() => {});
+  } catch (e) {}
+};
+
+const makeSessionId = (ts) => `focus-${ts}`;
+
+const formatTime = (secs) => {
+  const m = Math.floor(secs / 60);
+  const s = Math.max(0, Math.floor(secs % 60));
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
+// 动态计算番茄成熟颜色：青色(#8DB255) -> 橙黄色(#E9A23B) -> 番茄红(#D93A2B)
+const getTomatoColor = (progress) => {
+  const pClamped = clamp(progress, 0, 1);
+  if (pClamped <= 0.5) {
+    const p = pClamped / 0.5;
+    const r = Math.round(0x8d + (0xe9 - 0x8d) * p);
+    const g = Math.round(0xb2 + (0xa2 - 0xb2) * p);
+    const b = Math.round(0x55 + (0x3b - 0x55) * p);
+    return `rgb(${r},${g},${b})`;
+  } else {
+    const p = (pClamped - 0.5) / 0.5;
+    const r = Math.round(0xe9 + (0xd9 - 0xe9) * p);
+    const g = Math.round(0xa2 + (0x3a - 0xa2) * p);
+    const b = Math.round(0x3b + (0x2b - 0x3b) * p);
+    return `rgb(${r},${g},${b})`;
+  }
+};
+
+/**
+ * 单个分类 Chip（支持 150~200ms scale 1.05 与颜色高亮动效）
+ */
+function CategoryChip({ item, isSelected, onSelect, onLayout, t }) {
+  const scaleAnim = useRef(new Animated.Value(isSelected ? 1.05 : 1)).current;
+
+  useEffect(() => {
+    Animated.timing(scaleAnim, {
+      toValue: isSelected ? 1.05 : 1,
+      duration: 180,
+      easing: RNEasing.out(RNEasing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [isSelected]);
+
+  return (
+    <Animated.View
+      style={{ transform: [{ scale: scaleAnim }] }}
+      onLayout={(e) => onLayout && onLayout(e.nativeEvent.layout)}
+    >
+      <TouchableOpacity
+        style={[
+          styles.catChip,
+          isSelected && {
+            borderColor: item.color,
+            backgroundColor: item.color + '15',
+            borderWidth: 1.5,
+          },
+        ]}
+        onPress={onSelect}
+        activeOpacity={0.7}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+        accessibilityRole="radio"
+        accessibilityState={{ selected: isSelected }}
+      >
+        <View style={[styles.catChipDot, { backgroundColor: item.color }]} />
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.catChipLabel,
+            isSelected && { color: item.color, fontWeight: '700' },
+          ]}
+        >
+          {t(item.i18nKey).replace(/^[^\w一-龥]+\s*/, '')}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 export default function PomodoroTimer({
   onStartFocus,
   onSaveFocus,
@@ -53,184 +200,198 @@ export default function PomodoroTimer({
   todayFocusSec = 0,
   todayFocusRecords = [],
   allFocusRecords,
-  onUpdateRecord,
-  onDeleteRecord,
+  onUpdateFocusSession,
+  onDeleteFocusSession,
   onGoInsights,
   onRunningChange,
 }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [durationSec, setDurationSec] = useState(25 * 60);
-  const [timeLeft, setTimeLeft] = useState(25 * 60);
-  const [running, setRunning] = useState(false);
-  const [paused, setPaused] = useState(false);
-  const [flowMode, setFlowMode] = useState(false);
-  const [overtimeSec, setOvertimeSec] = useState(0);
+  // Phase 状态机: 'idle' | 'holding' | 'running' | 'paused' | 'done' | 'resting'
+  const [phase, setPhase] = useState('idle');
 
-  useEffect(() => {
-    if (onRunningChange) {
-      onRunningChange(running);
-    }
-  }, [running, onRunningChange]);
-
+  // 基础计时状态
+  const [durationMin, setDurationMin] = useState(DEFAULT_DURATION_MIN);
+  const [timeLeftSec, setTimeLeftSec] = useState(DEFAULT_DURATION_MIN * 60);
+  const [category, setCategory] = useState('study'); // 首次使用默认「学习」
+  const [goalName, setGoalName] = useState('');
+  const [isNoteEditing, setIsNoteEditing] = useState(false);
   const [ambient, setAmbient] = useState('none');
-  const [showAmbientPicker, setShowAmbientPicker] = useState(false);
+
+  // 用户是否曾经滑动手势（用于控制“上下滑动调节”提示的展示）
+  const [hasSlidAdjust, setHasSlidAdjust] = useState(false);
+
+  // Refs for timestamp logic
+  const startTsRef = useRef(null);
+  const totalDurationSecRef = useRef(DEFAULT_DURATION_MIN * 60);
+  const pausedTotalSecRef = useRef(0);
+  const lastPauseTsRef = useRef(null);
+  const timerRef = useRef(null);
+  const restEndTsRef = useRef(null);
+  const categoryRef = useRef('study');
+  const sessionIdRef = useRef(null);
+  const savedRef = useRef(false);
+  const phaseRef = useRef('idle');
+
+  // 分类 Chip 居中滚动计算相关
+  const catScrollRef = useRef(null);
+  const catChipLayoutsRef = useRef({});
+  const catViewportWidthRef = useRef(0);
+
+  const setPhaseAndRef = useCallback((next) => {
+    phaseRef.current = next;
+    setPhase(next);
+  }, []);
+
+  // Ambient sound refs
   const soundRef = useRef(null);
   const playReqIdRef = useRef(0);
 
-  const [category, setCategory] = useState(null);
-  const [goalName, setGoalName] = useState('');
-  const [showHelp, setShowHelp] = useState(false);
-  const [showPostFocus, setShowPostFocus] = useState(false);
-  const [showAbandonModal, setShowAbandonModal] = useState(false);
+  // Toast
+  const [toast, setToast] = useState({ visible: false, message: '' });
+  const toastTimerRef = useRef(null);
+
+  // 放弃二次确认状态
+  const [abandonArmed, setAbandonArmed] = useState(false);
+  const abandonArmedRef = useRef(false);
+  const abandonTimerRef = useRef(null);
+
+  // 按住开始按钮文案提示
+  const [holdEarlyRelease, setHoldEarlyRelease] = useState(false);
+  const holdReleaseTimerRef = useRef(null);
+
+  // 休息倒计时
+  const [restTimeLeftSec, setRestTimeLeftSec] = useState(REST_DURATION_SEC);
+
+  // 模态弹窗
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [showCustomModal, setShowCustomModal] = useState(false);
-  const [customMinutesInput, setCustomMinutesInput] = useState('');
-  const [postCategory, setPostCategory] = useState(null);
-  const [postNote, setPostNote] = useState('');
-  const pendingSaveRef = useRef(null);
+  const [showAmbientPicker, setShowAmbientPicker] = useState(false);
+  const [customMinutesInput, setCustomMinutesInput] = useState(String(DEFAULT_DURATION_MIN));
 
-  // 计算今日专注总时长与各分类占比
+  // 减弱动效
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  // 拖动调时长手势状态（拖动时禁止外层滚动）
+  const [isDragging, setIsDragging] = useState(false);
+
+  // 响应式番茄尺寸计算：放大约 1.4 倍（240 * 1.4 = 336），小屏自适应压缩，杜绝重叠
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const [dialAreaHeight, setDialAreaHeight] = useState(0);
+
+  const responsiveTomatoSize = useMemo(() => {
+    const maxByWidth = Math.max(160, winWidth - 32);
+    const maxByHeight = dialAreaHeight > 0
+      ? Math.max(160, dialAreaHeight - 36)
+      : Math.max(160, winHeight * 0.36);
+    return Math.round(Math.min(336, maxByWidth, maxByHeight));
+  }, [winWidth, winHeight, dialAreaHeight]);
+
+  const idleTomatoBoxStyle = useMemo(
+    () => ({
+      width: responsiveTomatoSize,
+      height: responsiveTomatoSize,
+      alignItems: 'center',
+      justifyContent: 'center',
+    }),
+    [responsiveTomatoSize]
+  );
+
+  const dialNumberFontSize = useMemo(() => {
+    return responsiveTomatoSize >= 300 ? 56 : Math.max(38, Math.round(responsiveTomatoSize * 0.17));
+  }, [responsiveTomatoSize]);
+
+  // ==================== Reanimated 动画系统 ====================
+  // 番茄缩放共享值：待开始态 0.85 + 0.15*(min/120)，专注中 0.55 + 0.45*p
+  const scaleShared = useSharedValue(0.85 + 0.15 * (DEFAULT_DURATION_MIN / MAX_MIN));
+  const breathTranslateY = useSharedValue(0);
+
+  // 原生 Animated（用于背景过渡、按住进度条填充及彩点散开）
+  const holdProgressAnim = useRef(new Animated.Value(0)).current;
+  const pageBgAnim = useRef(new Animated.Value(0)).current;
+  const harvestParticleAnim = useRef(new Animated.Value(0)).current;
+
+  // 今日统计派生
+  const totalFocusCountCalculated = todayFocusCount || 0;
+  const totalFocusSecCalculated = todayFocusSec || 0;
   const todayFocusRecordsList = todayFocusRecords || [];
-  // 专注历史弹窗的数据源：优先用跨天的全量专注记录，缺省回退到今日
   const focusHistoryRecords = allFocusRecords || todayFocusRecordsList;
-  const totalFocusSecCalculated = todayFocusSec || todayFocusRecordsList.reduce((s, r) => s + (Number(r.duration) || 0), 0);
-  const totalFocusCountCalculated = todayFocusCount || todayFocusRecordsList.length;
 
-  const distributionBar = useMemo(() => {
-    if (!totalFocusSecCalculated || !todayFocusRecordsList.length) return [];
-    const map = {};
-    for (const r of todayFocusRecordsList) {
-      const catKey = r.category || 'unnamed';
-      const meta = CATEGORY_ITEMS.find(c => c.key === catKey);
-      const color = meta ? meta.color : '#B9A99D';
-      if (!map[catKey]) map[catKey] = { color, sec: 0 };
-      map[catKey].sec += Number(r.duration) || 0;
+  // 今日专注统计摘要
+  const todaySummary = useMemo(() => {
+    const recs = todayFocusRecordsList;
+    const count = recs.length || totalFocusCountCalculated;
+    let totalSec = 0;
+    for (const r of recs) {
+      totalSec += Number(r.duration) || 0;
     }
-    return Object.values(map).map(m => ({
-      color: m.color,
-      pct: Math.max(3, Math.round((m.sec / totalFocusSecCalculated) * 100)),
-    }));
-  }, [todayFocusRecordsList, totalFocusSecCalculated]);
-
-  const timerRef = useRef(null);
-
-  // Animation Values
-  const progressAnim = useRef(new Animated.Value(1)).current;
-  const pressScale = useRef(new Animated.Value(1)).current;
-  const glowOpacity = useRef(new Animated.Value(0)).current;
-
-  // Circle configs
-  const size = 240;
-  const strokeWidth = 12;
-  const cx = size / 2;
-  const cy = size / 2;
-  const r = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * r;
-
-  // Gestural Dial - 仅在明确垂直拖拽时响应，不抢占点击与滚动
-  const initialDurationRef = useRef(durationSec);
-  const dialResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        if (running) return false;
-        // 严格垂直阈值：垂直位移超过 18px 且垂直意图明显大于水平
-        return (
-          Math.abs(gestureState.dy) > 18 &&
-          Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 2
-        );
-      },
-      onPanResponderGrant: () => {
-        initialDurationRef.current = durationSec;
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        if (running) return;
-        const deltaMins = Math.round(-gestureState.dy / 22) * 5;
-        let newSec = initialDurationRef.current + deltaMins * 60;
-        if (newSec < 5 * 60) newSec = 5 * 60;
-        if (newSec > 180 * 60) newSec = 180 * 60;
-
-        if (newSec !== durationSec) {
-          setDurationSec(newSec);
-          setTimeLeft(newSec);
-        }
-      },
-    })
-  ).current;
-
-  // 基于绝对时间戳的实时计时同步器（解决息屏/后台计时挂起问题）
-  const targetEndTsRef = useRef(null);
-  const accumulatedFocusSecRef = useRef(0);
-
-  const syncTimeTick = useCallback(() => {
-    if (!running || paused) return;
-    const targetEnd = targetEndTsRef.current;
-    if (!targetEnd) return;
-    const now = Date.now();
-
-    if (now < targetEnd) {
-      // 倒计时阶段
-      const remSec = Math.max(1, Math.round((targetEnd - now) / 1000));
-      setTimeLeft(remSec);
-      setOvertimeSec(0);
-      progressAnim.setValue(remSec / durationSec);
-    } else {
-      // 倒计时已跑完，进入心流延展超时阶段
-      setTimeLeft(0);
-      const overSec = Math.max(0, Math.round((now - targetEnd) / 1000));
-      setOvertimeSec(overSec);
-      progressAnim.setValue(1);
-      if (!flowMode) {
-        setFlowMode(true);
-        Vibration.vibrate([0, 100, 50, 100]);
-      }
+    if (totalSec === 0 && totalFocusSecCalculated > 0) {
+      totalSec = totalFocusSecCalculated;
     }
-  }, [running, paused, durationSec, flowMode, progressAnim]);
+    return { count, totalSec };
+  }, [todayFocusRecordsList, totalFocusCountCalculated, totalFocusSecCalculated]);
 
-  // 息屏/前后台唤醒时立即校准时间
+  const currentAmbient = AMBIENT_OPTIONS.find((a) => a.key === ambient);
+  const currentAmbientLabel = currentAmbient
+    ? t(currentAmbient.label, currentAmbient.key)
+    : t('pomodoro.ambient_none', '无声');
+
+  const selectedCategoryMeta = useMemo(
+    () => getCategoryMeta(category, t),
+    [category, t]
+  );
+
+  // 番茄成熟进度 p (0 到 1)
+  const totalSecForCalc = totalDurationSecRef.current || durationMin * 60;
+  const tomatoProgress = totalSecForCalc > 0
+    ? 1 - Math.min(1, Math.max(0, timeLeftSec) / totalSecForCalc)
+    : 0;
+  const tomatoFillColor = phase === 'idle'
+    ? '#8DB255'
+    : phase === 'done'
+    ? '#D93A2B'
+    : getTomatoColor(tomatoProgress);
+
+  // 阶段提示文案
+  const stageHintText = useMemo(() => {
+    if (phase === 'paused') return t('pomodoro.pausedLabel', '已暂停');
+    if (tomatoProgress >= 0.9) return t('pomodoro.stageRipe', '马上就能收获了');
+    if (tomatoProgress >= 0.66) return t('pomodoro.stageRipening', '快熟了');
+    if (tomatoProgress >= 0.33) return t('pomodoro.stageTurning', '正在转红');
+    return t('pomodoro.stageGreen', '青涩的小番茄');
+  }, [phase, tomatoProgress, t]);
+
+  // 平滑滚动选中 Chip 到视口居中
+  const scrollToCategoryCenter = useCallback((catKey) => {
+    const layout = catChipLayoutsRef.current[catKey];
+    const vpW = catViewportWidthRef.current;
+    if (layout && vpW && catScrollRef.current) {
+      const targetX = layout.x - (vpW - layout.width) / 2;
+      catScrollRef.current.scrollTo({
+        x: Math.max(0, targetX),
+        animated: true,
+      });
+    }
+  }, []);
+
+  const handleSelectCategory = useCallback((catKey) => {
+    setCategory(catKey);
+    categoryRef.current = catKey;
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light);
+    scrollToCategoryCenter(catKey);
+  }, [scrollToCategoryCenter]);
+
+  // ==================== Effects ====================
+
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active' && running && !paused) {
-        syncTimeTick();
-      }
-    });
-    return () => sub.remove();
-  }, [running, paused, syncTimeTick]);
-
-  // 前台 UI 刷新定时器（仅负责每秒调度 syncTimeTick，不再依赖累加减一）
-  useEffect(() => {
-    if (running && !paused) {
-      syncTimeTick();
-      timerRef.current = setInterval(() => {
-        syncTimeTick();
-      }, 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
+    if (onRunningChange) {
+      onRunningChange(phase === 'running' || phase === 'paused' || phase === 'resting');
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [running, paused, syncTimeTick]);
+  }, [phase, onRunningChange]);
 
-  // Breathing effect during focus
-  useEffect(() => {
-    if (running && !paused) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowOpacity, { toValue: flowMode ? 1 : 0.4, duration: flowMode ? 2000 : 1500, useNativeDriver: true }),
-          Animated.timing(glowOpacity, { toValue: flowMode ? 0.3 : 0.1, duration: flowMode ? 2000 : 1500, useNativeDriver: true })
-        ])
-      ).start();
-    } else {
-      glowOpacity.stopAnimation();
-      glowOpacity.setValue(0);
-    }
-  }, [flowMode, running, paused]);
-
-  // 1. 初始化全局音频模式
   useEffect(() => {
     Audio.setAudioModeAsync({
       allowsRecordingIOS: false,
@@ -238,23 +399,340 @@ export default function PomodoroTimer({
       playsInSilentModeIOS: true,
       shouldDuckAndroid: true,
       playThroughEarpieceAndroid: false,
-    }).catch((err) => {
-      console.warn('[Audio] setAudioModeAsync error:', err);
-    });
+    }).catch(() => {});
 
     return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
-        soundRef.current = null;
-      }
+      stopAmbientSound();
     };
   }, []);
 
-  // 2. 统一白噪音播放核心函数（防竞态与泄露）
-  const playAmbientSound = async (soundKey) => {
+  // 恢复上次分类（首次默认「学习」）并在布局完成后滚动居中
+  useEffect(() => {
+    (async () => {
+      try {
+        const last = await AsyncStorage.getItem(STORAGE_KEY_LAST_CATEGORY);
+        const finalCat = (last && normalizeCategory(last)) || 'study';
+        setCategory(finalCat);
+        categoryRef.current = finalCat;
+        setTimeout(() => {
+          scrollToCategoryCenter(finalCat);
+        }, 300);
+      } catch (e) {
+        setCategory('study');
+        categoryRef.current = 'study';
+      }
+    })();
+  }, [scrollToCategoryCenter]);
+
+  useEffect(() => {
+    if (category) {
+      categoryRef.current = category;
+      AsyncStorage.setItem(STORAGE_KEY_LAST_CATEGORY, category).catch(() => {});
+    }
+  }, [category]);
+
+  // 恢复是否已滑动手势调节的持久化状态（调节过一次后永久隐藏）
+  useEffect(() => {
+    (async () => {
+      try {
+        const slid = await AsyncStorage.getItem(STORAGE_KEY_SLID_ADJUST);
+        if (slid === '1') {
+          setHasSlidAdjust(true);
+        }
+      } catch (e) {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      Notifications.requestPermissionsAsync().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const isReduceMotion = await AccessibilityInfo.isReduceMotionEnabled();
+        setReduceMotion(isReduceMotion);
+      } catch (e) {}
+    };
+    check();
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const onBackPress = () => {
+      if (phase === 'done' || phase === 'resting') {
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub?.remove?.();
+  }, [phase]);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (abandonTimerRef.current) clearTimeout(abandonTimerRef.current);
+      if (holdReleaseTimerRef.current) clearTimeout(holdReleaseTimerRef.current);
+      toastTimerRef.current = null;
+      abandonTimerRef.current = null;
+      holdReleaseTimerRef.current = null;
+    };
+  }, []);
+
+  // AppState 前后台恢复
+  const recoverActiveSessionRef = useRef(null);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      if (nextState === 'active' && (phaseRef.current === 'running' || phaseRef.current === 'paused')) {
+        await recoverActiveSessionRef.current?.();
+      }
+    });
+    return () => sub?.remove?.();
+  }, []);
+
+  // 计时器主循环
+  useEffect(() => {
+    if (phase !== 'running' && phase !== 'resting') {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+
+    timerRef.current = setInterval(() => {
+      if (phase === 'resting') {
+        const restEnd = restEndTsRef.current;
+        const next = restEnd ? Math.max(0, Math.ceil((restEnd - Date.now()) / 1000)) : 0;
+        setRestTimeLeftSec(next);
+        if (next <= 0) {
+          setPhaseAndRef('idle');
+          hapticNotify(Haptics.NotificationFeedbackType.Success);
+          if (onRunningChange) onRunningChange(false);
+        }
+        return;
+      }
+      const remaining = computeRemainingSec();
+      setTimeLeftSec(Math.max(0, remaining));
+      if (remaining <= 0) {
+        handleTimerDone();
+      }
+    }, 250);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [phase, durationMin, onRunningChange]);
+
+  // ==================== 视觉动画联动 ====================
+
+  // 番茄缩放动画（放大并支持 5~120 范围动态平滑过渡）
+  useEffect(() => {
+    if (phase === 'idle') {
+      const targetScale = 0.85 + 0.15 * (durationMin / MAX_MIN);
+      scaleShared.value = withTiming(targetScale, {
+        duration: 220,
+        easing: ReanimatedEasing.bezier(0.2, 0.8, 0.2, 1),
+      });
+      Animated.timing(pageBgAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: false,
+      }).start();
+    } else if (phase === 'running' || phase === 'paused') {
+      const targetScale = 0.6 + 0.4 * tomatoProgress;
+      scaleShared.value = withTiming(targetScale, {
+        duration: 350,
+        easing: ReanimatedEasing.linear,
+      });
+      Animated.timing(pageBgAnim, {
+        toValue: tomatoProgress,
+        duration: 500,
+        useNativeDriver: false,
+      }).start();
+    } else if (phase === 'done') {
+      scaleShared.value = 0.8;
+      scaleShared.value = withSequence(
+        withTiming(1.08, { duration: 280, easing: ReanimatedEasing.out(ReanimatedEasing.quad) }),
+        withTiming(1.0, { duration: 180, easing: ReanimatedEasing.inOut(ReanimatedEasing.quad) })
+      );
+      Animated.timing(pageBgAnim, {
+        toValue: 1,
+        duration: 450,
+        useNativeDriver: false,
+      }).start();
+    }
+  }, [durationMin, phase, tomatoProgress]);
+
+  // 呼吸动画
+  useEffect(() => {
+    if (phase === 'running' && !reduceMotion) {
+      breathTranslateY.value = withRepeat(
+        withSequence(
+          withTiming(-5, { duration: 1600, easing: ReanimatedEasing.inOut(ReanimatedEasing.sin) }),
+          withTiming(0, { duration: 1600, easing: ReanimatedEasing.inOut(ReanimatedEasing.sin) })
+        ),
+        -1,
+        true
+      );
+    } else {
+      breathTranslateY.value = withTiming(0, { duration: 200 });
+    }
+  }, [phase, reduceMotion]);
+
+  // 收获态彩点散开
+  useEffect(() => {
+    if (phase === 'done') {
+      if (reduceMotion) {
+        harvestParticleAnim.setValue(1);
+        return;
+      }
+      harvestParticleAnim.setValue(0);
+      Animated.timing(harvestParticleAnim, {
+        toValue: 1,
+        duration: 900,
+        easing: RNEasing.out(RNEasing.quad),
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [phase, reduceMotion]);
+
+  const animatedTomatoStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { scale: scaleShared.value },
+        { translateY: breathTranslateY.value },
+      ],
+    };
+  });
+
+  // ==================== Core Timer Logic ====================
+
+  const computeRemainingSec = useCallback(() => {
+    if (!startTsRef.current) return durationMin * 60;
+    const now = Date.now();
+    let elapsed = (now - startTsRef.current) / 1000;
+
+    let currentPause = 0;
+    if (lastPauseTsRef.current) {
+      currentPause = (now - lastPauseTsRef.current) / 1000;
+    }
+    elapsed -= pausedTotalSecRef.current + currentPause;
+
+    const remaining = totalDurationSecRef.current - elapsed;
+    return Math.ceil(remaining);
+  }, [durationMin]);
+
+  const persistActiveSession = useCallback(async () => {
+    const payload = {
+      sessionId: sessionIdRef.current,
+      phase: phaseRef.current,
+      startTs: startTsRef.current,
+      totalDurationSec: totalDurationSecRef.current,
+      durationSec: totalDurationSecRef.current,
+      pausedTotalSec: pausedTotalSecRef.current,
+      lastPauseTs: lastPauseTsRef.current,
+      category: categoryRef.current,
+      goalName: goalName.trim() || t('home.unnamedFocus', '未命名专注'),
+      durationMin,
+      ambient,
+    };
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY_ACTIVE, JSON.stringify(payload));
+    } catch (e) {}
+  }, [durationMin, ambient, t, goalName]);
+
+  const clearActiveSession = useCallback(async () => {
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEY_ACTIVE);
+    } catch (e) {}
+  }, []);
+
+  const recoverActiveSession = useCallback(async () => {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEY_ACTIVE);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (!data || !data.startTs) return;
+
+      if (savedRef.current) return;
+
+      const total = data.totalDurationSec || data.durationSec || data.durationMin * 60 || durationMin * 60;
+      const pausedSoFar = data.pausedTotalSec || 0;
+
+      let extraPause = 0;
+      if (data.phase === 'paused' && data.lastPauseTs) {
+        extraPause = (Date.now() - data.lastPauseTs) / 1000;
+      }
+
+      const elapsed = (Date.now() - data.startTs) / 1000 - pausedSoFar - extraPause;
+      const remaining = Math.ceil(total - elapsed);
+
+      startTsRef.current = data.startTs;
+      totalDurationSecRef.current = total;
+      pausedTotalSecRef.current = pausedSoFar;
+      lastPauseTsRef.current = data.lastPauseTs || null;
+      sessionIdRef.current = data.sessionId;
+      categoryRef.current = data.category || 'study';
+      setCategory(data.category || 'study');
+      setGoalName(data.goalName || '');
+      setAmbient(data.ambient || 'none');
+      setDurationMin(data.durationMin || DEFAULT_DURATION_MIN);
+
+      if (data.phase === 'running' && remaining <= 0) {
+        setTimeLeftSec(0);
+        setPhaseAndRef('done');
+      } else if (data.phase === 'running') {
+        setTimeLeftSec(Math.max(0, remaining));
+        setPhaseAndRef('running');
+        await scheduleNotification();
+      } else {
+        setTimeLeftSec(Math.max(0, remaining));
+        setPhaseAndRef(data.phase);
+      }
+    } catch (e) {}
+  }, [durationMin]);
+
+  recoverActiveSessionRef.current = recoverActiveSession;
+
+  const scheduleNotification = useCallback(async () => {
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      if (phaseRef.current !== 'running' || !startTsRef.current) return;
+      const endTime = startTsRef.current + totalDurationSecRef.current * 1000 - pausedTotalSecRef.current * 1000;
+      const trigger = new Date(endTime);
+      if (trigger <= new Date()) return;
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: t('pomodoro.harvestTitle', '收获一颗番茄'),
+          body: t('pomodoro.doneBody', '番茄钟时间到了，快来查看你的收获吧'),
+          sound: 'default',
+        },
+        trigger: { type: 'date', date: trigger },
+      });
+    } catch (e) {}
+  }, [t]);
+
+  const cancelNotification = useCallback(async () => {
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+    } catch (e) {}
+  }, []);
+
+  const playAmbientSound = useCallback(async (key) => {
     const reqId = ++playReqIdRef.current;
 
-    // 卸载已加载声音
     if (soundRef.current) {
       const prev = soundRef.current;
       soundRef.current = null;
@@ -264,35 +742,28 @@ export default function PomodoroTimer({
       } catch (e) {}
     }
 
-    if (soundKey === 'none' || !AMBIENT_SOUND_FILES[soundKey]) {
-      return;
-    }
+    if (key === 'none' || !AMBIENT_SOUND_FILES[key]) return;
 
     try {
       const { sound } = await Audio.Sound.createAsync(
-        AMBIENT_SOUND_FILES[soundKey],
+        AMBIENT_SOUND_FILES[key],
         {
           shouldPlay: true,
           isLooping: true,
           volume: 0.7,
         }
       );
-
-      // 若在加载过程中已有新请求，立即释放并退出
       if (reqId !== playReqIdRef.current) {
         await sound.stopAsync().catch(() => {});
         await sound.unloadAsync().catch(() => {});
         return;
       }
-
       soundRef.current = sound;
       await sound.playAsync();
-    } catch (err) {
-      console.warn('[Audio] playAmbientSound error:', soundKey, err);
-    }
-  };
+    } catch (err) {}
+  }, []);
 
-  const stopAmbientSound = async () => {
+  const stopAmbientSound = useCallback(async () => {
     playReqIdRef.current++;
     if (soundRef.current) {
       const cur = soundRef.current;
@@ -302,204 +773,368 @@ export default function PomodoroTimer({
         await cur.unloadAsync();
       } catch (e) {}
     }
-  };
-
-  // 3. 专注状态与音频播放联动
-  useEffect(() => {
-    if (running) {
-      if (paused) {
-        if (soundRef.current) {
-          soundRef.current.pauseAsync().catch(() => {});
-        }
-      } else {
-        if (soundRef.current) {
-          soundRef.current.playAsync().catch(() => {});
-        } else if (ambient !== 'none') {
-          playAmbientSound(ambient);
-        }
-      }
-    } else {
-      if (!showAmbientPicker) {
-        stopAmbientSound();
-      }
-    }
-  }, [running, paused, ambient, showAmbientPicker]);
-
-  const handleStart = () => {
-    if (!category) {
-      Vibration.vibrate(50);
-      Alert.alert(t('pomodoro.requireCategory', '请先选择一个专注分类'));
-      return;
-    }
-    if (!running) {
-      Vibration.vibrate(20);
-      accumulatedFocusSecRef.current = 0;
-      targetEndTsRef.current = Date.now() + durationSec * 1000;
-      setRunning(true);
-      setPaused(false);
-      setFlowMode(false);
-      setOvertimeSec(0);
-      setTimeLeft(durationSec);
-      progressAnim.setValue(1);
-      if (onStartFocus) onStartFocus({ durationSec, goalName: goalName.trim() || t('home.unnamedFocus'), category });
-    }
-  };
-
-  const handlePause = () => {
-    Vibration.vibrate(20);
-    const now = Date.now();
-    if (targetEndTsRef.current) {
-      if (now < targetEndTsRef.current) {
-        const remSec = Math.max(0, Math.round((targetEndTsRef.current - now) / 1000));
-        accumulatedFocusSecRef.current = durationSec - remSec;
-        setTimeLeft(remSec);
-      } else {
-        const overSec = Math.max(0, Math.round((now - targetEndTsRef.current) / 1000));
-        accumulatedFocusSecRef.current = durationSec + overSec;
-        setOvertimeSec(overSec);
-        setTimeLeft(0);
-      }
-    }
-    targetEndTsRef.current = null;
-    setPaused(true);
-  };
-
-  const handleResume = () => {
-    Vibration.vibrate(20);
-    const now = Date.now();
-    if (!flowMode) {
-      targetEndTsRef.current = now + timeLeft * 1000;
-    } else {
-      targetEndTsRef.current = now - overtimeSec * 1000;
-    }
-    setPaused(false);
-  };
-
-  const handleAbandon = () => {
-    Vibration.vibrate(20);
-    setShowAbandonModal(true);
-  };
-
-  // 计时会话结束（放弃 / 无保存结束 / 已保存）时统一清理活跃专注标记，
-  // 否则未保存的会话会让 widget 一直显示"专注中"。
-  const clearActiveFocus = useCallback(() => {
-    AsyncStorage.removeItem('timeflow_active_focus').catch(() => {});
   }, []);
 
-  const confirmAbandon = () => {
-    setShowAbandonModal(false);
-    Vibration.vibrate(30);
-    stopAmbientSound();
-    targetEndTsRef.current = null;
-    accumulatedFocusSecRef.current = 0;
-    setRunning(false);
-    setPaused(false);
-    setFlowMode(false);
-    setTimeLeft(durationSec);
-    setOvertimeSec(0);
-    progressAnim.setValue(1);
-    clearActiveFocus();
-  };
-
-  const handleFinish = () => {
-    Vibration.vibrate(80);
-    stopAmbientSound();
-    const actualFocusSec = durationSec - timeLeft + overtimeSec;
-    targetEndTsRef.current = null;
-    accumulatedFocusSecRef.current = 0;
-    setRunning(false);
-    setPaused(false);
-
-    if (actualFocusSec > 30) {
-      // Show post-focus modal for review
-      pendingSaveRef.current = { duration: actualFocusSec, goalName: goalName.trim() || t('home.unnamedFocus'), category };
-      setPostCategory(category);
-      setPostNote('');
-      setShowPostFocus(true);
-    } else {
-      // 太短不保存，直接清掉活跃标记
-      clearActiveFocus();
+  const pauseAmbientSound = useCallback(async () => {
+    if (soundRef.current) {
+      try {
+        await soundRef.current.pauseAsync();
+      } catch (e) {}
     }
+  }, []);
 
-    setFlowMode(false);
-    setTimeLeft(durationSec);
-    setOvertimeSec(0);
-    progressAnim.setValue(1);
-  };
+  const resumeAmbientSound = useCallback(async () => {
+    if (soundRef.current) {
+      try {
+        await soundRef.current.playAsync();
+      } catch (e) {}
+    } else if (ambient !== 'none') {
+      await playAmbientSound(ambient);
+    }
+  }, [ambient, playAmbientSound]);
 
-  const confirmPostFocus = () => {
-    if (pendingSaveRef.current && onSaveFocus) {
-      onSaveFocus({
-        ...pendingSaveRef.current,
-        category: postCategory || pendingSaveRef.current.category,
-        note: postNote.trim(),
+  const showToast = useCallback((message) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ visible: true, message });
+    toastTimerRef.current = setTimeout(() => {
+      setToast({ visible: false, message: '' });
+    }, 1500);
+  }, []);
+
+  const startFocus = useCallback(async () => {
+    hapticImpact(Haptics.ImpactFeedbackStyle.Heavy);
+    const now = Date.now();
+    const totalSec = durationMin * 60;
+    startTsRef.current = now;
+    totalDurationSecRef.current = totalSec;
+    pausedTotalSecRef.current = 0;
+    lastPauseTsRef.current = null;
+    sessionIdRef.current = makeSessionId(now);
+    savedRef.current = false;
+    setTimeLeftSec(totalSec);
+    setPhaseAndRef('running');
+
+    if (onStartFocus) {
+      onStartFocus({
+        durationSec: totalSec,
+        goalName: goalName.trim() || t('home.unnamedFocus', '未命名专注'),
+        category: categoryRef.current || 'study',
       });
     }
-    pendingSaveRef.current = null;
-    setShowPostFocus(false);
-    clearActiveFocus();
-  };
+
+    await persistActiveSession();
+    await scheduleNotification();
+    if (ambient !== 'none') {
+      await playAmbientSound(ambient);
+    }
+  }, [durationMin, goalName, t, onStartFocus, persistActiveSession, scheduleNotification, ambient, playAmbientSound]);
+
+  const handleTimerDone = useCallback(async () => {
+    if (phaseRef.current !== 'running') return;
+    setPhaseAndRef('done');
+    setTimeLeftSec(0);
+    hapticNotify(Haptics.NotificationFeedbackType.Success);
+    await cancelNotification();
+    await stopAmbientSound();
+    await clearActiveSession();
+  }, [cancelNotification, stopAmbientSound, clearActiveSession]);
+
+  const pauseFocus = useCallback(async () => {
+    if (phase !== 'running') return;
+    lastPauseTsRef.current = Date.now();
+    setPhaseAndRef('paused');
+    await persistActiveSession();
+    await cancelNotification();
+    await pauseAmbientSound();
+  }, [phase, persistActiveSession, cancelNotification, pauseAmbientSound]);
+
+  const resumeFocus = useCallback(async () => {
+    if (phase !== 'paused') return;
+    if (lastPauseTsRef.current) {
+      const pauseDuration = (Date.now() - lastPauseTsRef.current) / 1000;
+      pausedTotalSecRef.current += pauseDuration;
+      lastPauseTsRef.current = null;
+    }
+    setPhaseAndRef('running');
+    await persistActiveSession();
+    await scheduleNotification();
+    await resumeAmbientSound();
+  }, [phase, persistActiveSession, scheduleNotification, resumeAmbientSound]);
+
+  // 放弃专注（二次确认机制；确认放弃后清空任务名）
+  const abandonFocus = useCallback(async () => {
+    if (abandonArmedRef.current) {
+      abandonArmedRef.current = false;
+      if (abandonTimerRef.current) {
+        clearTimeout(abandonTimerRef.current);
+        abandonTimerRef.current = null;
+      }
+      setAbandonArmed(false);
+      hapticImpact(Haptics.ImpactFeedbackStyle.Light);
+      await cancelNotification();
+      await stopAmbientSound();
+      await clearActiveSession();
+      savedRef.current = false;
+      setGoalName('');
+      setPhaseAndRef('idle');
+      setTimeLeftSec(durationMin * 60);
+      startTsRef.current = null;
+      totalDurationSecRef.current = durationMin * 60;
+      pausedTotalSecRef.current = 0;
+      lastPauseTsRef.current = null;
+      sessionIdRef.current = null;
+      return;
+    }
+    abandonArmedRef.current = true;
+    setAbandonArmed(true);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light);
+    if (abandonTimerRef.current) clearTimeout(abandonTimerRef.current);
+    abandonTimerRef.current = setTimeout(() => {
+      abandonArmedRef.current = false;
+      setAbandonArmed(false);
+      abandonTimerRef.current = null;
+    }, ABANDON_CONFIRM_MS);
+  }, [cancelNotification, stopAmbientSound, clearActiveSession, durationMin]);
+
+  const resetToIdle = useCallback(async (notifyParent = true) => {
+    await clearActiveSession();
+    if (abandonTimerRef.current) {
+      clearTimeout(abandonTimerRef.current);
+      abandonTimerRef.current = null;
+    }
+    abandonArmedRef.current = false;
+    setAbandonArmed(false);
+    setGoalName('');
+    setIsNoteEditing(false);
+    setPhaseAndRef('idle');
+    setTimeLeftSec(durationMin * 60);
+    setRestTimeLeftSec(REST_DURATION_SEC);
+    restEndTsRef.current = null;
+    startTsRef.current = null;
+    totalDurationSecRef.current = durationMin * 60;
+    pausedTotalSecRef.current = 0;
+    lastPauseTsRef.current = null;
+    sessionIdRef.current = null;
+    savedRef.current = false;
+    if (notifyParent && onRunningChange) onRunningChange(false);
+  }, [clearActiveSession, durationMin, onRunningChange]);
+
+  const saveFocusRecord = useCallback(async () => {
+    const totalSec = totalDurationSecRef.current;
+    if (onSaveFocus && totalSec > 0) {
+      savedRef.current = true;
+      await onSaveFocus({
+        duration: totalSec,
+        goalName: goalName.trim() || t('home.unnamedFocus', '未命名专注'),
+        category: categoryRef.current || 'study',
+        note: '',
+      });
+    }
+  }, [onSaveFocus, goalName, t]);
+
+  const saveDoneFocus = useCallback(async () => {
+    await saveFocusRecord();
+    await resetToIdle(false);
+  }, [saveFocusRecord, resetToIdle]);
+
+  const startRest = useCallback(async () => {
+    await saveFocusRecord();
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium);
+    await clearActiveSession();
+    restEndTsRef.current = Date.now() + REST_DURATION_SEC * 1000;
+    setRestTimeLeftSec(REST_DURATION_SEC);
+    setPhaseAndRef('resting');
+    if (onRunningChange) onRunningChange(true);
+  }, [saveFocusRecord, clearActiveSession, onRunningChange]);
+
+  // ==================== 按住开始 (Hold to Start) ====================
+
+  const holdTimerRef = useRef(null);
+
+  const startHolding = useCallback(() => {
+    if (phase !== 'idle' && phase !== 'holding') return;
+    setHoldEarlyRelease(false);
+    if (holdReleaseTimerRef.current) clearTimeout(holdReleaseTimerRef.current);
+
+    Animated.timing(holdProgressAnim, {
+      toValue: 1,
+      duration: HOLD_MS,
+      easing: RNEasing.linear,
+      useNativeDriver: false,
+    }).start();
+
+    holdTimerRef.current = setTimeout(() => {
+      startFocus();
+    }, HOLD_MS);
+  }, [phase, startFocus, holdProgressAnim]);
+
+  const cancelHolding = useCallback(() => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    Animated.timing(holdProgressAnim, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: false,
+    }).start();
+
+    if (phase === 'holding') {
+      setPhaseAndRef('idle');
+      setHoldEarlyRelease(true);
+      if (holdReleaseTimerRef.current) clearTimeout(holdReleaseTimerRef.current);
+      holdReleaseTimerRef.current = setTimeout(() => {
+        setHoldEarlyRelease(false);
+      }, 1500);
+    }
+  }, [holdProgressAnim, phase]);
+
+  // 按住按钮文案
+  const holdButtonLabel = useMemo(() => {
+    if (holdEarlyRelease) {
+      return t('pomodoro.hold1sHint', '按住 1 秒开始');
+    }
+    if (phase === 'holding') {
+      return t('pomodoro.holding', '继续按住…');
+    }
+    return t('pomodoro.holdStartWithMin', '按住开始专注 · {min}分').replace('{min}', durationMin);
+  }, [holdEarlyRelease, phase, durationMin, t]);
+
+  // ==================== react-native-gesture-handler 转盘拖动 ====================
+  const dragStartMinShared = useSharedValue(DEFAULT_DURATION_MIN);
+  const currentMinShared = useSharedValue(DEFAULT_DURATION_MIN);
+
+  const handleMinuteChangeWorklet = useCallback((nextMin) => {
+    setDurationMin(nextMin);
+    setTimeLeftSec(nextMin * 60);
+    setHasSlidAdjust((prev) => {
+      if (!prev) {
+        AsyncStorage.setItem(STORAGE_KEY_SLID_ADJUST, '1').catch(() => {});
+      }
+      return true;
+    });
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
+  const panGesture = useMemo(() => {
+    return Gesture.Pan()
+      .activeOffsetY([-6, 6])
+      .failOffsetX([-25, 25])
+      .onBegin(() => {
+        'worklet';
+        dragStartMinShared.value = currentMinShared.value;
+        runOnJS(setIsDragging)(true);
+      })
+      .onUpdate((e) => {
+        'worklet';
+        const deltaSteps = Math.round(-e.translationY / STEP_PX);
+        const rawMin = dragStartMinShared.value + deltaSteps * STEP_MIN;
+        const targetMin = Math.max(MIN_MIN, Math.min(MAX_MIN, rawMin));
+        if (targetMin !== currentMinShared.value) {
+          currentMinShared.value = targetMin;
+          runOnJS(handleMinuteChangeWorklet)(targetMin);
+        }
+      })
+      .onFinalize(() => {
+        'worklet';
+        runOnJS(setIsDragging)(false);
+      });
+  }, [handleMinuteChangeWorklet]);
 
   const handleDurationPreset = (mins) => {
-    const sec = mins * 60;
-    setDurationSec(sec);
-    setTimeLeft(sec);
+    currentMinShared.value = mins;
+    setDurationMin(mins);
+    setTimeLeftSec(mins * 60);
+    setHasSlidAdjust(true);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleCustomDurationConfirm = () => {
     const mins = parseInt(customMinutesInput, 10);
-    if (!isNaN(mins) && mins >= 1 && mins <= 180) {
+    if (!isNaN(mins) && mins >= MIN_MIN && mins <= MAX_MIN) {
       handleDurationPreset(mins);
       setShowCustomModal(false);
     } else {
-      Alert.alert(t('pomodoro.customDurTitle', '自定义专注时长'), t('pomodoro.customDurHint', '请输入 1~180 之间的分钟数'));
+      showToast(t('pomodoro.customDurHint', '请输入 5~120 之间的分钟数'));
     }
   };
 
-  const formatTime = (secs) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const formatShortDur = (sec) => {
-    if (sec >= 3600) return `${(sec / 3600).toFixed(1)}h`;
-    return `${Math.floor(sec / 60)}m`;
-  };
-
-  const strokeDashoffset = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [circumference, 0],
-  });
-
-  const ringColor = flowMode ? colors.success : colors.primary;
-  const durationMin = Math.round(durationSec / 60);
-  const currentAmbient = AMBIENT_OPTIONS.find(a => a.key === ambient);
-  const currentAmbientLabel = currentAmbient ? t(currentAmbient.label, currentAmbient.key) : t('pomodoro.ambient_none', '无声');
-
-  const handleSelectAmbientInModal = (key) => {
+  const handleSelectAmbientInModal = async (key) => {
     setAmbient(key);
     if (key === 'none') {
-      stopAmbientSound();
+      await stopAmbientSound();
     } else {
-      playAmbientSound(key);
+      await playAmbientSound(key);
     }
   };
 
-  const handleCloseAmbientModal = () => {
-    setShowAmbientPicker(false);
-    if (!running) {
-      stopAmbientSound();
-    }
-  };
+  // ==================== 番茄标准 SVG 绘制 (240x240) ====================
+  const renderTomatoSvg = (showCheckmark = false) => (
+    <Svg width="100%" height="100%" viewBox="0 0 240 240">
+      {/* 底部微投影 */}
+      <Ellipse cx={120} cy={226} rx={70} ry={8} fill="#2B211C" opacity={0.08} />
+      {/* 番茄椭圆主体 */}
+      <Ellipse cx={120} cy={138} rx={94} ry={86} fill={tomatoFillColor} />
+      {/* 左上角半透明高光 */}
+      <Ellipse
+        cx={82}
+        cy={108}
+        rx={22}
+        ry={12}
+        fill="#FFFFFF"
+        opacity={0.28}
+        transform="rotate(-30 82 108)"
+      />
+      {/* 顶部叶片 */}
+      <Path
+        d="M120 62 C108 66 88 62 74 74 C92 76 104 82 120 84 C136 82 148 76 166 74 C152 62 132 66 120 62 Z"
+        fill="#4E8F4A"
+      />
+      {/* 茎 */}
+      <Path
+        d="M120 64 C120 50 124 42 132 36"
+        stroke="#3E7A3C"
+        strokeWidth={7}
+        strokeLinecap="round"
+        fill="none"
+      />
+      {/* 收获态中心白色对勾 */}
+      {showCheckmark && (
+        <Path
+          d="M86 140l24 24 44-50"
+          stroke="#FFFFFF"
+          strokeWidth={12}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+      )}
+    </Svg>
+  );
 
+  const animatedPageBg = pageBgAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [colors.bg, isDark ? '#261C19' : '#FBE3D6'],
+  });
+
+  const holdFillWidth = holdProgressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
+
+  // 背景白噪音选择弹窗
   const renderAmbientModal = () => (
-    <Modal visible={showAmbientPicker} transparent animationType="fade" onRequestClose={handleCloseAmbientModal}>
+    <Modal
+      visible={showAmbientPicker}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowAmbientPicker(false)}
+    >
       <View style={styles.modalBg}>
         <View style={styles.modalContent}>
           <Text style={styles.modalTitle}>{t('pomodoro.bgSound', '背景声音')}</Text>
           <View style={styles.ambientGrid}>
-            {AMBIENT_OPTIONS.map(item => {
+            {AMBIENT_OPTIONS.map((item) => {
               const isActive = ambient === item.key;
               return (
                 <TouchableOpacity
@@ -508,18 +1143,27 @@ export default function PomodoroTimer({
                   onPress={() => handleSelectAmbientInModal(item.key)}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name={item.icon} size={20} color={isActive ? colors.primaryStrong : colors.ink2} />
-                  <Text style={[styles.ambientOptionText, isActive && { color: colors.primaryStrong, fontWeight: '700' }]}>
+                  <Ionicons
+                    name={item.icon}
+                    size={20}
+                    color={isActive ? colors.primaryStrong : colors.ink2}
+                  />
+                  <Text
+                    style={[
+                      styles.ambientOptionText,
+                      isActive && { color: colors.primaryStrong, fontWeight: '700' },
+                    ]}
+                  >
                     {t(item.label, item.key)}
                   </Text>
-                  {isActive && item.key !== 'none' && (
-                    <Ionicons name="volume-high" size={14} color={colors.primaryStrong} style={{ marginLeft: 'auto' }} />
-                  )}
                 </TouchableOpacity>
               );
             })}
           </View>
-          <TouchableOpacity style={[styles.modalClose, { backgroundColor: colors.chip }]} onPress={handleCloseAmbientModal}>
+          <TouchableOpacity
+            style={[styles.modalClose, { backgroundColor: colors.chip }]}
+            onPress={() => setShowAmbientPicker(false)}
+          >
             <Text style={[styles.modalCloseText, { color: colors.ink }]}>{t('common.done', '完成')}</Text>
           </TouchableOpacity>
         </View>
@@ -527,1039 +1171,1206 @@ export default function PomodoroTimer({
     </Modal>
   );
 
-  const renderAbandonModal = () => (
-    <Modal visible={showAbandonModal} transparent animationType="fade">
-      <View style={styles.modalBg}>
-        <View style={styles.abandonModalCard}>
-          <View style={[styles.abandonIconWrap, { backgroundColor: colors.danger + '18' }]}>
-            <Ionicons name="alert-circle" size={32} color={colors.danger} />
+  // ==================== 页面三：收获 (DONE) ====================
+  if (phase === 'done') {
+    return (
+      <Animated.View
+        style={[
+          styles.doneContainer,
+          {
+            backgroundColor: animatedPageBg,
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 20,
+          },
+        ]}
+      >
+        <ScrollView
+          style={{ flex: 1, alignSelf: 'stretch' }}
+          contentContainerStyle={styles.doneScroll}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* 番茄收获弹出区与 8 个散开彩点 */}
+          <View style={styles.harvestVisualWrap}>
+            {!reduceMotion &&
+              BURST_PARTICLES.map((p, idx) => {
+                const translateX = harvestParticleAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, p.dx],
+                });
+                const translateY = harvestParticleAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, p.dy],
+                });
+                const opacity = harvestParticleAnim.interpolate({
+                  inputRange: [0, 0.8, 1],
+                  outputRange: [1, 0.6, 0],
+                });
+                const scale = harvestParticleAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 0.4],
+                });
+                return (
+                  <Animated.View
+                    key={`burst-${idx}`}
+                    style={[
+                      styles.burstDot,
+                      {
+                        backgroundColor: p.color,
+                        transform: [{ translateX }, { translateY }, { scale }],
+                        opacity,
+                      },
+                    ]}
+                  />
+                );
+              })}
+
+            <Reanimated.View style={[styles.tomatoBox, animatedTomatoStyle]}>
+              {renderTomatoSvg(true)}
+            </Reanimated.View>
           </View>
-          <Text style={styles.abandonModalTitle}>{t('pomodoro.abandonTitle', '放弃专注')}</Text>
-          <Text style={styles.abandonModalMsg}>
-            {t('pomodoro.abandonMsg', '确定要放弃这次专注吗？已完成的时间将不会被记录。')}
+
+          <Text style={styles.harvestTitle}>{t('pomodoro.harvestTitle', '收获一颗番茄')}</Text>
+          <Text style={styles.harvestSub}>
+            {t('pomodoro.harvestSub', {
+              n: todaySummary.count + 1,
+              cat: selectedCategoryMeta?.name || '',
+              min: durationMin,
+            })
+              .replace('{n}', todaySummary.count + 1)
+              .replace('{cat}', selectedCategoryMeta?.name || '')
+              .replace('{min}', durationMin)}
           </Text>
+          {goalName.trim() ? <Text style={styles.harvestTaskText}>{goalName.trim()}</Text> : null}
 
-          <View style={styles.abandonBtnRow}>
-            <TouchableOpacity
-              style={[styles.abandonBtnCancel, { backgroundColor: colors.chip }]}
-              onPress={() => setShowAbandonModal(false)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.abandonBtnCancelText, { color: colors.ink }]}>
-                {t('pomodoro.keepFocusing', '继续专注')}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.abandonBtnConfirm, { backgroundColor: colors.danger }]}
-              onPress={confirmAbandon}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.abandonBtnConfirmText}>
-                {t('pomodoro.confirmAbandon', '放弃')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  // 专注结束后弹出（确认分类/备注）。必须在 running 与 idle 两个渲染分支都挂载：
-  // handleFinish 会先 setRunning(false)，弹窗若只挂在 running 分支就会被卸载，导致永远无法保存。
-  const renderPostFocusModal = () => (
-    <Modal visible={showPostFocus} transparent animationType="slide">
-      <View style={styles.modalBg}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>{t('pomodoro.postTitle', '🎉 专注完成！')}</Text>
-          <Text style={styles.postDuration}>{formatShortDur(pendingSaveRef.current?.duration || 0)}</Text>
-
-          <Text style={styles.postLabel}>{t('pomodoro.postCatLabel', '确认分类')}</Text>
-          <View style={styles.postCatGrid}>
-            {CATEGORY_ITEMS.map(item => {
-              const isSelected = postCategory === item.key;
-              // 去除可能自带的 emoji 前缀，保证只显示单个大图标与纯文本
-              const cleanLabel = t(item.key).replace(/^[^\w\u4e00-\u9fa5]+\s*/, '');
+          {/* 分类快捷微调 */}
+          <Text style={styles.postCatHint}>
+            {t('pomodoro.changeCatHint', '分类不对？现在点一下就能改')}
+          </Text>
+          <View style={styles.catGridDone}>
+            {FOCUS_CATEGORIES.map((item) => {
+              const isSelected = category === item.key;
               return (
                 <TouchableOpacity
-                  key={item.key}
-                  style={[styles.postCatBtn, isSelected && { borderColor: item.color, borderWidth: 2 }]}
-                  onPress={() => setPostCategory(item.key)}
+                  key={`done-cat-${item.key}`}
+                  style={[
+                    styles.catBtnDone,
+                    isSelected && styles.catBtnDoneSelected,
+                  ]}
+                  onPress={() => setCategory(item.key)}
+                  activeOpacity={0.7}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isSelected }}
                 >
-                  <Text style={styles.postCatIcon}>{item.icon}</Text>
-                  <Text style={[styles.postCatText, isSelected && { fontWeight: '700' }]}>{cleanLabel}</Text>
-                  {isSelected && <Ionicons name="checkmark-circle" size={16} color={item.color} style={{ position: 'absolute', top: 4, right: 4 }} />}
+                  <View style={[styles.catChipDot, { backgroundColor: item.color }]} />
+                  <Text
+                    style={[
+                      styles.catBtnDoneText,
+                      isSelected && styles.catBtnDoneTextSelected,
+                    ]}
+                  >
+                    {t(item.i18nKey).replace(/^[^\w一-龥]+\s*/, '')}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
           </View>
 
-          <Text style={styles.postLabel}>{t('pomodoro.postNoteLabel', '补充备注（选填）')}</Text>
-          <TextInput
-            style={styles.postNoteInput}
-            value={postNote}
-            onChangeText={setPostNote}
-            placeholder={t('pomodoro.postNotePlaceholder', '这次专注做了什么？')}
-            placeholderTextColor={colors.ink3}
-            maxLength={100}
-            multiline
-          />
+          {/* 按钮区域 */}
+          <View style={styles.doneBtnGroup}>
+            <TouchableOpacity
+              style={styles.doneSaveBtn}
+              onPress={saveDoneFocus}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.doneSaveBtnText}>
+                {t('pomodoro.saveToToday', '记入今日专注')}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.doneRestBtn}
+              onPress={startRest}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.doneRestBtnText}>
+                {t('pomodoro.saveAndRest', '记入并休息 5 分钟')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </Animated.View>
+    );
+  }
 
-          <TouchableOpacity style={styles.modalClose} onPress={confirmPostFocus}>
-            <Text style={styles.modalCloseText}>{t('pomodoro.postConfirm', '确认保存')}</Text>
+  // ==================== 休息中 (RESTING) ====================
+  if (phase === 'resting') {
+    return (
+      <Animated.View
+        style={[
+          styles.restContainer,
+          { backgroundColor: animatedPageBg, paddingTop: insets.top, paddingBottom: insets.bottom },
+        ]}
+      >
+        <View style={styles.restContent}>
+          <Text style={styles.restTitle}>{t('pomodoro.restTitle', '休息一下')}</Text>
+          <Text style={styles.restTimer}>{formatTime(restTimeLeftSec)}</Text>
+          <Text style={styles.restHint}>
+            {t('pomodoro.restHint', '让大脑喘口气，倒计时结束后会自动返回')}
+          </Text>
+          <TouchableOpacity
+            style={styles.restSkipBtn}
+            onPress={() => resetToIdle(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.restSkipBtnText}>{t('pomodoro.skipRest', '跳过休息')}</Text>
           </TouchableOpacity>
         </View>
-      </View>
-    </Modal>
-  );
+      </Animated.View>
+    );
+  }
 
-  // ==================== RUNNING STATE ====================
-  if (running) {
-    const pomodoroNumber = todayFocusCount + 1;
-    const catItem = CATEGORY_ITEMS.find(c => c.key === category);
-    const elapsedSec = durationSec - timeLeft;
-    const elapsedMin = Math.floor(elapsedSec / 60);
-    const elapsedRemSec = elapsedSec % 60;
-
+  // ==================== 页面二：专注中 (RUNNING / PAUSED) ====================
+  if (phase === 'running' || phase === 'paused') {
     return (
-      <View style={styles.runningContainer}>
-        {/* Top: Today nth pomodoro & Category/Task pill */}
-        <View style={styles.runTopWrap}>
-          <Text style={styles.runCountText}>
-            {t('pomodoro.todayNth', '今天第 {n} 个番茄').replace('{n}', pomodoroNumber)}
-          </Text>
-          {catItem && (
-            <View style={[styles.runCatPill, { borderColor: catItem.color + '40', backgroundColor: catItem.color + '15' }]}>
-              <Text style={styles.runCatText}>{t(catItem.key)}</Text>
+      <Animated.View
+        style={[
+          styles.runningContainer,
+          { backgroundColor: animatedPageBg, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 20 },
+        ]}
+      >
+        <ScrollView
+          style={{ flex: 1, alignSelf: 'stretch' }}
+          contentContainerStyle={styles.runningScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* 顶部第 N 次与分类胶囊 */}
+          <View style={styles.runTopWrap}>
+            <Text style={styles.runCountText}>
+              {t('pomodoro.todayNth', { n: todaySummary.count + 1 }).replace(
+                '{n}',
+                todaySummary.count + 1
+              )}
+            </Text>
+            <View style={styles.runCatCapsule}>
+              <View
+                style={[
+                  styles.catChipDot,
+                  { backgroundColor: selectedCategoryMeta?.color || colors.primary },
+                ]}
+              />
+              <Text style={styles.runCatName}>{selectedCategoryMeta?.name}</Text>
               {goalName.trim() ? (
                 <Text style={styles.runGoalText}> · {goalName.trim()}</Text>
               ) : null}
             </View>
-          )}
-        </View>
+          </View>
 
-        {/* Timer Ring */}
-        <View style={styles.ringContainer}>
-          <Svg width={size} height={size}>
-            <Circle cx={cx} cy={cy} r={r} stroke={colors.line2} strokeWidth={strokeWidth} fill="none" />
-            <AnimatedCircle
-              cx={cx} cy={cy} r={r}
-              stroke={ringColor}
-              strokeWidth={strokeWidth}
-              strokeDasharray={circumference}
-              strokeDashoffset={flowMode ? 0 : strokeDashoffset}
-              strokeLinecap="round"
-              fill="none"
-              transform={`rotate(-90 ${cx} ${cy})`}
-            />
-            {!paused && (
-              <AnimatedCircle
-                cx={cx} cy={cy} r={r}
-                stroke={ringColor}
-                strokeWidth={strokeWidth + (flowMode ? 10 : 6)}
-                strokeOpacity={glowOpacity}
-                strokeDasharray={circumference}
-                strokeDashoffset={flowMode ? 0 : strokeDashoffset}
-                strokeLinecap="round"
-                fill="none"
-                transform={`rotate(-90 ${cx} ${cy})`}
+          {/* 中部成熟番茄 */}
+          <View style={styles.runTomatoWrap}>
+            <Reanimated.View style={[styles.tomatoBox, animatedTomatoStyle]}>
+              {renderTomatoSvg(false)}
+            </Reanimated.View>
+          </View>
+
+          {/* 倒计时与阶段文案 */}
+          <View style={styles.runTimerWrap}>
+            <Text style={styles.runClockText}>{formatTime(timeLeftSec)}</Text>
+            <Text style={styles.runStageText}>{stageHintText}</Text>
+          </View>
+
+          {/* 按钮控制区 */}
+          <View style={styles.runControlRow}>
+            <TouchableOpacity
+              style={[styles.runQuitBtn, abandonArmed && styles.runQuitBtnArmed]}
+              onPress={abandonFocus}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.runQuitBtnText, abandonArmed && styles.runQuitBtnTextArmed]}>
+                {abandonArmed ? t('pomodoro.confirmAbandon2', '再点一次放弃') : t('pomodoro.abandon', '放弃')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.runPauseBtn}
+              onPress={phase === 'paused' ? resumeFocus : pauseFocus}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={phase === 'paused' ? 'play' : 'pause'}
+                size={20}
+                color="#FFFFFF"
               />
-            )}
-          </Svg>
-
-          <View style={styles.timeWrap}>
-            {flowMode ? (
-              <>
-                <Text style={[styles.runTimeText, { color: colors.success }]}>+{formatTime(overtimeSec)}</Text>
-                <Text style={styles.runSubText}>
-                  {t('pomodoro.focusedTime', '已专注 {time}').replace('{time}', formatTime(durationSec))}
-                </Text>
-              </>
-            ) : (
-              <>
-                <Text style={[styles.runTimeText, paused && { opacity: 0.4 }]}>{formatTime(timeLeft)}</Text>
-                <Text style={styles.runSubText}>
-                  {paused ? t('pomodoro.pausedLabel', '已暂停') : (
-                    t('pomodoro.runningSubText', '共 {total} 分钟 · 已专注 {min} 分 {sec} 秒')
-                      .replace('{total}', durationMin)
-                      .replace('{min}', elapsedMin)
-                      .replace('{sec}', elapsedRemSec)
-                  )}
-                </Text>
-              </>
-            )}
+              <Text style={styles.runPauseBtnText}>
+                {phase === 'paused' ? t('pomodoro.resume', '继续') : t('pomodoro.pause', '暂停')}
+              </Text>
+            </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Action Buttons: Abandon & Pause/Resume (2 buttons grouped as a whole, strictly centered) */}
-        <View style={styles.runActionsWrap}>
-          <View style={styles.runActionsGroup}>
-            {!flowMode && (
-              <Pressable style={styles.subActionBtn} onPress={handleAbandon}>
-                <Text style={styles.subActionText}>{t('pomodoro.abandon', '放弃')}</Text>
-              </Pressable>
-            )}
+          {/* 背景声音行 */}
+          <TouchableOpacity
+            style={styles.runAmbientRow}
+            onPress={() => setShowAmbientPicker(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="volume-medium-outline" size={16} color="#6B5B4F" />
+            <Text style={styles.runAmbientText}>{currentAmbientLabel}</Text>
+            <Ionicons name="chevron-forward" size={13} color="#8C7D73" />
+          </TouchableOpacity>
 
-            {paused ? (
-              <Pressable style={[styles.mainActionBtn, { backgroundColor: colors.primary }]} onPress={handleResume}>
-                <Ionicons name="play" size={20} color="#fff" />
-                <Text style={styles.mainActionText}>{t('pomodoro.resume', '继续专注')}</Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                style={[
-                  styles.mainActionBtn,
-                  { backgroundColor: flowMode ? colors.success : colors.primary },
-                  flowMode && { width: 180, marginLeft: 0 },
-                ]}
-                onPress={flowMode ? handleFinish : handlePause}
-              >
-                <Ionicons name={flowMode ? "checkmark" : "pause"} size={20} color="#fff" />
-                <Text style={styles.mainActionText}>
-                  {flowMode ? t('pomodoro.endSave', '结束并保存') : t('pomodoro.pause', '暂停')}
-                </Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
-
-        {/* Ambient sound bar in running */}
-        <TouchableOpacity
-          style={styles.runSoundRow}
-          onPress={() => setShowAmbientPicker(true)}
-          activeOpacity={0.7}
-        >
-          <Ionicons name={currentAmbient?.icon || 'volume-mute-outline'} size={18} color={colors.ink2} />
-          <Text style={styles.runSoundText}>{currentAmbientLabel}</Text>
-          <Text style={styles.runSoundStatus}>
-            {ambient !== 'none' ? t('pomodoro.playingSound', '正在播放') : t('pomodoro.ambient_none', '无声')}
-          </Text>
-          <Ionicons name="chevron-forward" size={14} color={colors.ink3} />
-        </TouchableOpacity>
-
-        {/* Notice text */}
-        <Text style={styles.runNoticeText}>
-          {t('pomodoro.runningNotice', '专注中隐藏底部导航。点「放弃」会再确认一次，避免误触。')}
-        </Text>
-
-        {renderPostFocusModal()}
-
-        {/* Ambient Picker Modal (Running) */}
-        {renderAmbientModal()}
-
-        {/* Abandon Confirmation Themed Modal */}
-        {renderAbandonModal()}
-      </View>
+          {renderAmbientModal()}
+        </ScrollView>
+      </Animated.View>
     );
   }
 
+  // ==================== 页面一：待开始 (IDLE) ====================
+  const isCustomActive = !DURATION_PRESETS.includes(durationMin);
 
-
-  // ==================== IDLE STATE ====================
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-      {/* 1. 今日专注卡片：点开看记录 */}
-      <TouchableOpacity
-        style={styles.todayFocusCard}
-        onPress={() => setShowHistoryModal(true)}
-        activeOpacity={0.7}
+    <View style={styles.idleRoot}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.idleScrollContent}
+        scrollEnabled={!isDragging}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.todayFocusHeader}>
-          <Text style={styles.todayFocusTitle}>{t('pomodoro.todayFocus', '今日专注')}</Text>
-          <Text style={styles.todayFocusStatText}>
-            {totalFocusCountCalculated} 次 · {formatDuration(totalFocusSecCalculated, lang)}
+        {/* 2. "今日专注"横条：降级为轻量摘要 */}
+        <TouchableOpacity
+          style={styles.summaryRow}
+          onPress={() => setShowHistoryModal(true)}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text
+            style={[
+              styles.summaryText,
+              todaySummary.count === 0 && styles.summaryTextEmpty,
+            ]}
+          >
+            {t('pomodoro.todaySummaryText', '今日 {n} 次 · {d}')
+              .replace('{n}', todaySummary.count)
+              .replace(
+                '{d}',
+                todaySummary.totalSec > 0
+                  ? formatDuration(todaySummary.totalSec, lang)
+                  : (lang === 'en' ? '0 min' : '0 分钟')
+              )}
           </Text>
-          <View style={styles.todayFocusRight}>
-            <Text style={styles.todayFocusViewLogs}>{t('pomodoro.viewRecords', '查看记录')}</Text>
-            <Ionicons name="chevron-forward" size={13} color="#5C4B43" />
-          </View>
-        </View>
+          <Ionicons
+            name="chevron-forward"
+            size={13}
+            color={todaySummary.count === 0 ? '#A6988D' : '#6B5B4F'}
+          />
+        </TouchableOpacity>
 
-        {/* 用途分布条 */}
-        <View style={styles.todayFocusBar}>
-          {distributionBar.length > 0 ? (
-            distributionBar.map((b, idx) => (
-              <View
-                key={'bar-' + idx}
-                style={{
-                  width: `${b.pct}%`,
-                  backgroundColor: b.color,
-                  height: '100%',
-                }}
-              />
-            ))
-          ) : (
-            <View style={{ flex: 1, backgroundColor: '#EFE2D7' }} />
-          )}
-        </View>
-      </TouchableOpacity>
-
-      {/* 2. 这次专注做什么？ (3x2 Grid) */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
+        {/* 3. 标题"这次专注做什么？" + 分类说明 */}
+        <View style={styles.catHeaderRow}>
           <Text style={styles.sectionTitle}>{t('pomodoro.whatToDo', '这次专注做什么？')}</Text>
-          <TouchableOpacity onPress={() => setShowHelp(true)}>
+          <TouchableOpacity
+            onPress={() => setShowHelp(true)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Text style={styles.helpLink}>{t('pomodoro.categoryHelp', '分类说明')}</Text>
           </TouchableOpacity>
         </View>
-        <View style={styles.catGrid}>
-          {CATEGORY_ITEMS.map(item => {
-            const isSelected = category === item.key;
-            return (
-              <TouchableOpacity
-                key={item.key}
-                style={[
-                  styles.catBtn,
-                  isSelected && { borderColor: '#D63B3B', borderWidth: 1.5, backgroundColor: '#FDE9E6' },
-                ]}
-                onPress={() => setCategory(item.key)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.catBtnDot, { backgroundColor: item.color }]} />
-                <Text style={[styles.catLabel, isSelected && { fontWeight: '800', color: '#B3302C' }]}>
-                  {t(item.key).replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')}
-                </Text>
-                {isSelected && (
-                  <Ionicons name="checkmark" size={14} color="#D63B3B" style={{ marginLeft: 2 }} />
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
 
-      {/* 3. 具体内容输入框 */}
-      <View style={styles.section}>
-        <View style={styles.taskInputWrap}>
-          <Ionicons name="pencil-outline" size={16} color="#6F5F57" />
-          <TextInput
-            style={styles.taskInput}
-            value={goalName}
-            onChangeText={setGoalName}
-            placeholder={t('pomodoro.taskPlaceholder', '具体做什么？（选填，如：英语听力）')}
-            placeholderTextColor="#9A8A80"
-            maxLength={30}
-            returnKeyType="done"
-          />
-        </View>
-      </View>
-
-      {/* 4. 居中计时大环 (200x200) - 手势严格限制在圆圈内，外部不拦截滚动 */}
-      <View style={styles.dialWrap}>
-        <View style={styles.dialRing} {...dialResponder.panHandlers}>
-          <TouchableOpacity
-            style={styles.dialRingInnerTouch}
-            activeOpacity={0.88}
-            onPress={() => {
-              setCustomMinutesInput(String(durationMin));
-              setShowCustomModal(true);
+        {/* 4. 分类：单行横向滚动 Chip */}
+        <View style={styles.catScrollWrapper}>
+          <ScrollView
+            ref={catScrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.catScrollContent}
+            onLayout={(e) => {
+              catViewportWidthRef.current = e.nativeEvent.layout.width;
             }}
           >
-            <Svg width={200} height={200}>
-              <Circle cx={100} cy={100} r={90} stroke="#F1E3D8" strokeWidth={12} fill="none" />
-              <Circle cx={100} cy={100} r={90} stroke="#D63B3B" strokeWidth={12} fill="none" strokeLinecap="round" />
-            </Svg>
-            <View style={styles.dialTimeCenter}>
-              <Text style={styles.dialTimeText}>{formatTime(timeLeft)}</Text>
-              <Text style={styles.dialSubText}>
-                {category ? `${t(category).replace(/^[^\w\u4e00-\u9fa5]+\s*/, '')} · ` : ''}
-                {t('pomodoro.focusDurLabel', '专注时长')}
-              </Text>
-            </View>
-          </TouchableOpacity>
+            {FOCUS_CATEGORIES.map((item) => {
+              const isSelected = category === item.key;
+              return (
+                <CategoryChip
+                  key={item.key}
+                  item={item}
+                  isSelected={isSelected}
+                  onSelect={() => handleSelectCategory(item.key)}
+                  onLayout={(layout) => {
+                    catChipLayoutsRef.current[item.key] = layout;
+                  }}
+                  t={t}
+                />
+              );
+            })}
+          </ScrollView>
+          <View style={styles.catFadeRight} pointerEvents="none" />
         </View>
-      </View>
 
-      {/* 5. 时长选择器 (15, 25, 45, 60, 自定义) */}
-      <View style={styles.durGrid}>
-        {DURATION_PRESETS.map(mins => {
-          const isActive = durationMin === mins;
-          return (
+        {/* 5. 番茄计时器（放大居中，在分类区与时长档位之间垂直居中，支持上下滑动调节时长 5~120） */}
+        <GestureDetector gesture={panGesture}>
+          <View
+            style={styles.idleDialArea}
+            onLayout={(e) => setDialAreaHeight(e.nativeEvent.layout.height)}
+          >
+            <Reanimated.View style={[idleTomatoBoxStyle, animatedTomatoStyle]}>
+              {renderTomatoSvg(false)}
+            </Reanimated.View>
+            <View style={styles.idleDialCenter} pointerEvents="none">
+              <Text
+                style={[
+                  styles.idleDialMinutes,
+                  { fontSize: dialNumberFontSize, lineHeight: dialNumberFontSize },
+                ]}
+              >
+                {durationMin}
+              </Text>
+              <Text style={styles.idleDialUnitText}>{t('pomodoro.minUnit', '分')}</Text>
+            </View>
+
+            {/* 番茄下方提示：无底色纯文字小字，仅首次进入显示，滑动调节过一次后永久隐藏 */}
+            {!hasSlidAdjust && (
+              <View style={styles.slideHintRow} pointerEvents="none">
+                <Ionicons name="swap-vertical" size={12} color={isDark ? colors.ink2 : '#7A6F66'} />
+                <Text style={[styles.slideHintText, { color: isDark ? colors.ink2 : '#7A6F66' }]}>
+                  {t('pomodoro.slideHint', '上下滑动调节时长')}
+                </Text>
+              </View>
+            )}
+          </View>
+        </GestureDetector>
+
+        {/* 底部操作组：时长档位 + 次要操作行 + 开始按钮整体下移，靠近开始按钮上方，消除中间大块空白 */}
+        <View style={styles.bottomControlsWrap}>
+          {/* 6. 时长快捷档位：5 / 15 / 25 / 45 / 60 / 自定义（升序排列，统一不带单位） */}
+          <View style={styles.durGrid}>
+            {DURATION_PRESETS.map((mins) => {
+              const isActive = durationMin === mins;
+              return (
+                <TouchableOpacity
+                  key={'dur-' + mins}
+                  style={[styles.durPill, isActive && styles.durPillActive]}
+                  onPress={() => handleDurationPreset(mins)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.durPillText, isActive && styles.durPillTextActive]}>
+                    {mins}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
             <TouchableOpacity
-              key={'dur-' + mins}
-              style={[styles.durPill, isActive && styles.durPillActive]}
-              onPress={() => handleDurationPreset(mins)}
+              style={[
+                styles.durPillCustom,
+                isCustomActive && styles.durPillCustomActive,
+              ]}
+              onPress={() => {
+                if (DURATION_PRESETS.includes(durationMin)) {
+                  handleDurationPreset(30);
+                } else {
+                  setCustomMinutesInput(String(durationMin));
+                  setShowCustomModal(true);
+                }
+              }}
               activeOpacity={0.7}
             >
-              <Text style={[styles.durPillText, isActive && styles.durPillTextActive]}>{mins}</Text>
+              <Text
+                style={[
+                  styles.durPillCustomText,
+                  isCustomActive && styles.durPillCustomTextActive,
+                ]}
+              >
+                {isCustomActive ? `${durationMin}` : t('pomodoro.custom', '自定义')}
+              </Text>
             </TouchableOpacity>
-          );
-        })}
-        <TouchableOpacity
-          style={[styles.durPillDashed, !DURATION_PRESETS.includes(durationMin) && styles.durPillActive]}
-          onPress={() => {
-            setCustomMinutesInput(String(durationMin));
-            setShowCustomModal(true);
-          }}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.durPillText, !DURATION_PRESETS.includes(durationMin) && styles.durPillTextActive]}>
-            {!DURATION_PRESETS.includes(durationMin) ? `${durationMin}分` : t('pomodoro.custom', '自定义')}
-          </Text>
-        </TouchableOpacity>
-      </View>
+          </View>
 
-      {/* 6. 白噪声条 */}
-      <TouchableOpacity
-        style={styles.whiteNoiseBar}
-        onPress={() => setShowAmbientPicker(true)}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="cellular-outline" size={18} color="#4A3F39" />
-        <Text style={styles.whiteNoiseTitle}>{t('pomodoro.bgSound', '白噪声')}</Text>
-        <Text style={styles.whiteNoiseCurrent}>
-          {ambient === 'none' ? t('pomodoro.soundNone', '无声') : currentAmbientLabel}
-        </Text>
-        <Ionicons name="chevron-forward" size={14} color="#9A8A80" />
-      </TouchableOpacity>
-
-      {/* 7. 底部开始按钮 */}
-      <View style={styles.startBtnWrap}>
-        <TouchableOpacity
-          style={[styles.startBtn, !category && { opacity: 0.85 }]}
-          onPress={handleStart}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="play" size={20} color="#fff" />
-          <Text style={styles.startBtnText}>
-            {t('pomodoro.startFocusWithMin', { min: durationMin })}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Post-Focus Modal（handleFinish 后 running 已置 false，这里才是实际承载保存弹窗的分支） */}
-      {renderPostFocusModal()}
-
-      {/* FocusHistoryModal 弹窗 */}
-      <FocusHistoryModal
-        visible={showHistoryModal}
-        onClose={() => setShowHistoryModal(false)}
-        records={focusHistoryRecords}
-        onUpdateRecord={onUpdateRecord}
-        onDeleteRecord={onDeleteRecord}
-      />
-
-      {/* 自定义时长弹窗 */}
-      <Modal visible={showCustomModal} transparent animationType="fade" onRequestClose={() => setShowCustomModal(false)}>
-        <View style={styles.modalBg}>
-          <View style={styles.customDurDialog}>
-            <Text style={styles.modalTitle}>{t('pomodoro.customDurTitle', '自定义专注时长')}</Text>
-            <View style={styles.customDurInputRow}>
-              <TextInput
-                style={styles.customDurInput}
-                value={customMinutesInput}
-                onChangeText={setCustomMinutesInput}
-                placeholder="25"
-                placeholderTextColor="#9A8A80"
-                keyboardType="number-pad"
-                maxLength={3}
-                autoFocus
-              />
-              <Text style={{ fontSize: 16, fontWeight: '700', color: '#2B1F1A' }}>{t('pomodoro.minUnit', '分钟')}</Text>
-            </View>
-            <View style={styles.customDurBtnRow}>
-              <TouchableOpacity
-                style={styles.customDurBtnCancel}
-                onPress={() => setShowCustomModal(false)}
+          {/* 7. 次要操作行：+ 添加备注 ｜ 🔊 背景声音：无声（1px 浅描边小胶囊，点击热区 >= 44dp） */}
+          <View style={styles.subActionsRow}>
+            {isNoteEditing ? (
+              <View
+                style={[
+                  styles.noteInputInlineWrap,
+                  {
+                    borderColor: colors.primary,
+                    backgroundColor: colors.surface,
+                  },
+                ]}
               >
-                <Text style={styles.customDurBtnCancelText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
+                <Ionicons
+                  name="pencil-outline"
+                  size={14}
+                  color={isDark ? colors.ink2 : '#5E4F44'}
+                />
+                <TextInput
+                  style={[styles.noteInputInline, { color: colors.ink }]}
+                  value={goalName}
+                  onChangeText={setGoalName}
+                  placeholder={t('pomodoro.taskPlaceholder', '选填，例如：写周报')}
+                  placeholderTextColor={colors.ink3}
+                  maxLength={30}
+                  autoFocus
+                  onBlur={() => {
+                    if (!goalName.trim()) {
+                      setIsNoteEditing(false);
+                    }
+                  }}
+                  returnKeyType="done"
+                  onSubmitEditing={() => setIsNoteEditing(false)}
+                />
+                <TouchableOpacity
+                  onPress={() => setIsNoteEditing(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="checkmark-circle" size={20} color={colors.primaryStrong} />
+                </TouchableOpacity>
+              </View>
+            ) : (
               <TouchableOpacity
-                style={styles.customDurBtnConfirm}
-                onPress={handleCustomDurationConfirm}
+                style={[
+                  styles.capsuleBtn,
+                  {
+                    borderColor: isDark ? colors.line2 : '#E6DACD',
+                    backgroundColor: isDark ? '#261F1A' : '#FFFFFF',
+                  },
+                ]}
+                onPress={() => setIsNoteEditing(true)}
+                activeOpacity={0.7}
               >
-                <Text style={styles.customDurBtnConfirmText}>{t('common.done')}</Text>
+                <Ionicons
+                  name={goalName.trim() ? 'document-text-outline' : 'add-outline'}
+                  size={15}
+                  color={goalName.trim() ? colors.ink : (isDark ? colors.ink2 : '#5E4F44')}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.capsuleText,
+                    { color: isDark ? colors.ink2 : '#5E4F44' },
+                    goalName.trim() && { color: colors.ink, fontWeight: '600' },
+                  ]}
+                >
+                  {goalName.trim() ? goalName.trim() : t('pomodoro.addNotePrompt', '+ 添加备注')}
+                </Text>
               </TouchableOpacity>
-            </View>
+            )}
+
+            {!isNoteEditing && (
+              <TouchableOpacity
+                style={[
+                  styles.capsuleBtn,
+                  {
+                    borderColor: isDark ? colors.line2 : '#E6DACD',
+                    backgroundColor: isDark ? '#261F1A' : '#FFFFFF',
+                  },
+                ]}
+                onPress={() => setShowAmbientPicker(true)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="volume-medium-outline"
+                  size={15}
+                  color={isDark ? colors.ink2 : '#5E4F44'}
+                />
+                <Text
+                  style={[styles.capsuleText, { color: isDark ? colors.ink2 : '#5E4F44' }]}
+                  numberOfLines={1}
+                >
+                  {t('pomodoro.soundPrefix', '背景声音：')}{currentAmbientLabel}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* 8. 开始按钮（长按 1 秒开始，带进度填充反馈） */}
+          <View style={styles.startBtnBottomWrap}>
+            <Pressable
+              style={({ pressed }) => [styles.startBtn, pressed && { transform: [{ scale: 0.99 }] }]}
+              onPressIn={() => {
+                setPhaseAndRef('holding');
+                startHolding();
+              }}
+              onPressOut={cancelHolding}
+              accessibilityRole="button"
+              accessibilityActions={[{ name: 'activate', label: '开始专注' }]}
+              onAccessibilityAction={(event) => {
+                if (event.nativeEvent.actionName === 'activate') {
+                  startFocus();
+                }
+              }}
+            >
+              <View style={styles.startBtnInner}>
+                <Animated.View style={[styles.startBtnFill, { width: holdFillWidth }]} />
+                <Ionicons name="play" size={18} color="#FFFFFF" />
+                <Text style={styles.startBtnText}>{holdButtonLabel}</Text>
+              </View>
+            </Pressable>
           </View>
         </View>
-      </Modal>
 
-      {/* Ambient Picker Modal */}
-      {renderAmbientModal()}
-
-      {/* Help Modal */}
-      <Modal visible={showHelp} transparent animationType="fade">
-        <View style={styles.modalBg}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('pomodoro.helpTitle', '专注分类说明')}</Text>
-            <ScrollView style={{ maxHeight: 400 }}>
-              {[
-                { title: t('pomodoro.helpWork', '💼 工作'), desc: t('pomodoro.helpWorkDesc', '涵盖：写代码、办公、会议、邮件、客户沟通、接单\n一句话判断：为职场或收入做的事') },
-                { title: t('pomodoro.helpStudy', '📚 学习'), desc: t('pomodoro.helpStudyDesc', '涵盖：备考、课业、阅读、网课、学新技能\n一句话判断：为了"输入知识"的事') },
-                { title: t('pomodoro.helpCreate', '🎨 创作'), desc: t('pomodoro.helpCreateDesc', '涵盖：写作、设计、剪辑、个人项目、爱好\n一句话判断：为了"产出自己的东西"的事') },
-                { title: t('pomodoro.helpBodyMind', '🧘 身心'), desc: t('pomodoro.helpBodyMindDesc', '涵盖：冥想、锻炼、休整\n一句话判断：照顾自己身体和状态的事') },
-                { title: t('pomodoro.helpLife', '🧹 生活'), desc: t('pomodoro.helpLifeDesc', '涵盖：家务整理、杂事、行政琐事\n一句话判断：维护日常运转的事') },
-                { title: t('pomodoro.helpPlan', '💡 规划复盘'), desc: t('pomodoro.helpPlanDesc', '涵盖：复盘、计划、拆目标、整理思路\n一句话判断：管理自己和时间的事') },
-              ].map((c, i) => (
-                <View key={i} style={styles.modalRow}>
-                  <Text style={styles.modalRowTitle}>{c.title}</Text>
-                  <Text style={styles.modalRowDesc}>{c.desc}</Text>
+        {/* 分类说明模态框 */}
+        <Modal visible={showHelp} transparent animationType="fade" onRequestClose={() => setShowHelp(false)}>
+          <View style={styles.modalBg}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{t('pomodoro.categoryHelp', '分类说明')}</Text>
+              {FOCUS_CATEGORIES.map((c) => (
+                <View key={c.key} style={styles.modalRow}>
+                  <Text style={styles.modalRowTitle}>
+                    {t(c.i18nKey).replace(/^[^\w一-龥]+\s*/, '')}
+                  </Text>
+                  <Text style={styles.modalRowDesc}>{t(CATEGORY_DESC_KEYS[c.key] || '')}</Text>
                 </View>
               ))}
-            </ScrollView>
-            <TouchableOpacity style={styles.modalClose} onPress={() => setShowHelp(false)}>
-              <Text style={styles.modalCloseText}>{t('pomodoro.helpBtn', '知道了')}</Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.modalClose} onPress={() => setShowHelp(false)}>
+                <Text style={styles.modalCloseText}>{t('common.done')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* 自定义时长弹窗 */}
+        <Modal visible={showCustomModal} transparent animationType="fade" onRequestClose={() => setShowCustomModal(false)}>
+          <View style={styles.modalBg}>
+            <View style={styles.customDurDialog}>
+              <Text style={styles.modalTitle}>{t('pomodoro.customDurTitle', '自定义专注时长')}</Text>
+              <View style={styles.customDurInputRow}>
+                <TextInput
+                  style={styles.customDurInput}
+                  value={customMinutesInput}
+                  onChangeText={setCustomMinutesInput}
+                  keyboardType="number-pad"
+                  maxLength={3}
+                  autoFocus
+                />
+                <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>
+                  {t('pomodoro.minUnit', '分钟')}
+                </Text>
+              </View>
+              <View style={styles.customDurBtnRow}>
+                <TouchableOpacity style={styles.customDurBtnCancel} onPress={() => setShowCustomModal(false)}>
+                  <Text style={styles.customDurBtnCancelText}>{t('common.cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.customDurBtnConfirm} onPress={handleCustomDurationConfirm}>
+                  <Text style={styles.customDurBtnConfirmText}>{t('common.done')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {renderAmbientModal()}
+
+        <FocusHistoryModal
+          visible={showHistoryModal}
+          onClose={() => setShowHistoryModal(false)}
+          focusSessions={focusHistoryRecords}
+          onUpdateFocusSession={onUpdateFocusSession}
+          onDeleteFocusSession={onDeleteFocusSession}
+        />
+      </ScrollView>
+
+      {/* Toast 提示 */}
+      {toast.visible && (
+        <View style={styles.toastWrap} pointerEvents="none">
+          <View style={styles.toastCard}>
+            <Text style={styles.toastText}>{toast.message}</Text>
           </View>
         </View>
-      </Modal>
-    </ScrollView>
+      )}
+    </View>
   );
 }
 
-const makeStyles = (colors) => StyleSheet.create({
-  // ====== IDLE STATE ======
-  container: {
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    paddingBottom: 40,
+const styles = StyleSheet.create({
+  idleRoot: {
+    flex: 1,
+    alignSelf: 'stretch',
   },
-  todayFocusCard: {
-    width: '100%',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#EFE2D7',
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginBottom: 14,
-  },
-  todayFocusHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  idleScrollContent: {
+    flexGrow: 1,
+    paddingTop: 8,
+    paddingBottom: 16,
     justifyContent: 'space-between',
-    minHeight: 28,
   },
-  todayFocusTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#2B1F1A',
-  },
-  todayFocusStatText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#B3302C',
-  },
-  todayFocusRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  todayFocusViewLogs: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#5C4B43',
-  },
-  todayFocusBar: {
-    flexDirection: 'row',
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden',
-    gap: 2,
-    marginTop: 8,
-    backgroundColor: '#F3E4DB',
-  },
-  catBtnDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  dialWrap: {
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 12,
-  },
-  dialRing: {
-    position: 'relative',
-    width: 200,
-    height: 200,
-  },
-  dialRingInnerTouch: {
-    width: 200,
-    height: 200,
-    position: 'relative',
-  },
-  dialTimeCenter: {
+  toastWrap: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
+    bottom: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    zIndex: 100,
+  },
+  toastCard: {
+    minWidth: 220,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: 'rgba(43, 31, 26, 0.88)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dialTimeText: {
-    fontSize: 44,
-    fontWeight: '800',
-    letterSpacing: 1,
-    color: '#2B1F1A',
-    lineHeight: 48,
-  },
-  dialSubText: {
-    fontSize: 12,
-    color: '#6F5F57',
-    marginTop: 4,
-    fontWeight: '600',
-  },
-  durGrid: {
-    width: '100%',
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  durPill: {
-    flex: 1,
-    height: 44,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#EADDD2',
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  durPillActive: {
-    borderColor: '#D63B3B',
-    backgroundColor: '#FDE9E6',
-  },
-  durPillDashed: {
-    flex: 1.2,
-    height: 44,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#CDBCAF',
-    borderStyle: 'dashed',
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  durPillText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4A3F39',
-  },
-  durPillTextActive: {
-    fontWeight: '800',
-    color: '#B3302C',
-  },
-  whiteNoiseBar: {
-    width: '100%',
-    height: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#EFE2D7',
-    borderRadius: 14,
-    backgroundColor: '#fff',
-    marginBottom: 14,
-  },
-  whiteNoiseTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4A3F39',
-  },
-  whiteNoiseCurrent: {
-    flex: 1,
-    textAlign: 'right',
+  toastText: {
     fontSize: 13,
-    color: '#6F5F57',
-    marginRight: 4,
-  },
-  startBtnWrap: {
-    width: '100%',
-    marginBottom: 10,
-  },
-  customDurDialog: {
-    width: '85%',
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 20,
-    alignItems: 'center',
-  },
-  customDurInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginVertical: 18,
-  },
-  customDurInput: {
-    width: 100,
-    height: 48,
-    borderWidth: 1.5,
-    borderColor: '#D63B3B',
-    borderRadius: 14,
-    fontSize: 22,
-    fontWeight: '800',
-    textAlign: 'center',
-    color: '#2B1F1A',
-  },
-  customDurBtnRow: {
-    flexDirection: 'row',
-    width: '100%',
-    gap: 12,
-  },
-  customDurBtnCancel: {
-    flex: 1,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#F1E6DC',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  customDurBtnCancelText: {
-    fontSize: 14,
     fontWeight: '600',
-    color: '#5C4B43',
-  },
-  customDurBtnConfirm: {
-    flex: 1,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#D63B3B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  customDurBtnConfirmText: {
-    fontSize: 14,
-    fontWeight: '700',
     color: '#fff',
+    textAlign: 'center',
   },
-  todayStats: {
+
+  // 2. 今日摘要行
+  summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 4,
     gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: colors.primarySoft || (colors.primary + '15'),
-    borderRadius: 16,
     marginBottom: 8,
   },
-  todayStatsText: {
+  summaryText: {
     fontSize: 13,
-    fontWeight: '700',
-    color: colors.primaryStrong,
+    fontWeight: '600',
+    color: '#B33427',
   },
-  section: {
-    width: '100%',
-    marginBottom: 16,
+  summaryTextEmpty: {
+    color: '#A6988D',
+    fontWeight: '500',
   },
-  sectionHeader: {
+
+  // 3. 分类标题行
+  catHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 16,
+    minHeight: 28,
     marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.ink,
-    marginBottom: 8,
+    color: '#2B211C',
   },
   helpLink: {
     fontSize: 13,
-    color: colors.primaryStrong,
-    fontWeight: '600',
-    marginBottom: 8,
+    color: '#8C7D73',
+    fontWeight: '500',
   },
 
-  // Category Grid (3x2)
-  catGrid: {
+  // 4. 分类横向滚动条（区块间距 24）
+  catScrollWrapper: {
+    position: 'relative',
+    width: '100%',
+    minHeight: 44,
+    marginBottom: 24,
+  },
+  catScrollContent: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    paddingHorizontal: 16,
     gap: 8,
   },
-  catBtn: {
-    width: '31.5%',
-    height: 44,
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.line,
-    gap: 6,
-    paddingHorizontal: 4,
+  catFadeRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 24,
+    backgroundColor: 'transparent',
   },
-  catDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  catLabel: {
-    fontSize: 14,
-    color: colors.ink,
-    fontWeight: '500',
-  },
-  catCheckIcon: {
-    marginLeft: 2,
-  },
-
-  // Task Input
-  taskInputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    height: 48,
-    borderWidth: 1,
-    borderColor: colors.line,
-    gap: 10,
-  },
-  taskInput: {
-    flex: 1,
-    fontSize: 14,
-    color: colors.ink,
-    paddingVertical: 0,
-  },
-
-  // Duration Row
-  durRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  durBtn: {
-    flex: 1,
-    height: 44,
+  catChip: {
+    minHeight: 38,
     borderRadius: 999,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: '#EADFD0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    gap: 7,
   },
-  durBtnActive: {
-    backgroundColor: colors.surface,
-    borderWidth: 2,
-    borderColor: colors.primary,
+  catChipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  durText: {
-    fontSize: 14,
+  catChipLabel: {
+    fontSize: 13,
     fontWeight: '500',
-    color: colors.ink2,
-  },
-  durTextActive: {
-    color: colors.ink,
-    fontWeight: '700',
+    color: '#2B211C',
   },
 
-  // Ring (idle)
-  ringContainer: {
+  // 5. 番茄计时器放大居中（在分类区与时长档位之间垂直居中，小屏自适应）
+  idleDialArea: {
+    flex: 1,
+    width: '100%',
+    minHeight: 180,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    marginVertical: 8,
+    marginBottom: 24,
   },
-  timeWrap: {
+  tomatoBox: {
+    width: 240,
+    height: 240,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  idleDialCenter: {
     position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '57.5%',
+    transform: [{ translateY: -30 }],
     alignItems: 'center',
     justifyContent: 'center',
   },
-  timeText: {
-    fontSize: 52,
+  idleDialMinutes: {
     fontWeight: '700',
-    color: colors.ink,
-    fontVariant: ['tabular-nums'],
-    letterSpacing: -1,
-    lineHeight: 56,
+    color: '#1F2B14',
   },
-  timeSubCategory: {
+  idleDialUnitText: {
     fontSize: 13,
-    color: colors.ink3,
-    marginTop: 4,
-    fontWeight: '500',
+    fontWeight: '600',
+    color: '#1F2B14',
+    marginTop: 1,
   },
-  hintRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-    gap: 4,
-  },
-  hintText: {
-    fontSize: 11,
-    color: colors.ink3,
-    fontWeight: '500',
-  },
-
-  // Sound Row
-  soundRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
-    marginBottom: 20,
-  },
-  soundLabel: {
-    flex: 1,
-    fontSize: 14,
-    color: colors.ink,
-    fontWeight: '500',
-  },
-
-  // Start Button
-  startBtn: {
-    backgroundColor: colors.primary,
+  slideHintRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
+    marginTop: 8,
+  },
+  slideHintText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+
+  // 底部操作区总容器（整体下移靠近开始按钮）
+  bottomControlsWrap: {
+    width: '100%',
+    marginTop: 'auto',
+    paddingBottom: 4,
+  },
+
+  // 6. 时长快捷档位
+  durGrid: {
+    width: '100%',
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 6,
+    marginBottom: 12,
+  },
+  durPill: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#EADFD0',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  durPillActive: {
+    borderColor: '#C63D31',
+    backgroundColor: '#FFF1EC',
+  },
+  durPillText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#2B211C',
+  },
+  durPillTextActive: {
+    fontWeight: '700',
+    color: '#B33427',
+  },
+  durPillCustom: {
+    flex: 1.15,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#C9B8A8',
+    borderStyle: 'dashed',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  durPillCustomActive: {
+    borderStyle: 'solid',
+    borderColor: '#C63D31',
+    backgroundColor: '#FFF1EC',
+  },
+  durPillCustomText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#5E4F44',
+  },
+  durPillCustomTextActive: {
+    fontWeight: '700',
+    color: '#B33427',
+  },
+
+  // 7. 次要设置合并行（1px 浅描边小胶囊，点击热区 >= 44dp）
+  subActionsRow: {
+    width: '100%',
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  capsuleBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  capsuleText: {
+    fontSize: 13.5,
+    fontWeight: '500',
+  },
+  noteInputInlineWrap: {
+    flex: 1,
+    height: 44,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  noteInputInline: {
+    flex: 1,
+    fontSize: 13.5,
+    paddingVertical: 0,
+  },
+
+  // 8. 开始按钮（下移贴近底部单手拇指热区，长按 1 秒开始进度填充）
+  startBtnBottomWrap: {
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  startBtn: {
+    width: '100%',
     height: 56,
     borderRadius: 999,
+    backgroundColor: '#C63D31',
+    overflow: 'hidden',
+  },
+  startBtnInner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
-    width: '100%',
-    ...shadow.primary,
+    position: 'relative',
+  },
+  startBtnFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#8E2A20',
   },
   startBtnText: {
-    color: '#fff',
-    fontSize: 17,
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: '700',
   },
 
-  // ====== RUNNING STATE ======
+  // 专注中页面
   runningContainer: {
     flex: 1,
+    alignSelf: 'stretch',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+  },
+  runningScrollContent: {
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingHorizontal: 16,
   },
   runTopWrap: {
     alignItems: 'center',
-    marginBottom: 36,
-    gap: 10,
+    marginTop: 20,
+    marginBottom: 8,
+    gap: 8,
   },
   runCountText: {
     fontSize: 13,
-    color: colors.ink3,
-    fontWeight: '500',
+    color: '#6B5B4F',
   },
-  runCatPill: {
+  runCatCapsule: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 999,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
+    borderColor: '#EFE5D8',
   },
-  colorDot: {
+  runCatName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#2B211C',
+  },
+  runGoalText: {
+    fontSize: 15,
+    color: '#5E4F44',
+  },
+  runTomatoWrap: {
+    width: '100%',
+    minHeight: 240,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 12,
+  },
+  runTimerWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  runClockText: {
+    fontSize: 68,
+    fontWeight: '700',
+    lineHeight: 72,
+    fontVariant: ['tabular-nums'],
+    color: '#2B211C',
+  },
+  runStageText: {
+    fontSize: 14,
+    color: '#6B5B4F',
+    marginTop: 4,
+  },
+  runControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: 24,
+    marginBottom: 20,
+  },
+  runQuitBtn: {
+    minWidth: 104,
+    height: 56,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D9C9BA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  runQuitBtnArmed: {
+    borderColor: '#D93A2B',
+  },
+  runQuitBtnText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#5E4F44',
+  },
+  runQuitBtnTextArmed: {
+    color: '#D93A2B',
+    fontWeight: '700',
+  },
+  runPauseBtn: {
+    minWidth: 160,
+    height: 64,
+    paddingHorizontal: 24,
+    borderRadius: 999,
+    backgroundColor: '#C63D31',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  runPauseBtnText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  runAmbientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EFE5D8',
+    marginTop: 10,
+  },
+  runAmbientText: {
+    fontSize: 13,
+    color: '#6B5B4F',
+    fontWeight: '500',
+  },
+
+  // 收获页面
+  doneContainer: {
+    flex: 1,
+    alignSelf: 'stretch',
+  },
+  doneScroll: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 28,
+  },
+  harvestVisualWrap: {
+    width: 240,
+    height: 240,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  burstDot: {
+    position: 'absolute',
     width: 10,
     height: 10,
     borderRadius: 5,
   },
-  runCatText: {
-    fontSize: 15,
+  harvestTitle: {
+    fontSize: 28,
     fontWeight: '700',
-    color: colors.ink,
+    color: '#2B211C',
+    marginTop: 8,
   },
-  runGoalText: {
-    fontSize: 15,
-    color: colors.ink2,
-    fontWeight: '500',
+  harvestSub: {
+    fontSize: 14,
+    color: '#5E4F44',
+    marginTop: 4,
   },
-  runTimeText: {
-    fontSize: 64,
-    fontWeight: '700',
-    color: colors.ink,
-    fontVariant: ['tabular-nums'],
-    letterSpacing: -1,
-    lineHeight: 70,
+  harvestTaskText: {
+    fontSize: 14,
+    color: '#5E4F44',
+    marginTop: 2,
   },
-  runSubText: {
-    fontSize: 13,
-    color: colors.ink3,
-    marginTop: 6,
-    textAlign: 'center',
+  postCatHint: {
+    fontSize: 12,
+    color: '#5E4F44',
+    marginTop: 16,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
   },
-  runActionsWrap: {
+  catGridDone: {
     width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 44,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  runActionsGroup: {
+  catBtnDone: {
+    width: '31.5%',
+    height: 44,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#EADFD0',
+    gap: 8,
+    paddingHorizontal: 4,
   },
-  subActionBtn: {
-    width: 88,
+  catBtnDoneSelected: {
+    borderColor: '#C63D31',
+    borderWidth: 1.5,
+    backgroundColor: '#FFF1EC',
+  },
+  catBtnDoneText: {
+    fontSize: 14,
+    color: '#2B211C',
+    fontWeight: '500',
+  },
+  catBtnDoneTextSelected: {
+    fontWeight: '700',
+  },
+  doneBtnGroup: {
+    width: '100%',
+    marginTop: 20,
+    gap: 8,
+  },
+  doneSaveBtn: {
+    width: '100%',
     height: 56,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.line2 || colors.line,
-    backgroundColor: colors.surface,
+    backgroundColor: '#C63D31',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 24,
-    ...shadow.sm,
   },
-  subActionText: {
-    fontSize: 15,
-    color: colors.ink2,
-    fontWeight: '500',
-  },
-  mainActionBtn: {
-    width: 160,
-    height: 64,
-    borderRadius: 999,
-    backgroundColor: colors.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    ...shadow.primary,
-  },
-  mainActionText: {
-    color: '#fff',
-    fontSize: 18,
+  doneSaveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 17,
     fontWeight: '700',
   },
-  runSoundRow: {
+  doneRestBtn: {
     width: '100%',
     height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.surface,
-    flexDirection: 'row',
+    borderRadius: 999,
+    backgroundColor: 'transparent',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    gap: 10,
-    marginTop: 24,
+    justifyContent: 'center',
   },
-  runSoundText: {
-    fontSize: 14,
-    color: colors.ink,
+  doneRestBtnText: {
+    fontSize: 15,
     fontWeight: '500',
-  },
-  runSoundStatus: {
-    flex: 1,
-    textAlign: 'right',
-    fontSize: 13,
-    color: colors.ink3,
-  },
-  runNoticeText: {
-    fontSize: 12,
-    color: colors.ink3,
-    textAlign: 'center',
-    marginTop: 16,
-    lineHeight: 18,
-    paddingHorizontal: 16,
+    color: '#5E4F44',
   },
 
-  // ====== MODALS ======
+  // 休息中
+  restContainer: {
+    flex: 1,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  restContent: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  restTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#2B211C',
+    marginBottom: 16,
+  },
+  restTimer: {
+    fontSize: 64,
+    fontWeight: '800',
+    color: '#C63D31',
+    marginBottom: 16,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -1,
+  },
+  restHint: {
+    fontSize: 13,
+    color: '#6B5B4F',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 32,
+    paddingHorizontal: 20,
+  },
+  restSkipBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#EADFD0',
+    backgroundColor: '#FFFFFF',
+  },
+  restSkipBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B5B4F',
+  },
+
+  // 模态弹窗
   modalBg: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -1567,102 +2378,40 @@ const makeStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  abandonModalCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 22,
-    padding: 24,
-    width: '100%',
-    maxWidth: 320,
-    alignItems: 'center',
-    ...shadow.card,
-  },
-  abandonIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-  },
-  abandonModalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.ink,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  abandonModalMsg: {
-    fontSize: 14,
-    color: colors.ink2,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-  abandonBtnRow: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  abandonBtnCancel: {
-    flex: 1,
-    height: 46,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  abandonBtnCancelText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  abandonBtnConfirm: {
-    flex: 1,
-    height: 46,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow.sm,
-  },
-  abandonBtnConfirmText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
   modalContent: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 24,
     width: '100%',
     maxWidth: 400,
-    ...shadow.md,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: colors.ink,
+    color: '#2B211C',
     marginBottom: 16,
     textAlign: 'center',
   },
   modalRow: {
-    marginBottom: 16,
-    backgroundColor: colors.chip,
+    marginBottom: 12,
+    backgroundColor: '#FAF4EC',
     padding: 12,
     borderRadius: 12,
   },
   modalRowTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: colors.ink,
+    color: '#2B211C',
     marginBottom: 4,
   },
   modalRowDesc: {
-    fontSize: 14,
-    color: colors.ink2,
-    marginBottom: 2,
-    lineHeight: 20,
+    fontSize: 13,
+    color: '#6B5B4F',
+    lineHeight: 18,
   },
   modalClose: {
     marginTop: 10,
-    backgroundColor: colors.primary,
+    backgroundColor: '#C63D31',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
@@ -1672,8 +2421,6 @@ const makeStyles = (colors) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-
-  // Ambient Picker Grid
   ambientGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1688,69 +2435,72 @@ const makeStyles = (colors) => StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 12,
-    backgroundColor: colors.chip,
+    backgroundColor: '#FAF4EC',
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: '#EADFD0',
   },
   ambientOptionActive: {
-    backgroundColor: colors.primarySoft || (colors.primary + '15'),
-    borderColor: colors.primary,
+    backgroundColor: '#FFF1EC',
+    borderColor: '#C63D31',
   },
   ambientOptionText: {
     fontSize: 14,
-    color: colors.ink2,
+    color: '#2B211C',
     fontWeight: '500',
   },
-
-  // Post-Focus Modal
-  postDuration: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: colors.primaryStrong,
-    textAlign: 'center',
-    marginBottom: 16,
+  customDurDialog: {
+    width: '85%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
   },
-  postLabel: {
+  customDurInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 18,
+  },
+  customDurInput: {
+    width: 100,
+    height: 48,
+    borderWidth: 1.5,
+    borderColor: '#C63D31',
+    borderRadius: 14,
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+    color: '#2B211C',
+  },
+  customDurBtnRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+  },
+  customDurBtnCancel: {
+    flex: 1,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FAF4EC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customDurBtnCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2B211C',
+  },
+  customDurBtnConfirm: {
+    flex: 1,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#C63D31',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customDurBtnConfirmText: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.ink,
-    marginBottom: 8,
-    marginTop: 8,
-  },
-  postCatGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  postCatBtn: {
-    width: '31%',
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 12,
-    backgroundColor: colors.chip,
-    borderWidth: 1,
-    borderColor: colors.line,
-    position: 'relative',
-  },
-  postCatIcon: {
-    fontSize: 18,
-    marginBottom: 2,
-  },
-  postCatText: {
-    fontSize: 11,
-    color: colors.ink2,
-  },
-  postNoteInput: {
-    backgroundColor: colors.chip,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    fontSize: 14,
-    color: colors.ink,
-    borderWidth: 1,
-    borderColor: colors.line,
-    minHeight: 60,
-    textAlignVertical: 'top',
-    marginBottom: 8,
+    color: '#fff',
   },
 });

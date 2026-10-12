@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>番茄会成熟</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button,input{font-family:inherit}
+@keyframes breathe{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes burst{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.4)}}
+@keyframes pop{0%{transform:scale(.8)}60%{transform:scale(1.08)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion: reduce){*{animation:none !important}}
+</style>
+</helmet>
+
+<div style="position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: {{bg}}; transition: background 0.6s; color: #2B211C; font-family: 'Noto Sans SC', system-ui, sans-serif; display: flex; flex-direction: column">
+
+<!-- ============ 待开始 ============ -->
+<sc-if value="{{isIdle}}" hint-placeholder-val="{{ true }}">
+<div style="flex: 1; min-height: 0; display: flex; flex-direction: column">
+
+<div style="flex: 1; min-height: 0; box-sizing: border-box; padding: 8px 16px 0; display: flex; flex-direction: column; gap: 10px">
+
+<div style="display: flex; justify-content: space-between; align-items: center; min-height: 52px">
+<div>
+<h1 style="margin: 0; font-size: 26px; font-weight: 700; line-height: 1.2">今天</h1>
+<p style="margin: 0; font-size: 12px; color: #6B5B4F">10月10日 · 周六</p>
+</div>
+<div style="display: flex; padding: 2px; gap: 2px; background: #F3EADF; border-radius: 12px">
+<button style="min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: #6B5B4F; font-size: 13px; display: flex; align-items: center; gap: 4px">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 16V12l2-5h10l2 5v4zM5 12h14M8 16v2M16 16v2"/></svg>
+行程轨迹
+</button>
+<button aria-pressed="true" style="min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: #FFFFFF; color: #B33427; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(43, 33, 28, 0.14)">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="14" r="7"/><path d="M12 7c-1-2-3-3-5-2M12 7c1-2 3-3 5-2"/></svg>
+室内专注
+</button>
+</div>
+</div>
+
+<div style="box-sizing: border-box; padding: 0; overflow: hidden; background: #FFFFFF; border: 1px solid #EFE5D8; border-radius: 16px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; padding: 0 12px 0 16px">
+<span style="font-size: 14px; font-weight: 700">今日专注</span>
+<span style="font-size: 13px; font-weight: 700; color: #B33427">{{todayText}}</span>
+<button style="min-height: 44px; padding: 0 0 0 4px; border: 0; background: transparent; color: #2B211C; font-size: 12px; display: flex; align-items: center; gap: 2px">
+查看记录
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+</button>
+</div>
+<div style="height: 6px; overflow: hidden; display: flex; background: #F3EADF">
+<sc-for list="{{segs}}" as="g" hint-placeholder-count="2">
+<div style="width: {{g.w}}; background: {{g.color}}; transition: width 0.5s"></div>
+</sc-for>
+</div>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; min-height: 32px">
+<h2 style="margin: 0; font-size: 14px; font-weight: 700">这次专注做什么?</h2>
+<button style="min-height: 32px; padding: 0 2px; border: 0; background: transparent; color: #B33427; font-size: 13px; font-weight: 500">分类说明</button>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: -4px">
+<sc-for list="{{cats}}" as="c" hint-placeholder-count="6">
+<button onClick="{{c.pick}}" aria-pressed="{{c.selected}}" style="min-height: 44px; box-sizing: border-box; border: {{c.border}}; border-radius: 12px; background: {{c.bg}}; box-shadow: {{c.ring}}; color: #2B211C; font-size: 14px; font-weight: {{c.weight}}; display: flex; align-items: center; justify-content: center; gap: 8px">
+<span style="width: 8px; height: 8px; border-radius: 4px; background: {{c.color}}"></span>{{c.name}}
+</button>
+</sc-for>
+</div>
+
+<label style="display: flex; align-items: center; gap: 10px; min-height: 48px; box-sizing: border-box; padding: 0 14px; background: #FFFFFF; border: 1px solid #EADFD0; border-radius: 12px">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B5B4F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>
+<input type="text" onInput="{{onTask}}" placeholder="选填,例如:写周报" style="flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 14px; color: #2B211C">
+</label>
+
+<div style="flex: 1; min-height: 200px; position: relative; touch-action: none; cursor: ns-resize; user-select: none" onPointerDown="{{onDragStart}}" onPointerMove="{{onDragMove}}" onPointerUp="{{onDragEnd}}" onPointerCancel="{{onDragEnd}}">
+<div style="position: absolute; inset: 0; transform: scale({{idleScale}}); transform-origin: 50% 92%; transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)">
+<svg width="100%" height="100%" viewBox="0 0 240 240" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+<ellipse cx="120" cy="226" rx="70" ry="8" fill="#2B211C" opacity="0.08"/>
+<ellipse cx="120" cy="138" rx="94" ry="86" fill="{{tomatoFill}}"/>
+<ellipse cx="82" cy="108" rx="22" ry="12" fill="#FFFFFF" opacity="0.28" transform="rotate(-30 82 108)"/>
+<path d="M120 62 C108 66 88 62 74 74 C92 76 104 82 120 84 C136 82 148 76 166 74 C152 62 132 66 120 62 Z" fill="#4E8F4A"/>
+<path d="M120 64 C120 50 124 42 132 36" stroke="#3E7A3C" stroke-width="7" stroke-linecap="round" fill="none"/>
+</svg>
+</div>
+<div style="position: absolute; left: 0; right: 0; top: 57%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; pointer-events: none; color: #1F2B14">
+<span style="font-size: 52px; font-weight: 700; line-height: 1">{{minutes}}</span>
+<span style="margin-top: 2px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 2px">
+分钟
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 9l5-5 5 5M7 15l5 5 5-5"/></svg>
+</span>
+</div>
+</div>
+
+<div style="display: flex; gap: 8px">
+<sc-for list="{{presets}}" as="p" hint-placeholder-count="4">
+<button onClick="{{p.pick}}" style="flex: 1; min-height: 44px; border: {{p.border}}; border-radius: 10px; background: {{p.bg}}; color: {{p.color}}; font-size: 14px; font-weight: {{p.weight}}">{{p.label}}</button>
+</sc-for>
+<button onClick="{{onCustom}}" style="flex: 1; min-height: 44px; border: {{customBorder}}; border-radius: 10px; background: {{customBg}}; color: {{customColor}}; font-size: 13px; font-weight: {{customWeight}}">{{customLabel}}</button>
+</div>
+
+<button onClick="{{onSound}}" style="width: 100%; min-height: 48px; box-sizing: border-box; padding: 0 14px; border: 1px solid #EADFD0; border-radius: 12px; background: #FFFFFF; color: #2B211C; font-size: 14px; display: flex; align-items: center; gap: 10px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B5B4F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h2M7 8v8M11 5v14M15 8v8M19 11v2"/></svg>
+<span style="font-weight: 700">背景声音</span>
+<span style="flex: 1; text-align: right; color: #6B5B4F">{{soundName}}</span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B5B4F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+</button>
+
+<button onPointerDown="{{onHoldStart}}" onPointerUp="{{onHoldCancel}}" onPointerLeave="{{onHoldCancel}}" onPointerCancel="{{onHoldCancel}}" onKeyDown="{{onHoldKey}}" style="position: relative; overflow: hidden; width: 100%; min-height: 56px; flex: none; border: 0; border-radius: 999px; background: {{accent}}; color: #FFFFFF; font-size: 16px; font-weight: 700; touch-action: none; user-select: none">
+<span style="position: absolute; left: 0; top: 0; bottom: 0; width: {{holdW}}; background: #8E2A20"></span>
+<span style="position: relative; display: flex; align-items: center; justify-content: center; gap: 8px">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>
+{{holdLabel}}
+</span>
+</button>
+
+</div>
+
+<div style="margin-top: 8px; flex: none; border-top: 1px solid #EFE5D8; background: #FFFFFF; display: flex">
+<button style="flex: 1; min-height: 64px; border: 0; background: transparent; color: #B33427; font-size: 12px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+打卡
+</button>
+<button style="flex: 1; min-height: 64px; border: 0; background: transparent; color: #6B5B4F; font-size: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 20V12M12 20V5M18 20v-6"/></svg>
+洞察
+</button>
+<button style="flex: 1; min-height: 64px; border: 0; background: transparent; color: #6B5B4F; font-size: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c1-4 4-6 8-6s7 2 8 6"/></svg>
+我的
+</button>
+</div>
+
+</div>
+</sc-if>
+
+<!-- ============ 专注中 ============ -->
+<sc-if value="{{isRunning}}" hint-placeholder-val="{{ false }}">
+<div style="flex: 1; min-height: 0; box-sizing: border-box; padding: 0 16px 28px; display: flex; flex-direction: column; align-items: center">
+
+<div style="margin-top: 48px; display: flex; flex-direction: column; align-items: center; gap: 10px">
+<span style="font-size: 13px; color: #6B5B4F">今天第 {{nextIndex}} 次</span>
+<div style="display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: #FFFFFF; border: 1px solid #EFE5D8; border-radius: 999px">
+<span style="width: 8px; height: 8px; border-radius: 4px; background: {{catColor}}"></span>
+<span style="font-size: 15px; font-weight: 700">{{catName}}</span>
+<sc-if value="{{hasTask}}" hint-placeholder-val="{{ false }}">
+<span style="font-size: 15px; color: #5E4F44">· {{task}}</span>
+</sc-if>
+</div>
+</div>
+
+<div style="flex: 1; min-height: 240px; width: 100%; position: relative; margin-top: 12px">
+<div style="position: absolute; inset: 0; transform: scale({{runScale}}); transform-origin: 50% 92%; transition: transform 0.4s linear">
+<div style="position: absolute; inset: 0; animation: {{breathe}}">
+<svg width="100%" height="100%" viewBox="0 0 240 240" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+<ellipse cx="120" cy="226" rx="70" ry="8" fill="#2B211C" opacity="0.08"/>
+<ellipse cx="120" cy="138" rx="94" ry="86" fill="{{tomatoFill}}"/>
+<ellipse cx="82" cy="108" rx="22" ry="12" fill="#FFFFFF" opacity="0.28" transform="rotate(-30 82 108)"/>
+<path d="M120 62 C108 66 88 62 74 74 C92 76 104 82 120 84 C136 82 148 76 166 74 C152 62 132 66 120 62 Z" fill="#4E8F4A"/>
+<path d="M120 64 C120 50 124 42 132 36" stroke="#3E7A3C" stroke-width="7" stroke-linecap="round" fill="none"/>
+</svg>
+</div>
+</div>
+</div>
+
+<div style="text-align: center">
+<div style="font-size: 68px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums">{{clock}}</div>
+<div style="margin-top: 2px; font-size: 14px; color: #6B5B4F">{{stage}}</div>
+</div>
+
+<div style="margin-top: 28px; display: flex; align-items: center; gap: 20px">
+<button onClick="{{onQuit}}" style="min-width: 104px; min-height: 56px; padding: 0 16px; border: 1px solid #D9C9BA; border-radius: 999px; background: #FFFFFF; color: #5E4F44; font-size: 15px; font-weight: 500">{{quitLabel}}</button>
+<button onClick="{{onPause}}" style="min-width: 160px; min-height: 64px; padding: 0 24px; border: 0; border-radius: 999px; background: {{accent}}; color: #FFFFFF; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px">
+<sc-if value="{{paused}}" hint-placeholder-val="{{ false }}">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>
+</sc-if>
+<sc-if value="{{notPaused}}" hint-placeholder-val="{{ true }}">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+</sc-if>
+{{pauseLabel}}
+</button>
+</div>
+
+<button onClick="{{onSound}}" style="margin-top: 28px; width: 100%; min-height: 48px; box-sizing: border-box; padding: 0 14px; border: 1px solid #EFE5D8; border-radius: 12px; background: #FFFFFF; color: #2B211C; font-size: 14px; display: flex; align-items: center; gap: 10px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B5B4F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h2M7 8v8M11 5v14M15 8v8M19 11v2"/></svg>
+<span style="font-weight: 700">背景声音</span>
+<span style="flex: 1; text-align: right; color: #6B5B4F">{{soundName}}</span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B5B4F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+</button>
+
+</div>
+</sc-if>
+
+<!-- ============ 收获 ============ -->
+<sc-if value="{{isDone}}" hint-placeholder-val="{{ false }}">
+<div style="flex: 1; min-height: 0; box-sizing: border-box; padding: 0 16px 28px; display: flex; flex-direction: column; align-items: center">
+
+<div style="margin-top: 40px; flex: 1; min-height: 220px; width: 100%; position: relative">
+<span style="position: absolute; left: 50%; top: 56%; margin: -5px 0 0 -5px; width: 10px; height: 10px; border-radius: 5px; background: #D93A2B; --dx: -120px; --dy: -110px; animation: burst 0.9s ease-out forwards"></span>
+<span style="position: absolute; left: 50%; top: 56%; margin: -5px 0 0 -5px; width: 10px; height: 10px; border-radius: 5px; background: #E9A23B; --dx: 0px; --dy: -150px; animation: burst 0.9s ease-out 0.05s forwards"></span>
+<span style="position: absolute; left: 50%; top: 56%; margin: -5px 0 0 -5px; width: 10px; height: 10px; border-radius: 5px; background: #4E8F4A; --dx: 120px; --dy: -110px; animation: burst 0.9s ease-out 0.1s forwards"></span>
+<span style="position: absolute; left: 50%; top: 56%; margin: -5px 0 0 -5px; width: 10px; height: 10px; border-radius: 5px; background: #E9A23B; --dx: 150px; --dy: 0px; animation: burst 0.9s ease-out forwards"></span>
+<span style="position: absolute; left: 50%; top: 56%; margin: -5px 0 0 -5px; width: 10px; height: 10px; border-radius: 5px; background: #D93A2B; --dx: 120px; --dy: 110px; animation: burst 0.9s ease-out 0.05s forwards"></span>
+<span style="position: absolute; left: 50%; top: 56%; margin: -5px 0 0 -5px; width: 10px; height: 10px; border-radius: 5px; background: #4E8F4A; --dx: -150px; --dy: 0px; animation: burst 0.9s ease-out 0.1s forwards"></span>
+<span style="position: absolute; left: 50%; top: 56%; margin: -5px 0 0 -5px; width: 10px; height: 10px; border-radius: 5px; background: #D93A2B; --dx: -120px; --dy: 110px; animation: burst 0.9s ease-out 0.05s forwards"></span>
+<span style="position: absolute; left: 50%; top: 56%; margin: -5px 0 0 -5px; width: 10px; height: 10px; border-radius: 5px; background: #E9A23B; --dx: 0px; --dy: 140px; animation: burst 0.9s ease-out forwards"></span>
+<div style="position: absolute; inset: 0; animation: pop 0.5s ease-out">
+<svg width="100%" height="100%" viewBox="0 0 240 240" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+<ellipse cx="120" cy="226" rx="70" ry="8" fill="#2B211C" opacity="0.08"/>
+<ellipse cx="120" cy="138" rx="94" ry="86" fill="#D93A2B"/>
+<ellipse cx="82" cy="108" rx="22" ry="12" fill="#FFFFFF" opacity="0.28" transform="rotate(-30 82 108)"/>
+<path d="M120 62 C108 66 88 62 74 74 C92 76 104 82 120 84 C136 82 148 76 166 74 C152 62 132 66 120 62 Z" fill="#4E8F4A"/>
+<path d="M120 64 C120 50 124 42 132 36" stroke="#3E7A3C" stroke-width="7" stroke-linecap="round" fill="none"/>
+<path d="M86 140l24 24 44-50" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
+</div>
+</div>
+
+<h2 style="margin: 8px 0 0; font-size: 28px; font-weight: 700">收获一颗番茄</h2>
+<p style="margin: 4px 0 0; font-size: 14px; color: #5E4F44">今天第 {{nextIndex}} 次 · {{catName}} · {{minutes}} 分钟</p>
+<sc-if value="{{hasTask}}" hint-placeholder-val="{{ false }}">
+<p style="margin: 2px 0 0; font-size: 14px; color: #5E4F44">{{task}}</p>
+</sc-if>
+
+<p style="margin: 16px 0 8px; font-size: 12px; color: #5E4F44">分类不对?现在点一下就能改</p>
+<div style="width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{cats}}" as="c" hint-placeholder-count="6">
+<button onClick="{{c.pick}}" aria-pressed="{{c.selected}}" style="min-height: 44px; box-sizing: border-box; border: {{c.border}}; border-radius: 12px; background: {{c.bg}}; box-shadow: {{c.ring}}; color: #2B211C; font-size: 14px; font-weight: {{c.weight}}; display: flex; align-items: center; justify-content: center; gap: 8px">
+<span style="width: 8px; height: 8px; border-radius: 4px; background: {{c.color}}"></span>{{c.name}}
+</button>
+</sc-for>
+</div>
+
+<div style="margin-top: 16px; width: 100%; display: flex; flex-direction: column; gap: 4px">
+<button onClick="{{onHarvest}}" style="min-height: 56px; border: 0; border-radius: 999px; background: {{accent}}; color: #FFFFFF; font-size: 17px; font-weight: 700">记入今日专注</button>
+<button onClick="{{onHarvest}}" style="min-height: 48px; border: 0; border-radius: 999px; background: transparent; color: #5E4F44; font-size: 15px; font-weight: 500">记入并休息 5 分钟</button>
+</div>
+
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#C63D31","options":["#C63D31","#2F4B7C","#2F7D57","#7B5EA7"]},"demoSpeed":{"editor":"int","default":60,"min":1,"max":600,"section":"演示"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+state = {
+screen: 'idle',
+minutes: 25,
+cat: 1,
+elapsed: 0,
+paused: false,
+holdPct: 0,
+holdHint: false,
+confirmQuit: false,
+task: '',
+sound: 0,
+count: 3,
+by: [0, 28, 0, 0, 156, 0]
+};
+
+CATS = [
+{ name: '工作', color: '#3A62D8' },
+{ name: '学习', color: '#D33A3A' },
+{ name: '创作', color: '#E8891B' },
+{ name: '身心', color: '#2E9A6B' },
+{ name: '生活', color: '#1F90B0' },
+{ name: '规划复盘', color: '#7B55C4' }
+];
+
+SOUNDS = ['无声', '雨声', '森林', '海浪', '篝火', '咖啡馆', '火车'];
+PRESETS = [15, 25, 45, 60];
+
+componentDidMount() {
+this._tick = setInterval(() => {
+const s = this.state;
+if (s.screen !== 'running' || s.paused) return;
+const speed = this.props.demoSpeed ?? 60;
+const next = s.elapsed + speed * 0.1;
+if (next >= s.minutes * 60) {
+this.setState({ elapsed: s.minutes * 60, screen: 'done' });
+} else {
+this.setState({ elapsed: next });
+}
+}, 100);
+}
+
+componentWillUnmount() {
+clearInterval(this._tick);
+clearInterval(this._hold);
+clearTimeout(this._quitTimer);
+clearTimeout(this._hintTimer);
+}
+
+mix(a, b, t) {
+const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+return '#' + pa.map((v, i) => Math.round(v + (pb[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+
+fillAt(p) {
+return p < 0.5 ? this.mix('#8DB255', '#E9A23B', p / 0.5) : this.mix('#E9A23B', '#D93A2B', (p - 0.5) / 0.5);
+}
+
+fmt(min) {
+const h = Math.floor(min / 60);
+const m = min % 60;
+return h > 0 ? h + '小时' + m + '分' : m + '分';
+}
+
+startRunning() {
+this.setState({ screen: 'running', elapsed: 0, paused: false, holdPct: 0, holdHint: false, confirmQuit: false });
+}
+
+startHold() {
+if (this._hold || this.state.screen !== 'idle') return;
+this._holdStart = Date.now();
+this._hold = setInterval(() => {
+const pct = Math.min(100, ((Date.now() - this._holdStart) / 900) * 100);
+if (pct >= 100) {
+this.cancelHold(false);
+this.startRunning();
+} else {
+this.setState({ holdPct: pct });
+}
+}, 30);
+}
+
+cancelHold(early) {
+clearInterval(this._hold);
+this._hold = null;
+const pct = this.state.holdPct;
+if (early && pct > 0 && pct < 100) {
+this.setState({ holdPct: 0, holdHint: true });
+clearTimeout(this._hintTimer);
+this._hintTimer = setTimeout(() => this.setState({ holdHint: false }), 1500);
+}
+}
+
+renderVals() {
+const s = this.state;
+const accent = this.props.accent ?? '#C63D31';
+const total = s.minutes * 60;
+const p = Math.min(1, s.elapsed / total);
+const remain = Math.max(0, Math.ceil(total - s.elapsed));
+const mm = String(Math.floor(remain / 60)).padStart(2, '0');
+const ss = String(remain % 60).padStart(2, '0');
+const cat = this.CATS[s.cat];
+
+let tomatoFill = '#8DB255';
+let bg = '#FAF4EC';
+if (s.screen === 'running') {
+tomatoFill = this.fillAt(p);
+bg = this.mix('#EEF3E2', '#FBE3D6', p);
+} else if (s.screen === 'done') {
+tomatoFill = '#D93A2B';
+bg = '#FDE6E1';
+}
+
+let stage = '青涩的小番茄';
+if (s.paused) stage = '已暂停';
+else if (p >= 0.9) stage = '马上就能收获了';
+else if (p >= 0.66) stage = '快熟了';
+else if (p >= 0.33) stage = '正在转红';
+
+const cats = this.CATS.map((c, i) => ({
+name: c.name,
+color: c.color,
+selected: i === s.cat,
+border: '1px solid ' + (i === s.cat ? accent : '#EADFD0'),
+ring: i === s.cat ? '0 0 0 1px ' + accent : 'none',
+bg: i === s.cat ? '#FFF1EC' : '#FFFFFF',
+weight: i === s.cat ? 700 : 500,
+pick: () => this.setState({ cat: i })
+}));
+
+const presets = this.PRESETS.map((m) => {
+const on = m === s.minutes;
+return {
+label: String(m),
+border: '1px solid ' + (on ? accent : '#EADFD0'),
+bg: on ? '#FFF1EC' : '#FFFFFF',
+color: on ? '#B33427' : '#2B211C',
+weight: on ? 700 : 500,
+pick: () => this.setState({ minutes: m })
+};
+});
+
+const isCustom = this.PRESETS.indexOf(s.minutes) < 0;
+
+const sum = s.by.reduce((a, b) => a + b, 0);
+const segs = s.by
+.map((v, i) => ({ v, color: this.CATS[i].color }))
+.filter((g) => g.v > 0)
+.sort((a, b) => b.v - a.v)
+.map((g) => ({ w: ((g.v / sum) * 100).toFixed(1) + '%', color: g.color }));
+
+let holdLabel = '按住开始专注 · ' + s.minutes + ' 分钟';
+if (s.holdHint) holdLabel = '再按住一会儿哦';
+else if (s.holdPct > 0) holdLabel = '继续按住…';
+
+return {
+accent,
+bg,
+tomatoFill,
+isIdle: s.screen === 'idle',
+isRunning: s.screen === 'running',
+isDone: s.screen === 'done',
+minutes: s.minutes,
+idleScale: (0.8 + 0.2 * (s.minutes / 90)).toFixed(3),
+runScale: (0.55 + 0.45 * p).toFixed(3),
+nextIndex: s.count + 1,
+todayText: s.count + ' 次 · ' + this.fmt(sum),
+segs,
+cats,
+presets,
+customLabel: isCustom ? s.minutes + ' 分' : '自定义',
+customBorder: isCustom ? '1px solid ' + accent : '1px dashed #C9B8A8',
+customBg: isCustom ? '#FFF1EC' : 'transparent',
+customColor: isCustom ? '#B33427' : '#5E4F44',
+customWeight: isCustom ? 700 : 500,
+catName: cat.name,
+catColor: cat.color,
+task: s.task,
+hasTask: s.task.trim().length > 0,
+soundName: this.SOUNDS[s.sound],
+clock: mm + ':' + ss,
+stage,
+paused: s.paused,
+notPaused: !s.paused,
+pauseLabel: s.paused ? '继续' : '暂停',
+quitLabel: s.confirmQuit ? '再点一次放弃' : '放弃',
+breathe: s.paused ? 'none' : 'breathe 3.2s ease-in-out infinite',
+holdW: s.holdPct.toFixed(1) + '%',
+holdLabel,
+
+onTask: (e) => this.setState({ task: e.target.value }),
+onSound: () => this.setState({ sound: (this.state.sound + 1) % this.SOUNDS.length }),
+onCustom: () => {
+if (this.PRESETS.indexOf(this.state.minutes) >= 0) this.setState({ minutes: 30 });
+},
+
+onDragStart: (e) => {
+try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+this._dragY = e.clientY;
+this._dragMin = this.state.minutes;
+},
+onDragMove: (e) => {
+if (this._dragY == null) return;
+const d = Math.round((this._dragY - e.clientY) / 10) * 5;
+const m = Math.max(5, Math.min(90, this._dragMin + d));
+if (m !== this.state.minutes) this.setState({ minutes: m });
+},
+onDragEnd: () => {
+this._dragY = null;
+},
+
+onHoldStart: () => this.startHold(),
+onHoldCancel: () => this.cancelHold(true),
+onHoldKey: (e) => {
+if (e.key === 'Enter' || e.key === ' ') {
+e.preventDefault();
+this.startRunning();
+}
+},
+
+onPause: () => this.setState({ paused: !this.state.paused }),
+onQuit: () => {
+if (this.state.confirmQuit) {
+clearTimeout(this._quitTimer);
+this.setState({ screen: 'idle', elapsed: 0, paused: false, confirmQuit: false, task: '' });
+} else {
+this.setState({ confirmQuit: true });
+clearTimeout(this._quitTimer);
+this._quitTimer = setTimeout(() => this.setState({ confirmQuit: false }), 3000);
+}
+},
+onHarvest: () => {
+const st = this.state;
+const by = st.by.slice();
+by[st.cat] += st.minutes;
+this.setState({ screen: 'idle', elapsed: 0, count: st.count + 1, by, task: '' });
+}
+};
+}
+}
+</script>
+</body>
+</html>

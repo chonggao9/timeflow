@@ -14,7 +14,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import ModeIcon from './ModeIcon';
-import { MODE_KEYS } from './TransportPicker';
 
 const OFFSETS = [
   { min: 0, labelKey: 'home.justNow' },
@@ -39,8 +38,6 @@ export default function BackfillModal({
   const [selectedPlace, setSelectedPlace] = useState('');
   const [customInput, setCustomInput] = useState('');
   const [isCustomMode, setIsCustomMode] = useState(false);
-  const [currentMode, setCurrentMode] = useState(initialMode);
-  const [showModePicker, setShowModePicker] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -48,10 +45,8 @@ export default function BackfillModal({
       setSelectedPlace(commonPlaces[0] || '');
       setCustomInput('');
       setIsCustomMode(false);
-      setCurrentMode(initialMode || 'walk');
-      setShowModePicker(false);
     }
-  }, [visible, commonPlaces, initialMode]);
+  }, [visible, commonPlaces]);
 
   // 计算目标时间文案（HH:MM）
   const targetTimeStr = useMemo(() => {
@@ -78,7 +73,7 @@ export default function BackfillModal({
     onSave({
       offsetMin,
       locationName: name,
-      mode: currentMode,
+      mode: initialMode || 'walk',
     });
   };
 
@@ -186,52 +181,7 @@ export default function BackfillModal({
                 </View>
               )}
 
-              {/* 3. 出行方式 */}
-              <TouchableOpacity
-                style={styles.modeCard}
-                onPress={() => setShowModePicker(!showModePicker)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.modeLabel}>{t('backfill.modeDesc')}</Text>
-                <View style={styles.modeRightRow}>
-                  <ModeIcon mode={currentMode} size={16} color={colors.primaryStrong} />
-                  <Text style={styles.modeValText}>{t('mode.' + currentMode)}</Text>
-                  <Ionicons
-                    name={showModePicker ? 'chevron-up' : 'chevron-down'}
-                    size={14}
-                    color={colors.ink3}
-                  />
-                </View>
-              </TouchableOpacity>
-
-              {/* 展开可快捷切换交通方式 */}
-              {showModePicker && (
-                <View style={styles.modePickerContainer}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modePickerScroll}>
-                    {MODE_KEYS.map((m) => {
-                      const isCur = currentMode === m;
-                      return (
-                        <TouchableOpacity
-                          key={'bf-mode-' + m}
-                          style={[styles.modePickerItem, isCur && styles.modePickerItemActive]}
-                          onPress={() => {
-                            setCurrentMode(m);
-                            setShowModePicker(false);
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <ModeIcon mode={m} size={15} color={isCur ? colors.primaryStrong : colors.ink2} />
-                          <Text style={[styles.modePickerText, isCur && styles.modePickerTextActive]}>
-                            {t('mode.' + m)}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-              )}
-
-              {/* 4. 底部主按钮 */}
+              {/* 3. 底部主按钮 */}
               <TouchableOpacity
                 style={styles.submitBtn}
                 onPress={handleConfirm}
@@ -396,70 +346,6 @@ const makeStyles = (colors) =>
       fontSize: 14,
       color: colors.ink,
       padding: 0,
-    },
-    modeCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.line,
-      borderRadius: 14,
-      paddingHorizontal: 14,
-      height: 48,
-      marginBottom: 16,
-    },
-    modeLabel: {
-      fontSize: 13,
-      color: colors.ink2,
-    },
-    modeRightRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    modeValText: {
-      fontSize: 14,
-      fontWeight: '800',
-      color: colors.primaryStrong,
-    },
-    modePickerContainer: {
-      backgroundColor: colors.surface,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: colors.line,
-      paddingVertical: 8,
-      paddingHorizontal: 6,
-      marginBottom: 16,
-      marginTop: -8,
-    },
-    modePickerScroll: {
-      gap: 6,
-      paddingHorizontal: 6,
-    },
-    modePickerItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: colors.line,
-      backgroundColor: colors.chip,
-    },
-    modePickerItemActive: {
-      borderColor: colors.primary,
-      backgroundColor: colors.primarySoft,
-    },
-    modePickerText: {
-      fontSize: 12,
-      color: colors.ink2,
-      fontWeight: '600',
-    },
-    modePickerTextActive: {
-      color: colors.primaryStrong,
-      fontWeight: '700',
     },
     submitBtn: {
       height: 56,

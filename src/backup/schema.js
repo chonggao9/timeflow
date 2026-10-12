@@ -2,17 +2,17 @@
 // 不含高德 Key（明文凭证）——备份快照只覆盖「数据 + 设备偏好」，凭证永不入包。
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 export const SCHEMA_RECORDS_V1 = 'records-v1';
+export const SCHEMA_RECORDS_V2 = 'records-v2';
 
-// 需快照的偏好键（原始 AsyncStorage 键名，恢复时直接 setItem 回写，无映射可漂移）：
-// profile(JSON 串) + lang/theme/mode/currentTrip(串)。不含 amap 任一键。
+// 需快照的偏好键（原始 AsyncStorage 键名，恢复时直接 setItem 回写，无映射可漂移）:
+// profile(JSON 串) + lang/theme/mode(串)。不含 amap 任一键，current_trip 已进入 SQLite。
 export const PREF_KEYS = [
   'timeflow_profile',
   'timeflow_lang',
   'timeflow_theme',
   'timeflow_mode',
-  'timeflow_current_trip',
 ];
 
 // 收集全部偏好为 { rawKey: rawValue }，供 buildPlaintext 打进明文包。
@@ -24,14 +24,25 @@ export async function collectPreferences() {
   return prefs;
 }
 
-// 明文包。records 为 getRecords() 结果；preferences 为 collectPreferences() 结果。
-export function buildPlaintext(records, preferences) {
+// 明文包。data 为 { trips, records, focusSessions }；preferences 为 collectPreferences() 结果。
+export function buildPlaintext(data, preferences) {
+  let payload;
+  if (data && typeof data === 'object' && (Array.isArray(data.trips) || Array.isArray(data.records) || Array.isArray(data.focusSessions))) {
+    payload = data;
+  } else {
+    // 兼容旧调用：第一个参数直接是 records 数组
+    payload = { trips: [], records: Array.isArray(data) ? data : [], focusSessions: [] };
+  }
   return {
     app: 'TimeFlow',
     backupVersion: BACKUP_VERSION,
-    schema: SCHEMA_RECORDS_V1,
+    schema: SCHEMA_RECORDS_V2,
     createdAt: new Date().toISOString(),
-    records: Array.isArray(records) ? records : [],
+    data: {
+      trips: payload.trips || [],
+      records: payload.records || [],
+      focusSessions: payload.focusSessions || [],
+    },
     preferences: preferences || {},
   };
 }
@@ -41,9 +52,11 @@ export function validatePlaintext(obj) {
   if (!obj || typeof obj !== 'object') return false;
   if (obj.app !== 'TimeFlow') return false;
   if (obj.backupVersion !== BACKUP_VERSION) return false;
-  if (obj.schema !== SCHEMA_RECORDS_V1) return false;
-  if (!Array.isArray(obj.records)) return false;
-  return true;
+  // v1 兼容
+  if (obj.schema === SCHEMA_RECORDS_V1 && Array.isArray(obj.records)) return true;
+  // v2
+  if (obj.schema === SCHEMA_RECORDS_V2 && obj.data && Array.isArray(obj.data.records) && Array.isArray(obj.data.focusSessions)) return true;
+  return false;
 }
 
 // 恢复偏好：只写回已知 PREF_KEYS，值 null 则清除；其余键一律忽略，防注入任意键。
@@ -56,11 +69,5 @@ export async function restorePreferences(prefs) {
       else await AsyncStorage.setItem(key, val);
     } catch (e) { /* 单键失败不阻塞整体恢复 */ }
   }
-  // 行程时间戳不属于备份内容：若恢复了行程 id，把时间戳置为现在，
-  // 否则下次打卡会因缺时间戳的兼容分支并入可能已过去数周的旧行程。
-  try {
-    if (prefs['timeflow_current_trip'] != null) {
-      await AsyncStorage.setItem('timeflow_last_checkin_ts', String(Date.now()));
-    }
-  } catch (e) { /* 失败不阻塞恢复；下次打卡最多新开一条行程 */ }
+  // 当前行程已存入 SQLite，不再通过 AsyncStorage 恢复；也不设置时间戳。
 }

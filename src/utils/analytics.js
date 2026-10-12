@@ -1,12 +1,11 @@
 // 历史数据分析：端到端 A→B 行程查询（含中间停靠）、地点清单、耗时直方图。
-import { placeKey, median, UNNAMED, isPlaceholderName, TRIP_TIMEOUT_MS, isTravelRecord } from './stats';
+import { placeKey, median, UNNAMED, isPlaceholderName, TRIP_TIMEOUT_MS } from './stats';
 
 // 地点清单：placeKey → { key, name, count }（按次数降序），供 A→B 选择器用
 // 只统计行程记录：专注目标的名称不是地点，混进来会污染地点选择器。
 export function getPlaceOptions(records) {
   const map = new Map();
   for (const r of (records || [])) {
-    if (!isTravelRecord(r)) continue;
     const key = placeKey(r);
     if (!map.has(key)) map.set(key, { key, names: {}, count: 0 });
     const e = map.get(key);
@@ -37,7 +36,7 @@ function weekStart(ts) {
 // 端到端 A→B 行程查询：A→A1→A2→B 算一次 A→B（含中间停靠，door-to-door）。
 // 同行程多次往返 → 多次采样。没走过返回 null。
 export function queryJourney(records, fromKey, toKey) {
-  const travelRecords = (records || []).filter(isTravelRecord); // 专注记录不参与行程查询
+  const travelRecords = records || []; // 专注记录已分离到 focus_sessions，此处只处理行程记录
   const nameMap = new Map(getPlaceOptions(travelRecords).map(o => [o.key, o.name]));
 
   // 按行程分组、按时间排序
@@ -193,7 +192,6 @@ export function buildDurationHistogram(minutes) {
 export function groupTrips(records) {
   const byTrip = new Map();
   for (const r of (records || [])) {
-    if (!isTravelRecord(r)) continue;
     // 无 tripId 的旧数据按自然日归组，避免坍缩成一个跨月的巨型行程
     const d = new Date(r.timestamp);
     d.setHours(0, 0, 0, 0);

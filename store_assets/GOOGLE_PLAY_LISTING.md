@@ -20,15 +20,15 @@ TimeFlow - 时间打卡与行程记录
 
 #### 📝 简短说明 (Short Description, ≤ 80 字符)
 ```text
-极简优雅的时间打卡工具。轻触秒级记录途经点，智能生成行程时间轴与通勤耗时规律。
+极简时间打卡、通勤记录与沉浸式番茄钟。轻触秒级打卡，白噪音深度专注，数据全本地存储。
 ```
-*(字数：40 / 80 字符，直击用户核心价值)*
+*(字数：41 / 80 字符，直击出行与专注双重核心价值)*
 
 #### 📖 完整说明 (Full Description, ≤ 4000 字符)
 ```markdown
-TimeFlow（时光流）是一款专为追求高效、注重生活节奏与时间感知的人群打造的极简打卡与行程记录工具。
+TimeFlow（时光流）是一款专为追求高效、注重生活节奏与专注心流的人群打造的极简打卡、行程记录与沉浸式番茄专注工具。
 
-摒弃复杂繁琐的社交功能与多余交互，TimeFlow 坚持「数据全本地存储、秒级极速记录、优雅流体视觉」的核心设计哲学，让每一次停留与出发都自然、轻盈、井井有条。
+摒弃复杂繁琐的社交功能与多余交互，TimeFlow 坚持「数据全本地存储、秒级极速记录、优雅流体视觉」的核心设计哲学，让每一次出行、停留与深度专注都自然、轻盈、井井有条。
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✨ 核心功能特性
@@ -39,6 +39,12 @@ TimeFlow（时光流）是一款专为追求高效、注重生活节奏与时间
 • 一步完结：长按主按钮（>500ms）一步记录终点并完结行程，无需二次弹窗打扰；90分钟自适应超时断程兜底。
 • 9 大出行方式：覆盖步行、骑行、自驾、打车、地铁、公交、高铁、飞机、轮渡全场景，平滑滚动胶囊栏自动居中记忆。
 
+【全屏沉浸式番茄专注 · 深度心流】
+• 6 大生活与工作场景：覆盖工作 💼、学习 📚、创作 🎨、身心 🧘、生活 🧹、规划复盘 💡，清晰归类时间去向。
+• 7 款治愈系环境白噪音：内置细雨、森林、海浪、篝火、咖啡馆、火车、溪流与纯无声，一秒进入深度心流。
+• 手势圆环与心流延展：上下滑动圆环极简微调时长，番茄钟结束后自动进入「心流延展」，不打断突发灵感。
+• 极致防误触与专注沉浸：专注期间自动隐藏底部导航，防误触二次确认退出，长按震动保存记录。
+
 【补记打卡 · 弱网无忧】
 • 智能时间偏移：忘打卡无须慌张，自如选择「刚刚/5分前/15分前/30分前/1小时前」补录打卡。
 • 常用地点快选：地下车库、电梯间弱网离线环境下，自动提取历史常去高频地点 Chip，一触即录。
@@ -48,17 +54,18 @@ TimeFlow（时光流）是一款专为追求高效、注重生活节奏与时间
 • 耗时一览：各路段位移时间与全程累计用时即时计算，支持一键在地图上查看空间轨迹。
 • 灵活纠错：支持就地重命名地点、纠正出行方式或删除误触记录。
 
-【耗时规律 · 深度洞察】
-• A→B 通勤查询：智能分析任意两个常用地点之间的典型耗时、历史分布与时段规律。
-• 常见路段盘点：自动汇总你最常跑的高频通勤路线，出门前精准预估到达时间。
-• 数据总览：打卡总数、已探明路线与常去地点多维统计，掌控你的出行全貌。
+【耗时规律 · 通勤与专注双维洞察】
+• 空间与时间双维度：一键无缝切换「出行通勤」与「番茄专注」深度复盘看板。
+• A→B 通勤规律：智能分析常用地点典型耗时、历史分布与高峰时段规律，出门前精准预估到达时间。
+• 专注趋势与高效黄金时段：日均专注时长、完成率、分类占比多维图表呈现，智能识别你的高效时段（晨间/午后/傍晚/深夜）。
+• 全局里程碑：打卡总数、常去地点、探明路线与累计专注番茄钟一览无余。
 
 【桌面灵动小组件】
 • 桌面一键打卡：无需打开 App，在 Android 桌面上轻触小组件即可即刻打卡。
 • 状态实时呈现：内嵌流体卡片，实时映射出行方式 Emoji 与最新打卡地点。
 
 【隐私至上 · 本地安全】
-• 零服务器 / 零账号：基于高效本地 SQLite 数据库，打卡数据只留在你的手机本地。
+• 零服务器 / 零账号：基于高效本地 SQLite 数据库，打卡与专注数据只留在你的手机本地。
 • 军工级备份：内置 AES-256-CBC + HMAC-SHA256 加密备份，支持本地安全导出分享。
 • WebDAV 私有云同步：支持无缝绑定坚果云、Nextcloud 等你信任的私有云盘，数据主权牢牢掌握在自己手中。
 
@@ -68,7 +75,7 @@ TimeFlow（时光流）是一款专为追求高效、注重生活节奏与时间
 • 位置信息（ACCESS_FINE_LOCATION）：仅在您主动轻触打卡或启动补位时获取单次前台坐标，TimeFlow 绝不在后台静默追踪您的实时位置，亦不会将您的行踪上传至任何第三方服务器。
 • 隐私政策公开页：https://chonggao9.github.io/timeflow/privacy.html
 
-让时间流动可见，让每一程皆有印记。立即下载 TimeFlow，开启优雅从容的日常时间流记录！
+让时间流动可见，让每一程出行与专注皆有印记。立即下载 TimeFlow，开启优雅从容的日常时间流记录！
 ```
 
 ---
@@ -83,15 +90,15 @@ TimeFlow: Milestone Tracker
 
 #### 📝 Short Description (≤ 80 characters)
 ```text
-Minimalist time tracking & trip logger. One-tap check-in with fluid insights.
+Minimalist time tracking, trip logger & Pomodoro focus timer. 100% local-first.
 ```
-*(Length: 76 / 80 characters)*
+*(Length: 79 / 80 characters)*
 
 #### 📖 Full Description (≤ 4000 characters)
 ```markdown
-TimeFlow is a minimalist, elegant milestone tracker and trip timeline logger designed for those who value clarity, productivity, and personal rhythm.
+TimeFlow is a minimalist, elegant milestone tracker, trip timeline logger, and immersive focus companion designed for those who value clarity, productivity, and personal rhythm.
 
-With zero ads, zero accounts, and 100% local-first data storage, TimeFlow turns your daily commutes and travels into a beautiful, fluid stream of memories and insights.
+With zero ads, zero accounts, and 100% local-first data storage, TimeFlow turns your daily commutes, mindful moments, and deep focus sessions into a beautiful, fluid stream of memories and insights.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✨ KEY FEATURES
@@ -102,6 +109,12 @@ With zero ads, zero accounts, and 100% local-first data storage, TimeFlow turns 
 • One-Step Trip End: Long-press (>500ms) to mark destination and close the trip without friction.
 • 9 Travel Modes: Walk, Bike, Drive, Taxi, Subway, Transit, Train, Flight, and Boat with intelligent memory carousel.
 
+【Immersive Pomodoro Focus & Flow State】
+• 6 Life & Work Presets: Purpose-driven categories covering Work 💼, Study 📚, Create 🎨, Body & Mind 🧘, Life 🧹, and Plan & Review 💡.
+• Curated Ambient Soundscapes: 7 soothing scenes (Rain, Forest, Ocean Waves, Campfire, Cafe, Train, Stream) plus pure silence to enter deep flow instantly.
+• Gesture Ring & Flow Extension: Swipe up or down directly on the timer ring to smoothly adjust duration; automatic flow extension mode when you're in the zone.
+• Distraction-Free Experience: Auto-hides navigation during sessions, with fail-safe abandon confirmations, pause/resume, and haptic hold-to-save interactions.
+
 【Smart Backfill & Offline Quick Chips】
 • Flexible Time Offset: Forgot to check in? Easily backfill stops with "Just now, 5m ago, 15m ago, 30m ago, or 1h ago".
 • Frequent Places Chips: Instant one-tap selection from frequent locations even with poor signal or offline.
@@ -111,10 +124,11 @@ With zero ads, zero accounts, and 100% local-first data storage, TimeFlow turns 
 • Interactive Map View: Inspect your journey path with milestone waypoints and duration overview.
 • In-Place Adjustments: Easily rename locations, switch travel modes, or delete accidental logs.
 
-【Commute Insights & Travel Patterns】
-• Point A → Point B Analysis: Query typical travel times, historical patterns, and rush-hour variations.
-• Frequent Routes: Discover your most frequent commuting corridors and predict arrival times accurately.
-• Milestone Stats: Comprehensive overview of total check-ins, unique places, and discovered paths.
+【Deep Insights: Commute & Focus Analytics】
+• Dual-Dimension Analytics: Seamlessly toggle between Travel Commutes and Pomodoro Focus statistics.
+• Commute Patterns: Query Point A → Point B typical travel times, historical variations, and high-frequency corridors.
+• Focus Habits & Golden Hours: Track daily/weekly focus trends, completion rates, category distributions, and discover your peak productive hours (Morning, Afternoon, Evening, Night).
+• Milestone Totals: Comprehensive overview of total check-ins, visited places, completed Pomodoros, and daily focus averages.
 
 【Desktop Android Widget】
 • Instant Widget Check-In: Log your current location directly from your home screen without opening the app.
@@ -131,7 +145,7 @@ With zero ads, zero accounts, and 100% local-first data storage, TimeFlow turns 
 • Location (ACCESS_FINE_LOCATION): Only accessed in the foreground when you tap check-in. TimeFlow NEVER performs silent background location tracking.
 • Privacy Policy: https://chonggao9.github.io/timeflow/privacy.html
 
-Make your time visible. Track your journey with grace. Download TimeFlow today!
+Make your time visible. Track your journey, protect your focus, and live with grace. Download TimeFlow today!
 ```
 
 ---

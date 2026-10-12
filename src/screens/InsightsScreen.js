@@ -4,13 +4,19 @@ import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getRecords, clearAll, getRecordsFingerprint, updateRecord } from '../storage/store';
-import { computePathStats, formatDuration, isFocusRecord, getTravelRecords } from '../utils/stats';
+import { getRecords, clearAll, getRecordsFingerprint, updateFocusSession, getFocusSessions } from '../storage/store';
+import { computePathStats, formatDuration } from '../utils/stats';
 import { getPlaceOptions, queryJourney, buildDurationHistogram } from '../utils/analytics';
 import { radius, shadow } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import ModeIcon from '../components/ModeIcon';
+import {
+  FOCUS_CATEGORIES,
+  UNCATEGORIZED,
+  normalizeCategory,
+  getCategoryMeta,
+} from '../utils/focusCategories';
 import BarChart from '../components/charts/BarChart';
 import HistoryView from '../components/HistoryView';
 import RouteMapScreen from './RouteMapScreen';
@@ -26,6 +32,7 @@ export default function InsightsScreen() {
   const FOCUS_PRESETS_KEYS = ['pomodoro.helpWork', 'pomodoro.helpStudy', 'pomodoro.helpCreate', 'pomodoro.helpBodyMind', 'pomodoro.helpLife', 'pomodoro.helpPlan'];
 
   const [records, setRecords] = useState([]);
+  const [focusSessions, setFocusSessions] = useState([]);
   const [placeOptions, setPlaceOptions] = useState([]);
   const [paths, setPaths] = useState([]);
   const [fromKey, setFromKey] = useState(null);
@@ -47,10 +54,11 @@ export default function InsightsScreen() {
     const fp = await getRecordsFingerprint();
     if (lastFingerprintRef.current === fp) return;
     lastFingerprintRef.current = fp;
-    const all = await getRecords();
-    setRecords(all);
-    setPlaceOptions(getPlaceOptions(all));
-    const computedPaths = computePathStats(all);
+    const [travel, focus] = await Promise.all([getRecords(), getFocusSessions()]);
+    setRecords(travel);
+    setFocusSessions(focus);
+    setPlaceOptions(getPlaceOptions(travel));
+    const computedPaths = computePathStats(travel);
     setPaths(computedPaths);
 
     setFromKey(prevFrom => {
@@ -97,6 +105,7 @@ export default function InsightsScreen() {
           await clearAll();
           lastFingerprintRef.current = null;
           setRecords([]);
+          setFocusSessions([]);
           setPaths([]);
           setPlaceOptions([]);
           setResult(null);
@@ -110,7 +119,7 @@ export default function InsightsScreen() {
   const fromPlace = placeOptions.find(o => o.key === fromKey);
   const toPlace = placeOptions.find(o => o.key === toKey);
   // 行程域记录：专注记录不属于行程，总览看板与下面的历史列表都只看各自域
-  const travelRecords = useMemo(() => getTravelRecords(records), [records]);
+  const travelRecords = useMemo(() => records, [records]);
   const noData = travelRecords.length === 0;
 
   // 结果派生
@@ -121,17 +130,6 @@ export default function InsightsScreen() {
   const delta = result && result.weeklyTrend[7] != null && result.weeklyTrend[6] != null
     ? result.weeklyTrend[7] - result.weeklyTrend[6] : null;
   const breakdown = result && result.breakdown.length > 1 ? result.breakdown : null;
-
-  // 6 大类与未分类定义 (与 PomodoroTimer 严格保持一致)
-  const FOCUS_CATEGORIES = useMemo(() => [
-    { key: 'pomodoro.helpWork',     nameKey: 'pomodoro.helpWork',     icon: '💼', color: '#2F4B7C' },
-    { key: 'pomodoro.helpStudy',    nameKey: 'pomodoro.helpStudy',    icon: '📚', color: '#E4572E' },
-    { key: 'pomodoro.helpCreate',   nameKey: 'pomodoro.helpCreate',   icon: '🎨', color: '#E9A23B' },
-    { key: 'pomodoro.helpBodyMind', nameKey: 'pomodoro.helpBodyMind', icon: '🧘', color: '#4E9F7D' },
-    { key: 'pomodoro.helpLife',     nameKey: 'pomodoro.helpLife',     icon: '🧹', color: '#5E9BC9' },
-    { key: 'pomodoro.helpPlan',     nameKey: 'pomodoro.helpPlan',     icon: '💡', color: '#7B5EA7' },
-  ], []);
-  const UNCATEGORIZED = useMemo(() => ({ key: 'insights.uncategorized', nameKey: 'insights.uncategorized', icon: '📁', color: '#B8AFA8' }), []);
 
   const formatShortDuration = useCallback((sec) => {
     if (!sec || sec <= 0) return '0m';
@@ -146,7 +144,7 @@ export default function InsightsScreen() {
   }, []);
 
   // 基础专注数据衍生与过滤
-  const allFocusRecords = useMemo(() => records.filter(isFocusRecord), [records]);
+  const allFocusRecords = useMemo(() => focusSessions, [focusSessions]);
 
   const { focusRecords, prevFocusRecords, daysCount, daysLabel } = useMemo(() => {
     const now = new Date();
@@ -298,30 +296,19 @@ export default function InsightsScreen() {
     let totalSec = 0;
 
     focusRecords.forEach(r => {
-      let matchedKey = 'insights.uncategorized';
-      if (r.category) {
-        const found = FOCUS_CATEGORIES.find(c => c.key === r.category);
-        if (found) matchedKey = found.key;
-      } else {
-        // 向前兼容：历史旧版本无 category 字段，分类存放在 goalName 或 locationName
-        const raw = (r.goalName || r.locationName || '');
-        if (raw.includes('学习') || raw.includes('Study') || raw.includes('📚')) matchedKey = 'pomodoro.helpStudy';
-        else if (raw.includes('工作') || raw.includes('Work') || raw.includes('💼')) matchedKey = 'pomodoro.helpWork';
-        else if (raw.includes('创作') || raw.includes('Create') || raw.includes('🎨')) matchedKey = 'pomodoro.helpCreate';
-        else if (raw.includes('身心') || raw.includes('Wellness') || raw.includes('Body') || raw.includes('🧘')) matchedKey = 'pomodoro.helpBodyMind';
-        else if (raw.includes('生活') || raw.includes('Life') || raw.includes('🧹')) matchedKey = 'pomodoro.helpLife';
-        else if (raw.includes('规划') || raw.includes('Plan') || raw.includes('💡')) matchedKey = 'pomodoro.helpPlan';
-      }
+      const normalizedKey = r.category
+        ? normalizeCategory(r.category)
+        : null;
+      const matchedKey = normalizedKey || UNCATEGORIZED.key;
       const taskName = (r.goalName || r.locationName || '').trim() || t('home.unnamedFocus');
       const dur = Number(r.duration) || 0;
       totalSec += dur;
 
       if (!catMap[matchedKey]) {
-        const meta = FOCUS_CATEGORIES.find(c => c.key === matchedKey) || UNCATEGORIZED;
+        const meta = getCategoryMeta(matchedKey, t);
         catMap[matchedKey] = {
           key: matchedKey,
-          name: t(meta.nameKey, meta.key),
-          icon: meta.icon,
+          name: meta.name,
           color: meta.color,
           sec: 0,
           count: 0,
@@ -346,7 +333,7 @@ export default function InsightsScreen() {
         };
       })
       .sort((a, b) => b.sec - a.sec);
-  }, [focusRecords, FOCUS_CATEGORIES, UNCATEGORIZED, t]);
+  }, [focusRecords, t]);
 
   // 习惯洞察引擎：黄金时段与智能总结
   const habitInsights = useMemo(() => {
@@ -409,16 +396,13 @@ export default function InsightsScreen() {
     if (!draftName.trim() || !renameTarget) return;
     const newName = draftName.trim();
     if (newName !== renameTarget) {
-      const allRecords = await getRecords();
-      // 专注目标名存在 location_name 列（表里没有 goal_name 列）；比较时用与统计一致的“有效任务名”，
-      // 这样未命名专注（占位名）与具名任务都能被正确匹配。
+      const allFocus = await getFocusSessions();
       const focusName = (r) => (r.goalName || r.locationName || '').trim() || t('home.unnamedFocus');
-      const toUpdate = allRecords.filter(r => isFocusRecord(r) && focusName(r) === renameTarget);
+      const toUpdate = allFocus.filter(r => focusName(r) === renameTarget);
       for (const r of toUpdate) {
-        await updateRecord(r.id, { locationName: newName });
+        await updateFocusSession(r.id, { goalName: newName });
       }
-      lastFingerprintRef.current = null;
-      loadData();
+      setFocusSessions(await getFocusSessions());
     }
     setRenameTarget(null);
   };
@@ -444,7 +428,7 @@ export default function InsightsScreen() {
       </View>
 
       {view === 'history' ? (
-        <HistoryView records={records.filter(r => !isFocusRecord(r))} onShowMap={setMapTrip} onShowReceipt={setReceiptTrip} />
+        <HistoryView records={records} onShowMap={setMapTrip} onShowReceipt={setReceiptTrip} />
       ) : view === 'focus' ? (
             <>
               {/* 顶部时间范围筛选器 */}
@@ -618,8 +602,7 @@ export default function InsightsScreen() {
                               activeOpacity={0.7}
                             >
                               <View style={styles.catDistLeft}>
-                                <Text style={styles.catDistIcon}>{cat.icon}</Text>
-                                <Text style={styles.catDistName} numberOfLines={1}>{cat.name}</Text>
+      <Text style={styles.catDistName} numberOfLines={1}>{cat.name}</Text>
                               </View>
 
                               <View style={styles.catDistRight}>
@@ -760,7 +743,7 @@ export default function InsightsScreen() {
                   <View style={styles.emptyCatRow}>
                     {FOCUS_CATEGORIES.map(c => (
                       <View key={c.key} style={styles.emptyCatChip}>
-                        <Text style={styles.emptyCatChipText}>{t(c.nameKey)}</Text>
+                        <Text style={styles.emptyCatChipText}>{t(c.i18nKey)}</Text>
                       </View>
                     ))}
                   </View>
@@ -1262,9 +1245,6 @@ const makeStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flex: 1,
-  },
-  catDistIcon: {
-    fontSize: 18,
   },
   catDistName: {
     fontSize: 14,

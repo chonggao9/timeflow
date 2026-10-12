@@ -2,12 +2,14 @@
   "expo": {
     "name": "TimeFlow",
     "slug": "timeflow",
-    "version": "1.2.3",
+    "version": "1.2.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "backgroundColor": "#FF6B6B"
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FBF5EF"
     },
     "ios": {
       "supportsTablet": false,
@@ -19,7 +21,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FF6B6B"
+        "backgroundColor": "#F63437"
       },
       "package": "com.chonggao.timeflow",
       "permissions": [
@@ -32,7 +34,7 @@
           "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_KEY"
         }
       },
-      "versionCode": 25
+      "versionCode": 26
     },
     "plugins": [
       "./plugins/withRemoveMediaPermissions",
