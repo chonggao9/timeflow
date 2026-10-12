@@ -1,69 +1,135 @@
-// 备份调度：`backupNow`（人工立即备份）/ `runBackupIfDue`（自动备份入口）。
-// 口令存 secure-store（@key timeflow_backup_passphrase），供自动备份静默重加密；
-// 换机离线恢复时仍手输口令（不读这里）。
-// `running` 模块级防重入；成功才写 last-success（Back up 标签）；任何失败静默，不抛错。
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
-import { makeLocalBackup } from './backup';
-import { putBackup, getWebDavConfig } from './webdav';
+import { performBackup } from './backup';
+import { getBackupState, getBackupPassphrase } from './state';
 
-const AUTO_KEY = 'timeflow_backup_auto';
-const PASS_KEY = 'timeflow_backup_passphrase';
-const LAST_SUCCESS_KEY = 'timeflow_backup_last_success';
-const THROTTLE_MS = 30 * 60 * 1000;
+export const AUTO_KEY = 'timeflow_backup_auto';
+export const THROTTLE_MS = 30 * 60 * 1000; // 30 分钟最小间隔
+export const DEBOUNCE_MS = 60 * 1000;      // 60 秒数据变化防抖
 
-// 模块级防重入标志：一次只允许一个备份流程在跑。
-let running = false;
+let isRunning = false;
+let debounceTimer = null;
+let hasPendingChange = false;
+let appStateSubscription = null;
 
-// ---- 备份口令（secure-store）。设置/清除；读取用于备份时取当前口令。 ----
-export async function setBackupPassphrase(passphrase) {
-  if (passphrase) await SecureStore.setItemAsync(PASS_KEY, passphrase);
-  else await SecureStore.deleteItemAsync(PASS_KEY);
-}
-export async function getBackupPassphrase() {
-  try { return await SecureStore.getItemAsync(PASS_KEY); } catch (e) { return null; }
-}
-
-// ---- 自动备份开关 ----
 export async function setAutoBackup(enabled) {
   await AsyncStorage.setItem(AUTO_KEY, enabled ? '1' : '0');
 }
+
 export async function isAutoBackupEnabled() {
-  try { return (await AsyncStorage.getItem(AUTO_KEY)) === '1'; } catch (e) { return false; }
-}
-
-// 上次成功备份的时间戳（epoch ms），用于「上次备份」标签；无则 0。
-export async function getLastBackupTime() {
-  try { const v = await AsyncStorage.getItem(LAST_SUCCESS_KEY); return v ? Number(v) : 0; } catch (e) { return 0; }
-}
-
-// 立即备份：本地加密备份 +（已配 WebDAV 则上传）。返回 { uri, uploaded }，失败返回 null。
-export async function backupNow({ passphrase } = {}) {
-  if (running) return null;
-  running = true;
   try {
-    const p = passphrase || await getBackupPassphrase();
-    if (!p) return null;
-    const uri = await makeLocalBackup({ passphrase: p });
-    const dav = await getWebDavConfig();
-    let uploaded = false;
-    if (dav && dav.url) { await putBackup(uri); uploaded = true; }
-    await AsyncStorage.setItem(LAST_SUCCESS_KEY, String(Date.now()));
-    return { uri, uploaded };
+    return (await AsyncStorage.getItem(AUTO_KEY)) === '1';
   } catch (e) {
-    if (__DEV__) console.warn('[backup] failed:', (e && e.message) || e);
-    return null;
-  } finally {
-    running = false;
+    return false;
   }
 }
 
-// 自动备份入口（App 打开 / 打卡后调）：未启用 / 无口令 / 未到期 → 跳过；否则 backupNow。
+/**
+ * 手动立即备份（忽略节流，force=true 时忽略哈希比对）
+ */
+export async function backupNow({ force = false } = {}) {
+  if (isRunning) return { busy: true };
+  isRunning = true;
+  try {
+    const res = await performBackup({ isAuto: false, force });
+    hasPendingChange = false;
+    return res;
+  } finally {
+    isRunning = false;
+  }
+}
+
+/**
+ * 自动备份核心执行函数
+ */
+async function runAutoBackupInternal() {
+  if (isRunning) return false;
+  const [autoEnabled, pass, state] = await Promise.all([
+    isAutoBackupEnabled(),
+    getBackupPassphrase(),
+    getBackupState(),
+  ]);
+
+  if (!autoEnabled || !pass) return false;
+
+  // 节流检查：距上次备份是否已满 30 分钟
+  const lastAt = state.lastSuccessAt || 0;
+  if (Date.now() - lastAt < THROTTLE_MS) {
+    return false;
+  }
+
+  isRunning = true;
+  try {
+    const res = await performBackup({ isAuto: true, force: false });
+    hasPendingChange = false;
+    return !!res.success;
+  } catch (e) {
+    return false;
+  } finally {
+    isRunning = false;
+  }
+}
+
+/**
+ * 数据变更触发入口（打卡、修改、删除后调用）：
+ * 防抖 60 秒，并在满足 ≥ 30 分钟节流时触发
+ */
+export function notifyDataChanged() {
+  hasPendingChange = true;
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+  debounceTimer = setTimeout(() => {
+    debounceTimer = null;
+    runAutoBackupInternal().catch(() => {});
+  }, DEBOUNCE_MS);
+}
+
+/**
+ * 兼容旧调用的 runBackupIfDue（App 启动时执行一次）
+ */
 export async function runBackupIfDue({ force = false } = {}) {
-  if (!(await isAutoBackupEnabled())) return false;
-  if (!(await getBackupPassphrase())) return false;
-  const last = await getLastBackupTime();
-  if (!force && Date.now() - last < THROTTLE_MS) return false;
-  const result = await backupNow({});
-  return !!result;
+  const [autoEnabled, pass, state] = await Promise.all([
+    isAutoBackupEnabled(),
+    getBackupPassphrase(),
+    getBackupState(),
+  ]);
+
+  if (!autoEnabled || !pass) return false;
+
+  const lastAt = state.lastSuccessAt || 0;
+  if (!force && Date.now() - lastAt < THROTTLE_MS) {
+    return false;
+  }
+
+  if (isRunning) return false;
+  isRunning = true;
+  try {
+    const res = await performBackup({ isAuto: true, force });
+    hasPendingChange = false;
+    return !!res.success;
+  } catch (e) {
+    return false;
+  } finally {
+    isRunning = false;
+  }
+}
+
+/**
+ * 监听 App 切后台时自动补一次备份
+ */
+export function initAppStateBackupListener() {
+  if (appStateSubscription) return;
+
+  appStateSubscription = AppState.addEventListener('change', (nextState) => {
+    if (nextState === 'background' || nextState === 'inactive') {
+      if (hasPendingChange) {
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+          debounceTimer = null;
+        }
+        runBackupIfDue().catch(() => {});
+      }
+    }
+  });
 }

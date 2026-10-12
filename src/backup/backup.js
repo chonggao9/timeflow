@@ -1,97 +1,356 @@
-// 备份编排：本地加密备份生成 / 分享 / 从文件或原始串恢复。
-// 载体是 getRecords() 的 JSON 明文 → 加密成 envelope → 写 documentDirectory/timeflow-backups/。
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { getTrips, getRecords, getFocusSessions, importRecords } from '../storage/store';
-import { encrypt, decrypt, BadPassphraseError } from './crypto';
-import { collectPreferences, buildPlaintext, validatePlaintext, restorePreferences, SCHEMA_RECORDS_V2 } from './schema';
+import { Platform } from 'react-native';
+import { getTrips, getRecords, getFocusSessions, importRecords, clearAll } from '../storage/store';
+import { encrypt, decrypt, parseHeader, BadPassphraseError } from './crypto';
+import {
+  collectPreferences,
+  buildPlaintext,
+  validatePlaintext,
+  restorePreferences,
+  computeContentHash,
+  extractCounts,
+  SCHEMA_RECORDS_V2,
+} from './schema';
+import LocalTarget, { LOCAL_BACKUP_DIR } from './targets/LocalTarget';
+import { createWebDavTarget } from './webdav';
+import { getBackupState, updateBackupState, getBackupPassphrase } from './state';
 
-const BACKUP_DIR = `${FileSystem.documentDirectory}timeflow-backups/`;
-const KEEP_LOCAL = 5; // 本地目录只保留最近 N 份，避免无限堆积
+export { BadPassphraseError };
 
-// 备份文件名：timeflow-backup-YYYYMMDD-HHMMSS.json（本地时间）
-export function makeBackupFilename(date = new Date()) {
-  const p = n => String(n).padStart(2, '0');
-  return `timeflow-backup-${date.getFullYear()}${p(date.getMonth() + 1)}${p(date.getDate())}`
-    + `-${p(date.getHours())}${p(date.getMinutes())}${p(date.getSeconds())}.json`;
+/**
+ * 格式化时间为 YYYYMMDD-HHmm
+ */
+export function formatTimestampName(date = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  const y = date.getFullYear();
+  const m = p(date.getMonth() + 1);
+  const d = p(date.getDate());
+  const hh = p(date.getHours());
+  const mm = p(date.getMinutes());
+  return `${y}${m}${d}-${hh}${mm}`;
 }
 
-// 生成加密备份文件，返回本地 uri（含写入前建目录 + 写入后清理旧档）。
-export async function makeLocalBackup({ passphrase }) {
-  const [trips, records, focusSessions] = await Promise.all([getTrips(), getRecords(), getFocusSessions()]);
+export function makeBackupFilename(isSnap = false, date = new Date()) {
+  const prefix = isSnap ? 'timeflow-snap' : 'timeflow';
+  return `${prefix}-${formatTimestampName(date)}.tfb`;
+}
+
+/**
+ * 统一备份流水线
+ */
+export async function performBackup({ passphrase, isAuto = false, force = false } = {}) {
+  const pass = passphrase || (await getBackupPassphrase());
+  if (!pass) {
+    return { success: false, error: 'NO_PASSPHRASE' };
+  }
+
+  // 1. 收集数据与偏好
+  const [trips, records, focusSessions] = await Promise.all([
+    getTrips(),
+    getRecords(),
+    getFocusSessions(),
+  ]);
   const prefs = await collectPreferences();
+  const counts = {
+    records: records.length,
+    focus: focusSessions.length,
+    trips: trips.length,
+  };
+
+  // 2. 计算内容哈希（防冗余）
+  const contentHash = computeContentHash({ trips, records, focusSessions, preferences: prefs });
+  const state = await getBackupState();
+
+  if (!force && state.lastHash && state.lastHash === contentHash) {
+    return {
+      success: true,
+      skipped: true,
+      reason: 'SAME_HASH',
+      counts,
+    };
+  }
+
+  const localTarget = new LocalTarget();
+  const cloudTarget = await createWebDavTarget();
+
+  // 3. 防覆盖保护检查（仅针对自动备份且已配置云端）
+  if (isAuto && cloudTarget) {
+    try {
+      const cloudList = await cloudTarget.list();
+      // 获取最新云端文件的条数
+      let remoteLatestRecords = 0;
+      for (const item of cloudList) {
+        if (!item.isLegacy) {
+          try {
+            const raw = await cloudTarget.get(item.name);
+            const header = parseHeader(raw);
+            if (header && header.counts?.records != null) {
+              remoteLatestRecords = header.counts.records;
+              break;
+            }
+          } catch (e) {}
+        }
+      }
+
+      // 判定规则：本机记录数 < 最新远端版本记录数 × 50% 且 远端 ≥ 10 条
+      if (remoteLatestRecords >= 10 && records.length < remoteLatestRecords * 0.5) {
+        await updateBackupState({
+          status: 'needConfirm',
+          needConfirmReason: {
+            local: records.length,
+            remote: remoteLatestRecords,
+          },
+        });
+        return {
+          success: false,
+          needConfirm: true,
+          local: records.length,
+          remote: remoteLatestRecords,
+        };
+      }
+    } catch (e) {
+      // 检查异常不阻断，继续
+    }
+  }
+
+  // 4. 加密打包为 .tfb 格式
+  const deviceName = Platform.OS === 'android' ? 'Android Device' : 'iOS Device';
   const plaintext = buildPlaintext({ trips, records, focusSessions }, prefs);
-  const envelope = encrypt(passphrase, plaintext);
-  try {
-    await FileSystem.makeDirectoryAsync(BACKUP_DIR, { intermediates: true });
-  } catch (e) { /* 已存在则忽略 */ }
-  const uri = `${BACKUP_DIR}${makeBackupFilename()}`;
-  await FileSystem.writeAsStringAsync(uri, JSON.stringify(envelope), { encoding: FileSystem.EncodingType.UTF8 });
-  await pruneOldBackups(KEEP_LOCAL);
-  return uri;
+  const envelope = encrypt(pass, plaintext, {
+    device: deviceName,
+    counts,
+    hash: contentHash,
+  });
+  const envelopeStr = JSON.stringify(envelope);
+  const filename = makeBackupFilename(false);
+
+  // 5. 写入本地目标
+  await localTarget.put(filename, envelopeStr);
+  await localTarget.prune();
+
+  // 6. 写入 WebDAV 目标（若可用）
+  let cloudUploaded = false;
+  let cloudError = null;
+
+  if (cloudTarget) {
+    try {
+      await cloudTarget.put(filename, envelopeStr);
+      await cloudTarget.prune();
+      cloudUploaded = true;
+    } catch (err) {
+      cloudError = {
+        code: err.code || 'UNKNOWN',
+        at: Date.now(),
+        message: err.message || '上传云端失败',
+      };
+    }
+  }
+
+  // 7. 更新全局状态
+  await updateBackupState((s) => ({
+    ...s,
+    lastSuccessAt: Date.now(),
+    lastCounts: counts,
+    lastHash: contentHash,
+    status: cloudError ? 'failed' : 'ok',
+    cloud: {
+      enabled: !!cloudTarget,
+      lastError: cloudError,
+    },
+    local: {
+      enabled: true,
+    },
+  }));
+
+  return {
+    success: true,
+    filename,
+    uri: `${LOCAL_BACKUP_DIR}${filename}`,
+    counts,
+    cloudUploaded,
+    cloudError,
+  };
 }
 
-// 分享本地备份文件（复用 expo-sharing）。返回是否成功。
-export async function shareBackup(uri, dialogTitle) {
-  if (!(await Sharing.isAvailableAsync())) return false;
-  await Sharing.shareAsync(uri, { mimeType: 'application/json', dialogTitle: dialogTitle || 'TimeFlow backup' });
-  return true;
+/**
+ * 创建本地“恢复前快照”（标记 snap）
+ */
+export async function createPreRestoreSnapshot(passphrase) {
+  const pass = passphrase || (await getBackupPassphrase());
+  if (!pass) return null;
+
+  const [trips, records, focusSessions] = await Promise.all([
+    getTrips(),
+    getRecords(),
+    getFocusSessions(),
+  ]);
+  const prefs = await collectPreferences();
+  const counts = {
+    records: records.length,
+    focus: focusSessions.length,
+    trips: trips.length,
+  };
+  const hash = computeContentHash({ trips, records, focusSessions, preferences: prefs });
+
+  const plaintext = buildPlaintext({ trips, records, focusSessions }, prefs);
+  const envelope = encrypt(pass, plaintext, {
+    device: '本机快照',
+    counts,
+    hash,
+  });
+
+  const localTarget = new LocalTarget();
+  const filename = makeBackupFilename(true);
+  await localTarget.put(filename, JSON.stringify(envelope));
+  await localTarget.prune();
+  return filename;
 }
 
-// 读文件（content:// 先拷贝到 cache 再读）→ 原始串 →
-export async function readAndRestore(fileUri, passphrase) {
-  const localUri = await ensureReadable(fileUri);
-  const raw = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.UTF8 });
-  return readAndRestoreFromRaw(raw, passphrase);
-}
-
-// 从原始串恢复（文件路径与云端下载共用此入口）。返回 { imported, skipped }。
-export async function readAndRestoreFromRaw(raw, passphrase) {
+/**
+ * 从原始 JSON 字符串执行解密并恢复
+ * @param {string} raw - 密文包字符串
+ * @param {string} passphrase - 密码
+ * @param {'merge'|'overwrite'} mode - 恢复模式
+ */
+export async function restoreFromRaw(raw, passphrase, mode = 'merge') {
   let envelope;
-  try { envelope = JSON.parse(raw); } catch (e) { throw new BadPassphraseError('not a TimeFlow backup'); }
+  try {
+    envelope = JSON.parse(raw);
+  } catch (e) {
+    throw new BadPassphraseError('无效的备份文件');
+  }
 
-  const plaintext = decrypt(passphrase, envelope); // 先验 HMAC，错口令抛 BadPassphraseError
-  if (!validatePlaintext(plaintext)) throw new BadPassphraseError('invalid backup format');
+  // 1. 解密明文
+  const plaintext = decrypt(passphrase, envelope);
+  if (!validatePlaintext(plaintext)) {
+    throw new BadPassphraseError('备份数据格式不符合规范');
+  }
 
+  // 2. 若是完全覆盖模式，先清空现有数据
+  if (mode === 'overwrite') {
+    await clearAll();
+  }
+
+  // 3. 导入数据
   let result;
   if (plaintext.schema === SCHEMA_RECORDS_V2) {
-    result = await importRecords(plaintext.data || { trips: [], records: plaintext.data?.records || [], focusSessions: [] });
+    result = await importRecords(
+      plaintext.data || { trips: [], records: plaintext.data?.records || [], focusSessions: [] }
+    );
   } else {
     result = await importRecords(plaintext.records);
   }
+
+  // 4. 恢复偏好
   await restorePreferences(plaintext.preferences);
+
+  // 5. 更新状态
+  const counts = extractCounts(plaintext.data || plaintext);
+  await updateBackupState((s) => ({
+    ...s,
+    lastCounts: counts,
+  }));
+
+  return {
+    imported: result.imported,
+    skipped: result.skipped,
+    mode,
+    counts,
+  };
+}
+
+/**
+ * 分享备份文件（调用系统分享）
+ */
+export async function shareBackup(filename) {
+  if (!(await Sharing.isAvailableAsync())) return false;
+  const uri = `${LOCAL_BACKUP_DIR}${filename}`;
+  await Sharing.shareAsync(uri, {
+    mimeType: 'application/json',
+    dialogTitle: 'TimeFlow 备份导出',
+  });
+  return true;
+}
+
+/**
+ * 列出所有历史版本（本地与云端合并去重，免密解析头部）
+ */
+export async function listUnifiedVersions() {
+  const localTarget = new LocalTarget();
+  const cloudTarget = await createWebDavTarget();
+
+  const [localRows, cloudRows] = await Promise.all([
+    localTarget.list().catch(() => []),
+    cloudTarget ? cloudTarget.list().catch(() => []) : Promise.resolve([]),
+  ]);
+
+  const map = new Map();
+
+  // 处理本地项
+  for (const row of localRows) {
+    const raw = await localTarget.get(row.name).catch(() => null);
+    const header = raw ? parseHeader(raw) : null;
+    map.set(row.name, {
+      name: row.name,
+      modifiedAt: row.modifiedAt,
+      size: row.size,
+      isSnap: row.isSnap,
+      isLegacy: row.isLegacy,
+      device: header?.device || 'Android',
+      counts: header?.counts || { records: 0, focus: 0, trips: 0 },
+      createdAt: header?.createdAt || new Date(row.modifiedAt).toISOString(),
+      sources: ['local'],
+    });
+  }
+
+  // 合并云端项
+  for (const row of cloudRows) {
+    if (map.has(row.name)) {
+      const existing = map.get(row.name);
+      if (!existing.sources.includes('cloud')) {
+        existing.sources.push('cloud');
+      }
+    } else {
+      let header = null;
+      if (!row.isLegacy) {
+        try {
+          const raw = await cloudTarget.get(row.name);
+          header = parseHeader(raw);
+        } catch (e) {}
+      }
+      map.set(row.name, {
+        name: row.name,
+        modifiedAt: row.modifiedAt,
+        size: row.size,
+        isSnap: false,
+        isLegacy: row.isLegacy,
+        device: header?.device || (row.isLegacy ? 'Legacy Cloud' : 'Cloud Device'),
+        counts: header?.counts || (row.isLegacy ? null : { records: 0, focus: 0, trips: 0 }),
+        createdAt: header?.createdAt || new Date(row.modifiedAt).toISOString(),
+        sources: ['cloud'],
+      });
+    }
+  }
+
+  const result = Array.from(map.values());
+  result.sort((a, b) => b.modifiedAt - a.modifiedAt);
   return result;
 }
 
-// content://（document-picker）不能直读，拷贝到 cache 后返回本地 uri。
-async function ensureReadable(fileUri) {
-  if (!fileUri || !fileUri.startsWith('content://')) return fileUri;
-  const dest = `${FileSystem.cacheDirectory}timeflow-restore-${Date.now()}.json`;
-  await FileSystem.copyAsync({ from: fileUri, to: dest });
-  return dest;
-}
-
-// 列出本地备份（按 mtime 降序：最新在前）。
-async function listBackups() {
-  try {
-    const names = await FileSystem.readDirectoryAsync(BACKUP_DIR);
-    const rows = [];
-    for (const name of names) {
-      const uri = BACKUP_DIR + name;
-      const info = await FileSystem.getInfoAsync(uri, { md5: false });
-      if (info.exists) rows.push({ name, uri, mtime: info.modificationTime || 0 });
-    }
-    rows.sort((a, b) => b.mtime - a.mtime);
-    return rows;
-  } catch (e) {
-    return [];
+/**
+ * 读取某个版本的原始密文字符串（优先本地，若无从云端拉取）
+ */
+export async function getVersionRawContent(versionItem) {
+  const localTarget = new LocalTarget();
+  if (versionItem.sources.includes('local')) {
+    try {
+      return await localTarget.get(versionItem.name);
+    } catch (e) {}
   }
-}
-
-// 只留最近 max 份，其余删掉。
-export async function pruneOldBackups(max = KEEP_LOCAL) {
-  const rows = await listBackups();
-  for (let i = max; i < rows.length; i++) {
-    try { await FileSystem.deleteAsync(rows[i].uri, { idempotent: true }); } catch (e) { /* 忽略 */ }
+  const cloudTarget = await createWebDavTarget();
+  if (cloudTarget && versionItem.sources.includes('cloud')) {
+    return await cloudTarget.get(versionItem.name);
   }
+  throw new Error('无法读取该版本的备份文件');
 }

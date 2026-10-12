@@ -1,6 +1,7 @@
 // 备份明文包的结构与收集/校验。
 // 不含高德 Key（明文凭证）——备份快照只覆盖「数据 + 设备偏好」，凭证永不入包。
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import CryptoJS from 'crypto-js';
 
 export const BACKUP_VERSION = 2;
 export const SCHEMA_RECORDS_V1 = 'records-v1';
@@ -24,6 +25,23 @@ export async function collectPreferences() {
   return prefs;
 }
 
+// 计算数据实体内容的规范 SHA-256 哈希（忽略易变的外部时间戳，纯数据一致性对比）
+export function computeContentHash(data) {
+  const normTrips = (data.trips || []).map(t => ({ id: t.id, start: t.startTs || t.start_ts, end: t.endTs || t.end_ts, name: t.name }));
+  const normRecords = (data.records || []).map(r => ({ id: r.id, ts: r.timestamp, loc: r.locationName || r.location_name, mode: r.mode }));
+  const normFocus = (data.focusSessions || []).map(f => ({ id: f.id, ts: f.timestamp, goal: f.goalName || f.goal_name, dur: f.duration }));
+  const raw = JSON.stringify({ trips: normTrips, records: normRecords, focus: normFocus, prefs: data.preferences || {} });
+  return CryptoJS.SHA256(raw).toString(CryptoJS.enc.Hex);
+}
+
+export function extractCounts(data) {
+  return {
+    records: (data?.records || []).length,
+    focus: (data?.focusSessions || []).length,
+    trips: (data?.trips || []).length,
+  };
+}
+
 // 明文包。data 为 { trips, records, focusSessions }；preferences 为 collectPreferences() 结果。
 export function buildPlaintext(data, preferences) {
   let payload;
@@ -37,6 +55,7 @@ export function buildPlaintext(data, preferences) {
     app: 'TimeFlow',
     backupVersion: BACKUP_VERSION,
     schema: SCHEMA_RECORDS_V2,
+    schemaVersion: 2,
     createdAt: new Date().toISOString(),
     data: {
       trips: payload.trips || [],

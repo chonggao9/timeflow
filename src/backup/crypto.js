@@ -1,62 +1,71 @@
 // 备份加密核心：PBKDF2-SHA256 派生密钥 + AES-256-CBC 加密 + HMAC-SHA256 认证。
 //
-// 为什么不用 AES-GCM：crypto-js 官方核心包从未捆绑 GCM 模式（4.1.1 实测只有
-// CBC/CFB/CTR/OFB/ECB，无 mode-gcm.js）。改用 CBC+HMAC（Encrypt-then-MAC）——两类
-// 原语 crypto-js 都有，且 tag 由我们在 decrypt 里显式校验，比依赖 GCM 内部不透明的
-// tag 处理更可控：错口令 → HMAC 不匹配 → 确定性抛 BadPassphraseError，绝不往下走 AES。
-//
-// 用 crypto-js（CJS、纯 JS、Hermes 可直接跑），而非 @noble/*（后者纯 ESM，Metro/Hermes
-// 打包有风险）。crypto-js 自带 UTF8/Hex/Base64 编解码，规避 Hermes 缺 TextEncoder/btoa。
-//
-// 备份包外壳（envelope，JSON）：
-//   { app:'TimeFlow', backupVersion:1, kdf:'pbkdf2-sha256', enc:'aes-256-cbc',
-//     kdfIterations:150000, salt:'<hex 16B>', iv:'<hex 16B>',
-//     ciphertext:'<base64 AES-CBC 密文>', mac:'<base64 HMAC-SHA256>',
-//     createdAt:'ISO' }
-// mac = HMAC-SHA256(macKey, `${ivHex}:${ciphertextB64}`)，把字面串纳入认证，避免规范化攻击。
+// 新规范（v1，.tfb 格式）：
+//   {
+//     "v": 1,
+//     "createdAt": "2026-10-12T18:15:00+08:00",
+//     "device": "Pixel 7",
+//     "counts": { "records": 1248, "focus": 36, "trips": 210 },
+//     "hash": "<明文内容 SHA-256>",
+//     "kdf": { "alg": "PBKDF2-SHA256", "iter": 200000, "salt": "<base64>" },
+//     "iv": "<base64>",
+//     "ciphertext": "<base64>",
+//     "mac": "<base64>"
+//   }
+// 文件头（除 ciphertext 外）为明文，供版本列表免密直接预览；
+// MAC 覆盖头部关键信息（v, kdf, iv, counts）与密文，防止头部篡改；
+// 同时完全向下兼容旧版无头 JSON 备份（PBKDF2 15,000 次，Hex 格式）。
+
 import CryptoJS from 'crypto-js';
 
-// 纯 JS 环境下（Hermes 单线程），15,000 次既能保持充足的口令抗暴力破解强度，
-// 又能将手机端执行时间从 3~8s 降低至 150~250ms，避免主线程 Event Loop 假死或 ANR。
-// 解密时会自适应读取备份 envelope.kdfIterations，完全向后兼容旧版备份（150,000 次）。
-export const KDF_ITERATIONS = 15000;
+export const TFB_VERSION = 1;
+export const TFB_KDF_ITERATIONS = 200000;
+export const LEGACY_KDF_ITERATIONS = 15000;
 const SALT_BYTES = 16;
-const IV_BYTES = 16;   // AES 块大小
-const KEY_BYTES = 64;  // PBKDF2 派生 64B，前 32B=AES 密钥，后 32B=HMAC 密钥
+const IV_BYTES = 16;
+const KEY_BYTES = 64; // 前 32B=AES 密钥，后 32B=HMAC 密钥
 
-// 口令错误 / 文件损坏 / 篡改统一抛此错，调用方据此提示「口令错误或文件已损坏」。
 export class BadPassphraseError extends Error {
-  constructor(message = 'wrong passphrase or corrupted file') {
+  constructor(message = '密码不正确或文件已损坏') {
     super(message);
     this.name = 'BadPassphraseError';
   }
 }
 
-// 生成 n 字节随机，hex 编码。Hermes 下依赖 global.crypto（由 react-native-get-random-values 注入）。
+// WordArray 随机数生成
+export function randomBytesBase64(n) {
+  return CryptoJS.lib.WordArray.random(n).toString(CryptoJS.enc.Base64);
+}
+
 export function randomBytesHex(n) {
   return CryptoJS.lib.WordArray.random(n).toString(CryptoJS.enc.Hex);
 }
 
-// PBKDF2 一次派生双密钥：encKey(AES-256) + macKey(HMAC)。
-function deriveKeys(passphrase, saltHex, iterations) {
-  const salt = CryptoJS.enc.Hex.parse(saltHex);
+// PBKDF2 派生双密钥（支持 Base64 或 Hex 输入的 salt）
+function deriveKeys(passphrase, saltInput, iterations) {
+  let salt;
+  if (typeof saltInput === 'string' && saltInput.length === 32 && /^[0-9a-fA-F]+$/.test(saltInput)) {
+    salt = CryptoJS.enc.Hex.parse(saltInput);
+  } else {
+    try {
+      salt = CryptoJS.enc.Base64.parse(saltInput);
+    } catch (e) {
+      salt = CryptoJS.enc.Utf8.parse(saltInput);
+    }
+  }
+
   const dk = CryptoJS.PBKDF2(passphrase, salt, {
-    keySize: KEY_BYTES / 4, // 32-bit words = 64B
-    iterations,
+    keySize: KEY_BYTES / 4,
+    iterations: iterations || TFB_KDF_ITERATIONS,
     hasher: CryptoJS.algo.SHA256,
   });
+
   const encKey = CryptoJS.lib.WordArray.create(dk.words.slice(0, 8), 32);
   const macKey = CryptoJS.lib.WordArray.create(dk.words.slice(8, 16), 32);
   return { encKey, macKey };
 }
 
-// HMAC-SHA256 over `${ivHex}:${ciphertextB64}`（认证字面串，双方一致即可复验）。
-function computeMac(macKey, ivHex, ciphertextB64) {
-  const data = CryptoJS.enc.Utf8.parse(`${ivHex}:${ciphertextB64}`);
-  return CryptoJS.HmacSHA256(data, macKey).toString(CryptoJS.enc.Base64);
-}
-
-// 常数时间字符串比较（长度断定为两段，减少时序泄漏）。
+// 常数时间字符串对比（防时序攻击）
 function ctEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
   let diff = 0;
@@ -64,15 +73,39 @@ function ctEqual(a, b) {
   return diff === 0;
 }
 
-// 加密明文对象 → 加密外壳。opts 可注入固定 salt/iv/iterations（仅测试用）。
-export function encrypt(passphrase, plaintextObj, opts = {}) {
-  const saltHex = opts.saltHex || randomBytesHex(SALT_BYTES);
-  const ivHex = opts.ivHex || randomBytesHex(IV_BYTES);
-  const iterations = opts.iterations || KDF_ITERATIONS;
-  const { encKey, macKey } = deriveKeys(passphrase, saltHex, iterations);
-  const iv = CryptoJS.enc.Hex.parse(ivHex);
+// 计算 .tfb 规范的 MAC：覆盖关键头部 + 密文
+function computeTfbMac(macKey, { v, kdf, iv, counts, ciphertext }) {
+  const normCounts = `${counts?.records || 0}:${counts?.focus || 0}:${counts?.trips || 0}`;
+  const authPayload = `v${v}|${kdf?.alg}|${kdf?.iter}|${kdf?.salt}|${iv}|${normCounts}|${ciphertext}`;
+  const data = CryptoJS.enc.Utf8.parse(authPayload);
+  return CryptoJS.HmacSHA256(data, macKey).toString(CryptoJS.enc.Base64);
+}
 
+// 计算旧版 legacy MAC
+function computeLegacyMac(macKey, ivHex, ciphertextB64) {
+  const data = CryptoJS.enc.Utf8.parse(`${ivHex}:${ciphertextB64}`);
+  return CryptoJS.HmacSHA256(data, macKey).toString(CryptoJS.enc.Base64);
+}
+
+/**
+ * 加密打包为 .tfb 格式
+ * @param {string} passphrase - 用户密码
+ * @param {object} plaintextObj - 明文数据包
+ * @param {object} meta - 外部元数据 { device, counts, hash, createdAt, iterations }
+ */
+export function encrypt(passphrase, plaintextObj, meta = {}) {
+  const iterations = meta.iterations || TFB_KDF_ITERATIONS;
+  const saltB64 = meta.saltB64 || randomBytesBase64(SALT_BYTES);
+  const ivB64 = meta.ivB64 || randomBytesBase64(IV_BYTES);
+  const createdAt = meta.createdAt || new Date().toISOString();
+  const device = meta.device || 'Android';
+  const counts = meta.counts || { records: 0, focus: 0, trips: 0 };
+  const hash = meta.hash || '';
+
+  const { encKey, macKey } = deriveKeys(passphrase, saltB64, iterations);
+  const iv = CryptoJS.enc.Base64.parse(ivB64);
   const plainStr = typeof plaintextObj === 'string' ? plaintextObj : JSON.stringify(plaintextObj);
+
   const enc = CryptoJS.AES.encrypt(plainStr, encKey, {
     iv,
     mode: CryptoJS.mode.CBC,
@@ -80,42 +113,151 @@ export function encrypt(passphrase, plaintextObj, opts = {}) {
   });
   const ciphertextB64 = enc.ciphertext.toString(CryptoJS.enc.Base64);
 
-  return {
-    app: 'TimeFlow',
-    backupVersion: 1,
-    kdf: 'pbkdf2-sha256',
-    enc: 'aes-256-cbc',
-    kdfIterations: iterations,
-    salt: saltHex,
-    iv: ivHex,
+  const kdfObj = {
+    alg: 'PBKDF2-SHA256',
+    iter: iterations,
+    salt: saltB64,
+  };
+
+  const macB64 = computeTfbMac(macKey, {
+    v: TFB_VERSION,
+    kdf: kdfObj,
+    iv: ivB64,
+    counts,
     ciphertext: ciphertextB64,
-    mac: computeMac(macKey, ivHex, ciphertextB64),
-    createdAt: new Date().toISOString(),
+  });
+
+  return {
+    v: TFB_VERSION,
+    createdAt,
+    device,
+    counts,
+    hash,
+    kdf: kdfObj,
+    iv: ivB64,
+    ciphertext: ciphertextB64,
+    mac: macB64,
   };
 }
 
-// 解密外壳 → 明文对象。先验 HMAC：错口令 / 篡改 → 不匹配 → BadPassphraseError。
+/**
+ * 解密包（自动识别并兼容 .tfb 新版与 legacy 旧版）
+ */
 export function decrypt(passphrase, envelope) {
+  if (!envelope || typeof envelope !== 'object') {
+    throw new BadPassphraseError('无效的备份文件格式');
+  }
+
+  // 1. 新版 .tfb (带有 v: 1)
+  if (envelope.v === 1) {
+    try {
+      const kdf = envelope.kdf || {};
+      const iterations = kdf.iter || TFB_KDF_ITERATIONS;
+      const saltB64 = kdf.salt;
+      const ivB64 = envelope.iv;
+      const ciphertextB64 = envelope.ciphertext;
+
+      if (!saltB64 || !ivB64 || !ciphertextB64) {
+        throw new BadPassphraseError('备份文件关键字段缺失');
+      }
+
+      const { encKey, macKey } = deriveKeys(passphrase, saltB64, iterations);
+      const expectedMac = computeTfbMac(macKey, {
+        v: envelope.v,
+        kdf,
+        iv: ivB64,
+        counts: envelope.counts,
+        ciphertext: ciphertextB64,
+      });
+
+      if (!ctEqual(expectedMac, envelope.mac || '')) {
+        throw new BadPassphraseError('密码不正确或文件已损坏');
+      }
+
+      const iv = CryptoJS.enc.Base64.parse(ivB64);
+      const ct = CryptoJS.enc.Base64.parse(ciphertextB64);
+      const decrypted = CryptoJS.AES.decrypt(
+        CryptoJS.lib.CipherParams.create({ ciphertext: ct }),
+        encKey,
+        { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+      );
+
+      const plainStr = decrypted.toString(CryptoJS.enc.Utf8);
+      if (!plainStr) throw new BadPassphraseError('密码不正确或文件已损坏');
+      return JSON.parse(plainStr);
+    } catch (e) {
+      if (e instanceof BadPassphraseError) throw e;
+      throw new BadPassphraseError('密码不正确或文件已损坏');
+    }
+  }
+
+  // 2. Legacy 旧版（无 v 字段，带有 backupVersion 或 app: TimeFlow）
   try {
-    const iterations = envelope?.kdfIterations || KDF_ITERATIONS;
-    const { encKey, macKey } = deriveKeys(passphrase, envelope.salt, iterations);
+    const iterations = envelope.kdfIterations || LEGACY_KDF_ITERATIONS;
+    const salt = envelope.salt;
+    const ivHex = envelope.iv;
+    const ciphertextB64 = envelope.ciphertext;
 
-    const expectedMac = computeMac(macKey, envelope.iv, envelope.ciphertext);
-    if (!ctEqual(expectedMac, envelope.mac || '')) throw new Error('mac mismatch');
+    const { encKey, macKey } = deriveKeys(passphrase, salt, iterations);
+    const expectedMac = computeLegacyMac(macKey, ivHex, ciphertextB64);
 
-    const iv = CryptoJS.enc.Hex.parse(envelope.iv);
-    const ct = CryptoJS.enc.Base64.parse(envelope.ciphertext);
+    if (!ctEqual(expectedMac, envelope.mac || '')) {
+      throw new BadPassphraseError('密码不正确或文件已损坏');
+    }
+
+    const iv = CryptoJS.enc.Hex.parse(ivHex);
+    const ct = CryptoJS.enc.Base64.parse(ciphertextB64);
     const decrypted = CryptoJS.AES.decrypt(
       CryptoJS.lib.CipherParams.create({ ciphertext: ct }),
       encKey,
-      { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 },
+      { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
     );
 
     const plainStr = decrypted.toString(CryptoJS.enc.Utf8);
-    if (!plainStr) throw new Error('empty plaintext');
+    if (!plainStr) throw new BadPassphraseError('密码不正确或文件已损坏');
     return JSON.parse(plainStr);
   } catch (e) {
     if (e instanceof BadPassphraseError) throw e;
-    throw new BadPassphraseError(e && e.message);
+    throw new BadPassphraseError('密码不正确或文件已损坏');
   }
+}
+
+/**
+ * 免密解析文件头信息（用于历史版本列表和恢复预览）
+ */
+export function parseHeader(rawOrObj) {
+  let envelope = rawOrObj;
+  if (typeof rawOrObj === 'string') {
+    try {
+      envelope = JSON.parse(rawOrObj);
+    } catch (e) {
+      return null;
+    }
+  }
+  if (!envelope || typeof envelope !== 'object') return null;
+
+  if (envelope.v === 1) {
+    return {
+      v: envelope.v,
+      createdAt: envelope.createdAt,
+      device: envelope.device || 'Android',
+      counts: envelope.counts || { records: 0, focus: 0, trips: 0 },
+      hash: envelope.hash || '',
+      isLegacy: false,
+    };
+  }
+
+  // Legacy 旧版
+  if (envelope.app === 'TimeFlow' || envelope.backupVersion === 1) {
+    return {
+      v: 0,
+      createdAt: envelope.createdAt,
+      device: 'Legacy',
+      counts: null, // 旧版头部无明文统计
+      hash: '',
+      isLegacy: true,
+    };
+  }
+
+  return null;
 }

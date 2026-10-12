@@ -5,7 +5,8 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "audit": "node scripts/audit_code.js && node scripts/check_i18n.js",
+    "audit": "node scripts/audit_code.js && node scripts/check_i18n.js && node scripts/test_backup.js",
+    "test:backup": "node scripts/test_backup.js",
     "check:i18n": "node scripts/check_i18n.js",
     "release": "node scripts/release.js",
     "build:local": "node scripts/build_local.js",

@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TimeFlow 备份与恢复 · 交互设计稿</title>
+<style>
+:root{
+  --bg:#faf5ee;--card:#fff;--ink:#2a2420;--sub:#6f645c;--line:#efe7de;--pri:#f4605a;
+  --ok:#25915f;--okbg:#e5f4ea;--warn:#a96a0b;--warnbg:#fcf1d9;--err:#cf3b3b;--errbg:#fde7e4;--idle:#6f645c;--idlebg:#eee9e3;
+  --ico:#9a6b4b;--icobg:#f6ece2;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:#e9e2d9;font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--ink)}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+input{font:inherit;color:inherit}
+.stage{display:flex;gap:28px;justify-content:center;align-items:flex-start;padding:24px 16px;min-height:100vh}
+.phone{position:relative;width:390px;height:min(820px,calc(100vh - 48px));min-height:640px;background:var(--bg);border-radius:38px;box-shadow:0 0 0 10px #1f1b18,0 24px 60px rgba(0,0,0,.35);overflow:hidden;display:flex;flex-direction:column;flex:none}
+.sb{height:30px;display:flex;justify-content:space-between;align-items:center;padding:0 22px;font-size:12px;font-weight:600;flex:none}
+#screen{flex:1;overflow-y:auto;padding:4px 16px 24px;scrollbar-width:none}
+#screen::-webkit-scrollbar{display:none}
+h1{font-size:26px;margin:8px 0 2px}
+.subt{font-size:13px;color:var(--sub);margin-bottom:14px}
+.card{background:var(--card);border-radius:20px;box-shadow:0 2px 12px rgba(90,60,30,.07);overflow:hidden}
+.sec{font-size:13px;font-weight:600;color:var(--sub);margin:20px 4px 8px}
+.ok{--c:var(--ok);--cb:var(--okbg)}.warn{--c:var(--warn);--cb:var(--warnbg)}.err{--c:var(--err);--cb:var(--errbg)}.idle{--c:var(--idle);--cb:var(--idlebg)}
+/* user card */
+.user{display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:12px}
+.av{width:46px;height:46px;border-radius:50%;background:var(--pri);display:grid;place-items:center;color:#fff}
+.user b{font-size:16px}.badge{display:inline-block;font-size:11px;color:var(--pri);background:#fde8e6;border-radius:10px;padding:2px 8px;margin-top:3px}
+.user .ed{margin-left:auto;font-size:12px;color:var(--sub);background:var(--icobg);border-radius:12px;padding:5px 10px}
+/* status card */
+.scard{display:flex;align-items:center;gap:12px;padding:14px;margin-bottom:6px;border-radius:20px;background:var(--cb);border:1px solid color-mix(in srgb,var(--c) 22%,transparent);cursor:pointer}
+.sic{width:42px;height:42px;border-radius:14px;background:#fff;color:var(--c);display:grid;place-items:center;flex:none}
+.stx{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.stx b{font-size:15px;color:var(--c)}.stx span{font-size:13px;color:var(--ink)}.stx em{font-style:normal;font-size:12px;color:var(--sub)}
+.pill{background:var(--c);color:#fff;font-size:12.5px;padding:7px 12px;border-radius:14px;flex:none}
+.scard>svg{color:var(--sub);flex:none}
+/* rows */
+.row{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line);cursor:pointer;color:var(--ink)}
+.row:last-child{border-bottom:0}
+.row:active{background:#faf6f1}
+.row>svg:last-child{color:#a79b92;flex:none}
+.ico{width:34px;height:34px;border-radius:11px;background:var(--icobg);color:var(--ico);display:grid;place-items:center;flex:none}
+.lbl{flex:1;font-size:15px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.lbl small{font-size:12px;color:var(--sub)}
+.lbl b{font-weight:600}
+.rt{font-size:13px;color:var(--sub)}
+.row.danger .ico{background:var(--errbg);color:var(--err)}.row.danger .lbl{color:var(--err)}
+.tags{display:flex;gap:4px;flex:none}
+.tag{font-size:11px;padding:2px 7px;border-radius:8px;background:var(--icobg);color:var(--ico)}
+.tag.cloud{background:#e8f0fd;color:#3b69c9}.tag.snap{background:var(--warnbg);color:var(--warn)}.tag.warn{background:var(--warnbg);color:var(--warn)}
+/* tab bar */
+#tabbar{display:flex;height:62px;background:#fff;border-top:1px solid var(--line);flex:none}
+#tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#8d827a}
+#tabbar button.on{color:var(--pri);font-weight:600}
+/* subpage nav */
+.nav{display:flex;align-items:center;gap:6px;margin:2px 0 10px}
+.nav button{width:34px;height:34px;border-radius:50%;display:grid;place-items:center}
+.nav b{font-size:17px}
+/* hero */
+.hero{background:var(--card);border-radius:22px;padding:16px;box-shadow:0 2px 12px rgba(90,60,30,.07)}
+.hh{display:flex;gap:12px;align-items:center}
+.hh .sic{background:var(--cb)}
+.hh b{font-size:17px;color:var(--c);display:block}.hh span{font-size:13px;color:var(--sub)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.chip{font-size:12px;padding:4px 9px;border-radius:10px;background:var(--idlebg);color:var(--idle);display:flex;align-items:center;gap:4px}
+.chip.ok{background:var(--okbg);color:var(--ok)}.chip.err{background:var(--errbg);color:var(--err)}.chip.warn{background:var(--warnbg);color:var(--warn)}
+.btn{width:100%;padding:13px;border-radius:15px;font-weight:600;font-size:15px;background:var(--icobg);color:var(--ico)}
+.btn.primary{background:var(--pri);color:#fff}
+.btn.red{background:var(--err);color:#fff}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--sub);font-weight:500}
+.btns{display:flex;gap:8px}.btns .btn{flex:1}
+.banner{border-radius:14px;padding:11px 12px;font-size:13px;line-height:1.5;margin-bottom:12px;background:var(--cb);color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 25%,transparent)}
+.banner b{color:var(--c)}
+.banner .btns{margin-top:10px}.banner .btn{padding:9px;font-size:13.5px}
+.prog{height:46px;border-radius:15px;background:var(--icobg);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--ico);font-weight:600}
+.prog i{position:absolute;left:0;top:0;bottom:0;width:30%;background:rgba(244,96,90,.18);animation:slide 1.1s ease-in-out infinite}
+@keyframes slide{0%{left:-30%}100%{left:100%}}
+.empty{padding:26px 16px;text-align:center;font-size:13px;color:var(--sub);line-height:1.6}
+.sw{width:44px;height:26px;border-radius:13px;background:#d9d1c9;position:relative;flex:none;transition:.2s}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.sw.on{background:var(--ok)}.sw.on::after{left:21px}
+.note{font-size:12px;color:var(--sub);margin:8px 6px 0;line-height:1.6}
+/* forms */
+.f{display:block;margin:0 0 12px}.f span{display:block;font-size:12.5px;color:var(--sub);margin-bottom:5px}
+.f input{width:100%;padding:12px 13px;border:1px solid #e3d9ce;border-radius:13px;background:#fff;font-size:15px;outline:none}
+.f input:focus{border-color:var(--pri)}
+.bar{height:5px;border-radius:3px;background:#eee6dd;margin:-4px 0 4px;overflow:hidden}.bar i{display:block;height:100%;border-radius:3px;transition:.2s}
+.steps{display:flex;gap:6px;margin:4px 0 14px}.steps i{flex:1;height:4px;border-radius:2px;background:#e6dcd1}.steps i.on{background:var(--pri)}
+.res{font-size:13px;margin:-2px 0 12px;display:flex;gap:6px;align-items:center}
+/* sheet */
+#sheet{position:absolute;inset:0;background:rgba(30,20,10,.42);display:none;align-items:flex-end;z-index:20}
+#sheet.on{display:flex}
+#sheet.center{align-items:center;justify-content:center;padding:24px}
+.sh{width:100%;background:#fff;border-radius:26px 26px 0 0;padding:18px 18px 22px;animation:up .22s ease-out;max-height:92%;overflow-y:auto}
+#sheet.center .sh{border-radius:22px;animation:none}
+@keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.sh h3{margin:2px 0 4px;font-size:18px}.sh p{margin:0 0 12px;font-size:13px;color:var(--sub);line-height:1.55}
+.vsum{background:var(--bg);border-radius:14px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center}
+.vsum div b{display:block;font-size:17px}.vsum div span{font-size:11.5px;color:var(--sub)}
+.vtop{font-size:12.5px;color:var(--sub);margin-bottom:8px}
+.opt{display:flex;gap:11px;padding:13px;border:1.5px solid #e8dfd5;border-radius:16px;margin-bottom:10px;cursor:pointer}
+.opt.sel{border-color:var(--pri);background:#fff8f6}.opt.sel.dng{border-color:var(--err);background:#fff6f5}
+.rd{width:20px;height:20px;border-radius:50%;border:2px solid #cfc3b8;flex:none;margin-top:1px;display:grid;place-items:center}
+.opt.sel .rd{border-color:var(--pri)}.opt.sel .rd::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--pri)}
+.opt.sel.dng .rd{border-color:var(--err)}.opt.sel.dng .rd::after{background:var(--err)}
+.opt b{font-size:15px;display:block;margin-bottom:2px}.opt small{font-size:12.5px;color:var(--sub);line-height:1.5;display:block}
+.opt .mono{color:var(--ok);font-weight:600}.opt .bad{color:var(--err);font-weight:600}
+.safe{display:flex;gap:8px;background:var(--okbg);color:#1f6f4a;border-radius:13px;padding:10px 12px;font-size:12.5px;line-height:1.5;margin-bottom:14px}
+.safe svg{flex:none;margin-top:1px}
+.ok-big{text-align:center;padding:10px 0 6px}.ok-big .sic{margin:0 auto 10px;width:56px;height:56px;border-radius:50%;background:var(--okbg);color:var(--ok)}
+.spin{width:30px;height:30px;border:3px solid #eee;border-top-color:var(--pri);border-radius:50%;animation:rot .8s linear infinite;margin:14px auto}
+@keyframes rot{to{transform:rotate(360deg)}}
+.err-t{color:var(--err);font-size:12.5px;margin:-6px 0 10px}
+#toast{position:absolute;left:50%;bottom:80px;transform:translateX(-50%) translateY(20px);background:rgba(40,32,28,.92);color:#fff;font-size:13px;padding:10px 16px;border-radius:14px;opacity:0;transition:.25s;pointer-events:none;z-index:40;max-width:86%;text-align:center}
+#toast.on{opacity:1;transform:translateX(-50%)}
+/* side panel */
+.panel{width:330px;background:#fff;border-radius:22px;padding:20px;box-shadow:0 4px 24px rgba(0,0,0,.08);position:sticky;top:24px;flex:none}
+.panel h2{font-size:17px;margin:0 0 4px}.panel p{font-size:12.5px;color:var(--sub);margin:0 0 14px;line-height:1.55}
+.panel h4{font-size:12.5px;color:var(--sub);margin:16px 0 8px;font-weight:600}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{font-size:12.5px;padding:7px 11px;border-radius:12px;background:#f3ede6;color:var(--ink)}
+.seg button.on{background:var(--pri);color:#fff}
+.panel ul{margin:0;padding-left:18px;font-size:12.5px;line-height:1.75;color:#4a4039}
+@media(max-width:900px){.stage{flex-direction:column;align-items:center}.panel{width:min(390px,100%);position:static}.phone{width:min(390px,100%)}}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="phone">
+    <div class="sb"><span>18:19</span><span>▾ ▮ 96%</span></div>
+    <div id="screen"></div>
+    <div id="tabbar">
+      <button data-act="tab">__I_clock__<span>打卡</span></button>
+      <button data-act="tab">__I_chart__<span>统计</span></button>
+      <button class="on" data-act="tab">__I_user__<span>我的</span></button>
+    </div>
+    <div id="sheet"></div>
+    <div id="toast"></div>
+  </div>
+
+  <aside class="panel">
+    <h2>备份与恢复 · 交互设计稿</h2>
+    <p>在左侧手机里直接点。右侧可切换备份状态，观察「我的」页状态卡与二级页如何变化。</p>
+    <h4>备份状态</h4>
+    <div class="seg" id="stseg"></div>
+    <h4>跳转页面</h4>
+    <div class="seg" id="goseg"></div>
+    <h4>设计要点</h4>
+    <ul>
+      <li>「我的」页只留一张真实状态卡，原 4 个备份入口全部收进二级页</li>
+      <li>历史版本同时列出云端与本地，头部信息无需输入密码即可预览</li>
+      <li>恢复三步：验密码 → 选方式（合并 / 覆盖）→ 确认；执行前自动存快照</li>
+      <li>失败只改颜色与文案，不弹窗；手动备份失败才在页内给出原因</li>
+      <li>清空记录移到二级页底部，需输入「清空」确认，并先存快照</li>
+      <li>数据无变化时自动备份会按哈希跳过（此处仅作说明，演示中每次都会生成新版本）</li>
+    </ul>
+  </aside>
+</div>
+
+<script>
+const P={
+ chevR:'<path d="M9 18l6-6-6-6"/>',chevL:'<path d="M15 18l-6-6 6-6"/>',check:'<path d="M20 6L9 17l-5-5"/>',x:'<path d="M18 6L6 18M6 6l12 12"/>',
+ shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+ shieldOk:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>',
+ cloud:'<path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>',
+ clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+ chart:'<path d="M18 20V10M12 20V4M6 20v-6"/>',
+ user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+ alert:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
+ key:'<circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3M16 7l3 3M14 9l2 2"/>',
+ download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+ trash:'<path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+ lock:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+ globe:'<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/>',
+ drop:'<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>',
+ target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+ zap:'<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
+ info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+ refresh:'<path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+ phone:'<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/>',
+ file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/>',
+ undo:'<path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>',
+ up:'<path d="M16 16l-4-4-4 4M12 12v9"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>',
+ edit:'<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'
+};
+const I=(n,s=20)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]}</svg>`;
+document.querySelectorAll('#tabbar button').forEach((b,i)=>{b.innerHTML=b.innerHTML.replace(/__I_(\w+)__/,(_,n)=>I(n,22))});
+const $=s=>document.querySelector(s);
+
+const STATUS=[['ok','正常'],['stale','3 天未备份'],['failed','云端失败'],['needConfirm','需确认'],['notConfigured','未开启']];
+const META={
+ ok:{cls:'ok',ic:'shieldOk',t:'备份与恢复',pill:null},
+ stale:{cls:'warn',ic:'clock',t:'已 3 天未备份',l:'上次备份 10-09 21:10',pill:['立即备份','quick']},
+ failed:{cls:'err',ic:'alert',t:'云端备份失败',l:'授权已过期，本地备份正常',pill:['去修复','fix']},
+ needConfirm:{cls:'warn',ic:'alert',t:'自动备份已暂停',l:'记录数明显减少（1,248 → 312）',pill:['查看','open']},
+ notConfigured:{cls:'idle',ic:'shield',t:'尚未开启备份',l:'设置备份密码，保护你的打卡数据',pill:['去设置','setup']}
+};
+const initVersions=()=>[
+ {t:'今天 18:05',dev:'Pixel 7',n:1248,f:36,tr:210,w:['cloud','local']},
+ {t:'今天 09:30',dev:'Pixel 7',n:1231,f:35,tr:206,w:['cloud']},
+ {t:'昨天 21:10',dev:'Pixel 7',n:1220,f:34,tr:203,w:['local']},
+ {t:'10-10 20:42',dev:'Pixel 7',n:1198,f:33,tr:199,w:['cloud','local']},
+ {t:'10-08 08:15',dev:'Pixel 7',n:1150,f:30,tr:190,w:['cloud']}
+];
+const S={view:'profile',status:'ok',cloudOn:true,auto:true,backing:false,cur:1248,sheet:null,
+ setup:{step:1,pw:'',pw2:'',tested:false,testing:false},cloud:{tested:false,testing:false},versions:initVersions()};
+
+function setStatus(st){
+ S.status=st;S.cur=st==='needConfirm'?312:1248;S.versions=initVersions();S.cloudOn=true;S.backing=false;S.sheet=null;render();
+}
+function go(v){
+ if(v==='setup')S.setup={step:1,pw:'',pw2:'',tested:false,testing:false};
+ if(v==='cloud')S.cloud={tested:false,testing:false};
+ S.view=v;S.sheet=null;$('#screen').scrollTop=0;render();
+}
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2400)}
+
+const row=(ic,l,r='',a='soon',cls='')=>`<div class="row ${cls}" data-act="${a}"><span class="ico">${I(ic,18)}</span><span class="lbl">${l}</span><span class="rt">${r}</span>${I('chevR',16)}</div>`;
+
+/* ---------- 我的 ---------- */
+function profile(){
+ const m=META[S.status];
+ const line=S.status==='ok'?'上次备份 10 分钟前 · 1,248 条打卡':m.l;
+ const meta=S.status==='ok'?(S.cloudOn?'云端 + 本地 · 已加密':'仅本地 · 已加密'):'';
+ return `<h1>我的</h1><div class="subt">个人信息与偏好</div>
+ <div class="card user"><div class="av">${I('user',24)}</div><div><b>时空旅行者</b><br><span class="badge">已连续记录 4 天</span></div><button class="ed" data-act="soon">编辑</button></div>
+ <div class="scard ${m.cls}" data-act="openBackup"><div class="sic">${I(m.ic,22)}</div>
+  <div class="stx"><b>${m.t}</b><span>${line}</span>${meta?`<em>${meta}</em>`:''}</div>
+  ${m.pill?`<button class="pill" data-act="${m.pill[1]}">${m.pill[0]}</button>`:I('chevR',18)}</div>
+ <div class="sec">通用</div>
+ <div class="card">${row('globe','语言','中文')}${row('drop','主题','浅色')}</div>
+ <div class="sec">打卡</div>
+ <div class="card">${row('zap','一键打卡 + 今日状态')}${row('target','位置调试')}</div>
+ <div class="sec">关于</div>
+ <div class="card">${row('refresh','检查更新','v1.2.4')}${row('shield','隐私协议')}</div>`;
+}
+
+/* ---------- 备份与恢复 ---------- */
+const visVersions=()=>S.versions.map((x,i)=>({...x,i})).filter(x=>{
+ if(S.status==='notConfigured')return !!x.snap;
+ if(!S.cloudOn&&!x.snap&&!x.w.includes('local'))return false;
+ return true;
+});
+function backup(){
+ const m=META[S.status],st=S.status;
+ const cloudChip=st==='notConfigured'||!S.cloudOn?['','云端 未开启']:st==='failed'?['err','云端 授权失败']:['ok','云端 正常'];
+ const localChip=st==='notConfigured'?['','本地 未开启']:['ok','本地 正常'];
+ const encChip=st==='notConfigured'?['','未加密']:['ok','端到端加密'];
+ const chips=[cloudChip,localChip,encChip].map(c=>`<span class="chip ${c[0]}">${c[1]}</span>`).join('');
+ const title=st==='ok'?'备份正常':m.t;
+ const line=st==='ok'?'上次备份 10 分钟前 · 1,248 条打卡':m.l;
+ let banner='';
+ if(st==='failed')banner=`<div class="banner err"><b>云端授权已过期</b><br>最近一次云端备份失败，本地备份不受影响。请更新 WebDAV 应用密码。<div class="btns"><button class="btn" data-act="fix">去修复</button></div></div>`;
+ if(st==='needConfirm')banner=`<div class="banner warn"><b>记录数明显减少</b><br>本机现有 312 条，云端最新版本为 1,248 条。为防止覆盖云端历史，已暂停自动备份。<div class="btns"><button class="btn" data-act="keep">保持暂停</button><button class="btn primary" data-act="backupNow">仍然备份</button></div></div>`;
+ if(st==='stale')banner=`<div class="banner warn"><b>已超过 3 天没有备份</b><br>建议现在备份一次，避免换机或误删后丢失数据。</div>`;
+ let btn;
+ if(S.backing)btn=`<div class="prog"><i></i><span style="position:relative">正在加密并上传…</span></div>`;
+ else if(st==='notConfigured')btn=`<button class="btn primary" data-act="setup">去设置备份</button>`;
+ else if(st==='needConfirm')btn='';
+ else btn=`<button class="btn primary" data-act="backupNow">${st==='failed'?'重新备份':'立即备份'}</button>`;
+ const vs=visVersions();
+ const list=vs.length?vs.map(x=>{
+   const tags=x.snap?'<span class="tag snap">快照</span>':x.w.filter(w=>w!=='cloud'||S.cloudOn).map(w=>`<span class="tag ${w}">${w==='cloud'?'云端':'本地'}</span>`).join('');
+   return `<div class="row" data-act="restore" data-i="${x.i}"><span class="ico">${I(x.snap?'undo':'file',18)}</span><span class="lbl"><b>${x.t}</b><small>${x.dev} · ${x.n.toLocaleString()} 条打卡</small></span><span class="tags">${tags}</span>${I('chevR',16)}</div>`}).join('')
+   :`<div class="empty">还没有备份版本<br>完成设置后，每次备份都会出现在这里</div>`;
+ return `<div class="nav"><button data-act="back">${I('chevL',22)}</button><b>备份与恢复</b></div>
+ <div class="hero ${m.cls}"><div class="hh"><div class="sic">${I(m.ic,22)}</div><div><b>${title}</b><span>${line}</span></div></div>
+  <div class="chips">${chips}</div>${banner}${btn}</div>
+ <div class="sec">历史版本 <span style="font-weight:400">· 云端保留最近 7 份，本地 5 份</span></div>
+ <div class="card">${list}</div>
+ <div class="note">点任意版本即可预览并恢复，无需先输入密码。</div>
+ <div class="sec">设置</div>
+ <div class="card">
+  ${row('cloud','云端同步（WebDAV）',S.cloudOn&&st!=='notConfigured'?(st==='failed'?'<span style="color:var(--err)">需修复</span>':'已配置'):'未开启','openCloud')}
+  ${row('key','备份密码',st==='notConfigured'?'未设置':'已设置','soon')}
+  <div class="row" data-act="toggleAuto"><span class="ico">${I('refresh',18)}</span><span class="lbl">自动备份<small>数据变化后自动备份，切后台时补一次</small></span><span class="sw ${S.auto?'on':''}"></span></div>
+  ${row('download','导出可读数据','<span class="tag warn">未加密</span>','export')}
+ </div>
+ <div class="note">导出为 CSV / JSON，任何人拿到文件都能直接阅读，请妥善保管。</div>
+ <div class="sec">危险操作</div>
+ <div class="card"><div class="row danger" data-act="danger"><span class="ico">${I('trash',18)}</span><span class="lbl">清空所有打卡记录<small style="color:var(--sub)">清空前会自动保存一份本地快照</small></span>${I('chevR',16)}</div></div>`;
+}
+
+/* ---------- 首次设置 ---------- */
+function setup(){
+ const s=S.setup;
+ const nav=`<div class="nav"><button data-act="back">${I('chevL',22)}</button><b>开启备份</b></div><div class="steps"><i class="on"></i><i class="${s.step===2?'on':''}"></i></div>`;
+ if(s.step===1){
+  const len=s.pw.length,lv=len<6?[len?'25%':'0%','#d9534f','']:len<10?['60%','#e0a030','强度：中']:['100%','#25915f','强度：强'];
+  return nav+`<h1 style="font-size:22px">设置备份密码</h1><div class="subt">备份文件在本机加密，云端只保存密文。</div>
+  <label class="f"><span>备份密码（至少 6 位）</span><input id="pw1" type="password" value="${s.pw}" placeholder="输入密码"></label>
+  <div class="bar"><i id="bar" style="width:${lv[0]};background:${lv[1]}"></i></div>
+  <label class="f" style="margin-top:12px"><span>再输一次</span><input id="pw2" type="password" value="${s.pw2}" placeholder="确认密码"></label>
+  <div class="banner warn"><b>忘记密码无法找回备份</b><br>我们不保存你的密码，也无法为你重置。建议记在密码管理器里。</div>
+  <button class="btn primary" id="next1" data-act="setupNext" ${len>=6&&s.pw===s.pw2?'':'disabled'}>下一步</button>`;
+ }
+ return nav+`<h1 style="font-size:22px">云端同步（可选）</h1><div class="subt">用任意 WebDAV 服务（坚果云、Nextcloud 等）同步备份。</div>
+  <label class="f"><span>服务器地址</span><input value="https://dav.jianguoyun.com/dav/"></label>
+  <label class="f"><span>账号</span><input value="name@example.com"></label>
+  <label class="f"><span>应用密码（不是登录密码）</span><input type="password" value="abcdefgh1234"></label>
+  ${s.testing?'<div class="res">测试中…</div>':s.tested?`<div class="res" style="color:var(--ok)">${I('check',16)} 连接成功，已可写入</div>`:''}
+  <div class="btns" style="margin-bottom:10px"><button class="btn" data-act="setupTest">测试连接</button><button class="btn primary" data-act="setupFinish" ${s.tested?'':'disabled'}>完成</button></div>
+  <button class="btn ghost" data-act="setupSkip">跳过，仅本地备份</button>
+  <div class="note">应用密码保存在系统安全存储中，不会进入备份文件。</div>`;
+}
+
+/* ---------- 云端设置 ---------- */
+function cloud(){
+ const c=S.cloud,failed=S.status==='failed';
+ return `<div class="nav"><button data-act="back">${I('chevL',22)}</button><b>云端同步（WebDAV）</b></div>
+ ${failed?`<div class="banner err"><b>授权已过期</b><br>请到服务商后台重新生成「应用密码」，粘贴到下方后测试连接。</div>`:''}
+ <label class="f"><span>服务器地址</span><input value="https://dav.jianguoyun.com/dav/"></label>
+ <label class="f"><span>账号</span><input value="name@example.com"></label>
+ <label class="f"><span>应用密码</span><input type="password" value="${failed?'':'abcdefgh1234'}" placeholder="粘贴新的应用密码"></label>
+ ${c.testing?'<div class="res">测试中…</div>':c.tested?`<div class="res" style="color:var(--ok)">${I('check',16)} 连接成功，已可写入</div>`:''}
+ <div class="btns"><button class="btn" data-act="testConn">测试连接</button><button class="btn primary" data-act="saveCloud" ${c.tested||!failed?'':'disabled'}>保存</button></div>
+ <div class="note">云端目录：timeflow/ · 只保存加密后的备份文件（.tfb），保留最近 7 份。</div>`;
+}
+
+/* ---------- 弹层 ---------- */
+function sheetHTML(){
+ const s=S.sheet;
+ if(s.type==='danger'){
+  return `<div class="sh"><h3>清空所有打卡记录？</h3><p>将删除本机全部 ${S.cur.toLocaleString()} 条打卡、专注与行程数据。云端备份不受影响。</p>
+  <div class="safe">${I('shieldOk',16)}<span>清空前会自动保存「恢复前快照」，之后可在历史版本里找回。</span></div>
+  <label class="f"><span>请输入「清空」以确认</span><input id="dg" value="${s.txt||''}" placeholder="清空" autocomplete="off"></label>
+  <div class="btns"><button class="btn" data-act="closeSheet">取消</button><button class="btn red" id="dgBtn" data-act="doDanger" ${s.txt==='清空'?'':'disabled'}>清空</button></div></div>`;
+ }
+ const v=s.v,idx=s.i;
+ const add=idx===0?0:2+idx,del=Math.max(0,S.cur-v.n);
+ const summary=`<div class="vsum"><div><b>${v.n.toLocaleString()}</b><span>打卡</span></div><div><b>${v.f}</b><span>专注</span></div><div><b>${v.tr}</b><span>行程</span></div></div>`;
+ const head=`<div class="vtop">${v.t} · ${v.dev}</div>`;
+ if(s.step===1)return `<div class="sh"><h3>恢复这个版本</h3>${head}${summary}
+  <label class="f"><span>备份密码</span><input id="rpw" type="password" value="${s.pw||''}" placeholder="输入备份密码（演示：任意字符，输入 wrong 模拟错误）"></label>
+  ${s.err?'<div class="err-t">密码不正确，请重试</div>':''}
+  <div class="btns"><button class="btn" data-act="closeSheet">取消</button><button class="btn primary" id="rBtn" data-act="pwNext" ${s.pw?'':'disabled'}>验证</button></div></div>`;
+ if(s.step===2)return `<div class="sh"><h3>选择恢复方式</h3><p>${v.t} 的备份 · ${v.n.toLocaleString()} 条打卡</p>
+  <div class="opt ${s.mode==='merge'?'sel':''}" data-act="mode" data-m="merge"><span class="rd"></span><div><b>合并（推荐）</b><small>保留当前数据，只补入备份里缺少的记录。${add?`预计新增 <span class="mono">${add}</span> 条。`:'没有需要补入的记录。'}</small></div></div>
+  <div class="opt dng ${s.mode==='overwrite'?'sel':''}" data-act="mode" data-m="overwrite"><span class="rd"></span><div><b>完全覆盖</b><small>以备份为准替换当前全部数据。${del?`当前多出的 <span class="bad">${del}</span> 条记录将被删除。`:'当前数据将被备份内容替换。'}</small></div></div>
+  <div class="btns"><button class="btn" data-act="closeSheet">取消</button><button class="btn primary" data-act="toStep3">下一步</button></div></div>`;
+ if(s.step===3){const ow=s.mode==='overwrite';
+  const after=ow?v.n:S.cur+add;
+  return `<div class="sh"><h3>确认恢复</h3><p>${ow?'覆盖模式会替换当前所有数据。':'合并模式不会删除任何现有记录。'}</p>
+  <div class="vsum"><div><b>${S.cur.toLocaleString()}</b><span>恢复前</span></div><div><b style="color:var(--pri)">→</b><span>${ow?'覆盖':'合并'}</span></div><div><b>${after.toLocaleString()}</b><span>恢复后</span></div></div>
+  <div class="safe">${I('shieldOk',16)}<span>开始前会先自动保存「恢复前快照」，不满意可以一键回退。</span></div>
+  <div class="btns"><button class="btn" data-act="closeSheet">取消</button><button class="btn ${ow?'red':'primary'}" data-act="doRestore">${ow?'覆盖并恢复':'开始恢复'}</button></div></div>`;}
+ if(s.step===4)return `<div class="sh"><div class="spin"></div><h3 style="text-align:center">正在恢复…</h3><p style="text-align:center">先保存快照，再写入数据，请不要关闭应用。</p></div>`;
+ return `<div class="sh"><div class="ok-big"><div class="sic">${I('check',28)}</div><h3>恢复完成</h3><p>当前共 ${S.cur.toLocaleString()} 条打卡。恢复前的数据已保存为快照。</p></div>
+  <div class="btns"><button class="btn" data-act="undo">回退到恢复前</button><button class="btn primary" data-act="closeSheet">完成</button></div></div>`;
+}
+
+/* ---------- 渲染 ---------- */
+function render(){
+ const sc=$('#screen').scrollTop;
+ $('#screen').innerHTML={profile,backup,setup,cloud}[S.view]();
+ $('#screen').scrollTop=sc;
+ $('#tabbar').style.display=S.view==='profile'?'flex':'none';
+ const sh=$('#sheet');sh.className=S.sheet?('on'+(S.sheet.type==='danger'?' center':'')):'';
+ sh.innerHTML=S.sheet?sheetHTML():'';
+ $('#stseg').innerHTML=STATUS.map(([k,n])=>`<button class="${S.status===k?'on':''}" data-st="${k}">${n}</button>`).join('');
+ const GO=[['profile','我的'],['backup','备份与恢复'],['setup','首次设置'],['cloud','云端设置'],['restore','恢复流程'],['danger','清空确认']];
+ $('#goseg').innerHTML=GO.map(([k,n])=>`<button data-go="${k}">${n}</button>`).join('');
+}
+
+function runBackup(){
+ if(S.backing)return;
+ if(S.status==='notConfigured')return act('setup');
+ S.backing=true;render();
+ setTimeout(()=>{
+  const fail=S.status==='failed'&&S.cloudOn;
+  S.backing=false;S.cur+=1;
+  S.versions.unshift({t:'刚刚',dev:'Pixel 7',n:S.cur,f:36,tr:210,w:fail||!S.cloudOn?['local']:['cloud','local']});
+  if(S.status==='needConfirm'||S.status==='stale')S.status='ok';
+  render();
+  toast(fail?'本地已备份；云端失败：授权已过期':'备份完成 · '+(S.cloudOn?'云端 + 本地':'仅本地'));
+ },1200);
+}
+function openRestore(i){
+ if(S.status==='notConfigured'&&!S.versions[i].snap)return;
+ S.sheet={type:'restore',step:1,i,v:S.versions[i],pw:'',mode:'merge',err:false};render();
+}
+function act(a,el){
+ const S_=S;
+ switch(a){
+  case 'soon':toast('演示：该项不在本次改版范围');break;
+  case 'tab':toast('演示：切换到其他 Tab');break;
+  case 'openBackup':go(S.status==='notConfigured'?'setup':'backup');break;
+  case 'quick':go('backup');setTimeout(runBackup,350);break;
+  case 'fix':go('cloud');break;
+  case 'open':go('backup');break;
+  case 'setup':go('setup');break;
+  case 'back':go({backup:'profile',setup:'profile',cloud:'backup'}[S.view]);break;
+  case 'backupNow':runBackup();break;
+  case 'keep':toast('已保持暂停，不会自动上传');break;
+  case 'restore':openRestore(+el.dataset.i);break;
+  case 'closeSheet':S.sheet=null;render();break;
+  case 'pwNext':
+   if(S.sheet.pw.toLowerCase()==='wrong'){S.sheet.err=true;render();}else{S.sheet.err=false;S.sheet.step=2;render();}break;
+  case 'mode':S.sheet.mode=el.dataset.m;render();break;
+  case 'toStep3':S.sheet.step=3;render();break;
+  case 'doRestore':{
+   S.sheet.step=4;render();
+   setTimeout(()=>{
+    const s=S.sheet;if(!s)return;
+    const add=s.i===0?0:2+s.i;
+    S.versions.unshift({t:'刚刚',dev:'本机',n:S.cur,f:36,tr:210,w:['local'],snap:1});
+    S.cur=s.mode==='overwrite'?s.v.n:S.cur+add;
+    s.step=5;render();
+   },1400);break;}
+  case 'undo':{const k=S.versions.findIndex(x=>x.snap);if(k>=0){S.cur=S.versions[k].n;S.versions.splice(k,1);}S.sheet=null;render();toast('已回退到恢复前的状态');break;}
+  case 'danger':S.sheet={type:'danger',txt:''};render();break;
+  case 'doDanger':
+   S.versions.unshift({t:'刚刚',dev:'本机',n:S.cur,f:36,tr:210,w:['local'],snap:1});
+   S.sheet=null;render();toast('已清空，恢复前快照已保存');break;
+  case 'toggleAuto':S.auto=!S.auto;render();toast(S.auto?'已开启自动备份':'已关闭自动备份');break;
+  case 'openCloud':go('cloud');break;
+  case 'export':toast('演示：将导出未加密的 CSV / JSON');break;
+  case 'testConn':S.cloud.testing=true;render();setTimeout(()=>{S.cloud.testing=false;S.cloud.tested=true;render()},900);break;
+  case 'saveCloud':
+   S.cloudOn=true;if(S.status==='failed')S.status='ok';
+   S.view='backup';render();toast('已保存，云端同步恢复正常');break;
+  case 'setupNext':S.setup.step=2;render();break;
+  case 'setupTest':S.setup.testing=true;render();setTimeout(()=>{S.setup.testing=false;S.setup.tested=true;render()},900);break;
+  case 'setupFinish':S.status='ok';S.cloudOn=true;S.view='profile';render();toast('备份已开启 · 云端 + 本地');break;
+  case 'setupSkip':S.status='ok';S.cloudOn=false;S.view='profile';render();toast('备份已开启 · 仅本地');break;
+ }
+}
+document.addEventListener('click',e=>{
+ const st=e.target.closest('[data-st]');if(st){setStatus(st.dataset.st);return;}
+ const g=e.target.closest('[data-go]');
+ if(g){const k=g.dataset.go;
+  if(k==='restore'){S.view='backup';if(S.status==='notConfigured')S.status='ok';render();openRestore(1);}
+  else if(k==='danger'){S.view='backup';render();act('danger');}
+  else go(k);
+  return;}
+ const el=e.target.closest('[data-act]');if(el)act(el.dataset.act,el);
+});
+document.addEventListener('input',e=>{
+ const id=e.target.id;
+ if(id==='pw1'||id==='pw2'){
+  S.setup[id==='pw1'?'pw':'pw2']=e.target.value;
+  const s=S.setup,len=s.pw.length;
+  $('#next1').disabled=!(len>=6&&s.pw===s.pw2);
+  const b=$('#bar');b.style.width=len<6?(len?'25%':'0%'):len<10?'60%':'100%';b.style.background=len<6?'#d9534f':len<10?'#e0a030':'#25915f';
+ }
+ if(id==='rpw'){S.sheet.pw=e.target.value;$('#rBtn').disabled=!e.target.value;}
+ if(id==='dg'){S.sheet.txt=e.target.value;$('#dgBtn').disabled=e.target.value!=='清空';}
+});
+render();
+</script>
+</body>
+</html>
