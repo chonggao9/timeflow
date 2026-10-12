@@ -6,7 +6,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords, clearAll, getRecordsFingerprint, updateFocusSession, getFocusSessions } from '../storage/store';
 import { computePathStats, formatDuration } from '../utils/stats';
-import { getPlaceOptions, queryJourney, buildDurationHistogram } from '../utils/analytics';
+import { getPlaceOptions, queryJourney, buildDurationHistogram, computeWeekTravelStats, findLatestTripForRoute } from '../utils/analytics';
 import { radius, shadow } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
@@ -84,6 +84,40 @@ export default function InsightsScreen() {
   useFocusEffect(useCallback(() => {
     loadData();
   }, [loadData]));
+
+  const [selectedRouteIdx, setSelectedRouteIdx] = useState(0);
+
+  const discoveredRoutes = useMemo(() => {
+    return paths.filter(p => p.fromKey !== p.toKey);
+  }, [paths]);
+
+  useEffect(() => {
+    if (discoveredRoutes.length > 0) {
+      const idx = Math.min(selectedRouteIdx, discoveredRoutes.length - 1);
+      const r = discoveredRoutes[idx];
+      if (r) {
+        setFromKey(r.fromKey);
+        setToKey(r.toKey);
+      }
+    } else {
+      setFromKey(null);
+      setToKey(null);
+    }
+  }, [discoveredRoutes, selectedRouteIdx]);
+
+  const weekTravelStats = useMemo(() => {
+    return computeWeekTravelStats(travelRecords, lang);
+  }, [travelRecords, lang]);
+
+  const handleViewLatestTrip = useCallback(() => {
+    if (!fromKey || !toKey) return;
+    const latest = findLatestTripForRoute(travelRecords, fromKey, toKey);
+    if (latest) {
+      setReceiptTrip(latest);
+    } else {
+      Alert.alert(t('insights.noData'), t('insights.noDataHint'));
+    }
+  }, [travelRecords, fromKey, toKey, t]);
 
   // 选定出发地+目的地后自动查询端到端 A→B
   useEffect(() => {
@@ -814,157 +848,229 @@ export default function InsightsScreen() {
                 </View>
               </View>
 
-          {/* 高频通勤快捷查看标签 */}
-          {paths.length > 0 && (
-            <View style={styles.quickSection}>
-              <View style={styles.quickHeader}>
-                <Ionicons name="flash-outline" size={13} color={colors.primaryStrong} />
-                <Text style={styles.quickTitle}>{t('insights.quickRoutes')}</Text>
+          {/* 近 7 天出行卡片 */}
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardTitle}>{t('insights.recent7Days')}</Text>
+              <Text style={styles.cardSubText}>
+                {t('insights.totalTime')} <Text style={styles.cardSubBold}>{formatDuration(weekTravelStats.totalMins * 60, lang)}</Text>
+              </Text>
+            </View>
+
+            {/* 7 天柱状图 */}
+            <View style={styles.weekChartRow}>
+              {weekTravelStats.days.map((d, i) => {
+                const maxMins = Math.max(...weekTravelStats.days.map(x => x.mins), 48);
+                const barH = d.mins > 0 ? Math.max(6, Math.round((d.mins / maxMins) * 52)) : 3;
+                const barBg = d.mins === 0 ? colors.chip : (d.isToday ? colors.primaryStrong : '#F2A39B');
+                return (
+                  <View key={`day-${i}`} style={styles.weekCol}>
+                    <View style={styles.weekBarWrap}>
+                      <Text style={[styles.weekBarMins, d.isToday && { color: colors.primaryStrong, fontWeight: '700' }]}>
+                        {d.mins > 0 ? d.mins : ''}
+                      </Text>
+                      <View style={[styles.weekBarFill, { height: barH, backgroundColor: barBg }]} />
+                    </View>
+                    <Text style={[styles.weekDayLabel, d.isToday && styles.weekDayLabelToday]}>
+                      {d.label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* 出行方式占比条与图例 */}
+            {weekTravelStats.shares.length > 0 && (
+              <View style={styles.shareBlock}>
+                <View style={styles.shareBarRow}>
+                  {weekTravelStats.shares.map((s, idx) => (
+                    <View
+                      key={`share-${idx}`}
+                      style={[styles.shareBarSeg, { flex: Math.max(s.pct, 2), backgroundColor: s.color }]}
+                    />
+                  ))}
+                </View>
+                <View style={styles.legendRow}>
+                  {weekTravelStats.shares.map((s, idx) => (
+                    <View key={`legend-${idx}`} style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: s.color }]} />
+                      <Text style={styles.legendText}>
+                        {t('mode.' + s.mode, s.mode)} {s.pct}%
+                      </Text>
+                    </View>
+                  ))}
+                </View>
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickScroll}>
-                {paths.filter(p => p.fromKey !== p.toKey).slice(0, 5).map((p, idx) => {
-                  const isCur = fromKey === p.fromKey && toKey === p.toKey;
+            )}
+          </View>
+
+          {/* 路线洞察卡片 */}
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardTitle}>{t('insights.routeInsights')}</Text>
+              {result && (
+                <TouchableOpacity
+                  style={styles.linkBtn}
+                  onPress={handleViewLatestTrip}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.linkBtnText}>{t('insights.viewLatest')}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* 顶部已发现路线 chips 横向切换 */}
+            {discoveredRoutes.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.routeChipsRow}
+              >
+                {discoveredRoutes.map((r, i) => {
+                  const isCur = i === selectedRouteIdx;
                   return (
                     <TouchableOpacity
-                      key={`top-${idx}`}
-                      style={[styles.quickChip, isCur && styles.quickChipActive]}
-                      onPress={() => {
-                        setFromKey(p.fromKey);
-                        setToKey(p.toKey);
-                      }}
+                      key={`route-chip-${i}`}
+                      style={[styles.routeChip, isCur && styles.routeChipActive]}
+                      onPress={() => setSelectedRouteIdx(i)}
                       activeOpacity={0.7}
                     >
-                      <ModeIcon mode={p.mode} size={13} color={isCur ? colors.primaryStrong : colors.ink2} />
-                      <Text style={[styles.quickChipText, isCur && styles.quickChipTextActive]}>
-                        {p.fromName} → {p.toName}
+                      <Text style={[styles.routeChipName, isCur && styles.routeChipNameActive]} numberOfLines={1}>
+                        {r.fromName} → {r.toName}
                       </Text>
-                      <Text style={[styles.quickChipDur, isCur && styles.quickChipDurActive]}>
-                        {Math.round(p.medianSec / 60)}{t('insights.min')}
+                      <Text style={[styles.routeChipMode, isCur && styles.routeChipModeActive]}>
+                        {t('mode.' + (r.mode || 'walk'), r.mode)}
                       </Text>
                     </TouchableOpacity>
                   );
                 })}
               </ScrollView>
-            </View>
-          )}
+            ) : (
+              <View style={styles.emptyCardBox}>
+                <Text style={styles.emptyCardTitle}>{t('insights.noRoutesDiscovered')}</Text>
+                <Text style={styles.emptyCardHint}>{t('insights.noRoutesHint')}</Text>
+              </View>
+            )}
 
-          {/* A→B 定向查询（核心） */}
-          <View style={styles.card}>
-            <Text style={styles.queryTitle}>{t('insights.queryTitle')}</Text>
-            <View style={styles.queryRow}>
-              <TouchableOpacity style={styles.queryPlace} onPress={() => setPickerFor('from')} activeOpacity={0.7}>
-                <Text style={[styles.queryPlaceText, !fromPlace && styles.queryPlaceEmpty]} numberOfLines={1}>
-                  {fromPlace ? fromPlace.name : t('insights.from')}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.swapBtn}
-                onPress={swap}
-                activeOpacity={0.7}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="swap-horizontal" size={20} color={colors.primaryStrong} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.queryPlace} onPress={() => setPickerFor('to')} activeOpacity={0.7}>
-                <Text style={[styles.queryPlaceText, !toPlace && styles.queryPlaceEmpty]} numberOfLines={1}>
-                  {toPlace ? toPlace.name : t('insights.to')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* 路线结果 */}
-            {result ? (
-              <View style={styles.result}>
-                <View style={styles.routeHead}>
-                  <Text style={styles.routeTitle}>
-                    {result.fromName} <Text style={styles.arrow}>→</Text> {result.toName}
-                  </Text>
-                  <ModeIcon mode={result.mode} size={16} color={colors.ink2} />
-                </View>
-
-                <View style={styles.statRow}>
-                  <View style={styles.statMain}>
-                    <Text style={styles.statLabel}>{t('insights.typical')}</Text>
-                    <Text style={styles.statBig}>{formatDuration(result.medianSec, lang)}</Text>
-                    <Text style={styles.statHint}>{t('insights.journeyNote')}</Text>
-                  </View>
-                  <View style={styles.statSubCol}>
-                    <Text style={styles.statLabel}>{t('insights.spread')}</Text>
-                    <Text style={styles.statSub}>{formatDuration(result.p25Sec, lang)} – {formatDuration(result.p75Sec, lang)}</Text>
-                    <Text style={styles.statSub}>{t('insights.samples', { n: result.sampleCount })}</Text>
-                  </View>
-                </View>
-
-                {breakdown && (
-                  <View style={styles.breakdown}>
-                    <Text style={styles.chartTitle}>{t('insights.breakdown')}</Text>
-                    {breakdown.map((seg, i) => (
-                      <View key={i} style={styles.breakdownRow}>
-                        <Text style={styles.breakdownText} numberOfLines={1}>{seg.fromName} → {seg.toName}</Text>
-                        <Text style={styles.breakdownDur}>{formatDuration(seg.medianSec, lang)}</Text>
+            {/* 选中路线详情 */}
+            {result && (
+              <View style={styles.routeBody}>
+                {/* 耗时与指标概览 */}
+                <View style={styles.routeStatRow}>
+                  <View style={styles.routeStatLeft}>
+                    <Text style={styles.routeStatLabel}>
+                      {result.sampleCount < 2 ? t('insights.refDuration') : t('insights.typicalDuration')}
+                    </Text>
+                    {result.sampleCount >= 2 ? (
+                      <View style={styles.routeBigRow}>
+                        <Text style={styles.routeBigNum}>{Math.round(result.medianSec / 60)}</Text>
+                        <Text style={styles.routeBigUnit}>{t('insights.min')}</Text>
                       </View>
-                    ))}
+                    ) : (
+                      <View style={styles.routeBigRow}>
+                        <Text style={[styles.routeBigNum, { color: colors.ink2 }]}>
+                          {Math.round(result.medianSec / 60)}
+                        </Text>
+                        <Text style={[styles.routeBigUnit, { color: colors.ink2 }]}>{t('insights.min')}</Text>
+                      </View>
+                    )}
+                    <Text style={styles.routeTransferText}>
+                      {breakdown && breakdown.length > 1
+                        ? t('insights.transfers', { n: breakdown.length - 1 })
+                        : t('insights.journeyNote')}
+                    </Text>
+                  </View>
+
+                  <View style={styles.routeStatRight}>
+                    <Text style={styles.routeMetaText}>
+                      {t('insights.fluctuation')}{' '}
+                      <Text style={styles.routeMetaBold}>
+                        {Math.round(result.p25Sec / 60)} – {Math.round(result.p75Sec / 60)} {t('insights.min')}
+                      </Text>
+                    </Text>
+                    <Text style={styles.routeMetaText}>
+                      {t('insights.samplesCount')}{' '}
+                      <Text style={styles.routeMetaBold}>{result.sampleCount} 次</Text>
+                    </Text>
+                    <Text style={styles.routeMetaText}>
+                      {t('insights.typicalDeparture')}{' '}
+                      <Text style={styles.routeMetaBold}>{peakHour} 时</Text>
+                    </Text>
+                  </View>
+                </View>
+
+                {/* 趋势与样本不足提示 */}
+                {result.sampleCount < 2 && (
+                  <View style={styles.tipGray}>
+                    <Text style={styles.tipGrayText}>{t('insights.insufficientSamples')}</Text>
                   </View>
                 )}
 
+                {delta != null && delta !== 0 && (
+                  <View style={styles.tipSoft}>
+                    <Text style={styles.tipSoftText}>
+                      {delta < 0
+                        ? `最近一次比上周快 ${Math.abs(delta)} 分钟，耗时在慢慢变短。`
+                        : `最近一次比上周慢 ${delta} 分钟。`}
+                    </Text>
+                  </View>
+                )}
+
+                {/* 图表 1: 耗时分布（分钟） */}
                 {hist && (
                   <View style={styles.chartBlock}>
-                    <Text style={styles.chartTitle}>{t('insights.durationDist')}</Text>
-                    <BarChart data={hist.counts} highlightIndex={hist.highlight} height={110}
-                      xLabels={histLabels} valueLabel={`${Math.round(result.medianSec / 60)}${t('insights.min')}`} />
+                    <Text style={styles.chartTitle}>{t('insights.durationDistTitle')}</Text>
+                    <BarChart
+                      data={hist.counts}
+                      highlightIndex={hist.highlight}
+                      height={90}
+                      xLabels={histLabels}
+                      valueLabel={`${Math.round(result.medianSec / 60)}${t('insights.min')}`}
+                    />
                   </View>
                 )}
 
+                {/* 图表 2: 通常出发时段 (0-24时) */}
                 <View style={styles.chartBlock}>
-                  <Text style={styles.chartTitle}>{t('insights.timeOfDay')}</Text>
-                  <BarChart data={result.hourDist} highlightIndex={peakHour} height={100}
-                    xLabels={[{ index: 0, text: '0' }, { index: 6, text: '6' }, { index: 12, text: '12' }, { index: 18, text: '18' }, { index: 23, text: '24' }]}
-                    valueLabel={`${peakHour}${t('insights.hourUnit')}`} />
+                  <Text style={styles.chartTitle}>{t('insights.departureDistTitle')}</Text>
+                  <BarChart
+                    data={result.hourDist}
+                    highlightIndex={peakHour}
+                    height={85}
+                    xLabels={[
+                      { index: 0, text: '0' },
+                      { index: 6, text: '6' },
+                      { index: 12, text: '12' },
+                      { index: 18, text: '18' },
+                      { index: 23, text: '24时' },
+                    ]}
+                    valueLabel={`${peakHour}${t('insights.hourUnit')}`}
+                  />
                 </View>
 
+                {/* 图表 3: 近 8 周趋势 */}
                 <View style={styles.chartBlock}>
                   <View style={styles.chartTitleRow}>
-                    <Text style={styles.chartTitle}>{t('insights.weeklyTrend')}</Text>
+                    <Text style={styles.chartTitle}>{t('insights.weeklyTrendTitle')}</Text>
                     {delta != null && delta !== 0 && (
                       <Text style={[styles.delta, { color: delta < 0 ? colors.success : colors.danger }]}>
                         {delta < 0 ? '↓' : '↑'} {Math.abs(delta)} {t('insights.min')}
                       </Text>
                     )}
                   </View>
-                  <BarChart data={weeklyData} highlightIndex={7} height={100}
-                    xLabels={[{ index: 0, text: t('insights.weekAgo') }, { index: 7, text: t('insights.thisWeek') }]} />
+                  <BarChart
+                    data={weeklyData}
+                    highlightIndex={7}
+                    height={85}
+                    xLabels={[
+                      { index: 0, text: t('insights.weekAgo') },
+                      { index: 7, text: t('insights.thisWeek') },
+                    ]}
+                  />
                 </View>
               </View>
-            ) : fromKey && toKey ? (
-              fromKey === toKey ? (
-                <Text style={[styles.noData, { color: colors.danger }]}>{t('insights.samePlaceError')}</Text>
-              ) : (
-                <Text style={styles.noData}>{t('insights.noData')}。{t('insights.noDataHint')}</Text>
-              )
-            ) : null}
+            )}
           </View>
-
-          {/* 路段规律列表 */}
-          <Text style={styles.sectionTitle}>{t('insights.section')}</Text>
-          {paths.length === 0 ? (
-            <Text style={styles.noData}>{t('insights.noData')}。{t('insights.noDataHint')}</Text>
-          ) : (
-            paths.filter(p => p.fromKey !== p.toKey).slice(0, 8).map((p, i) => (
-              <TouchableOpacity key={i} style={styles.pathCard} onPress={() => { setFromKey(p.fromKey); setToKey(p.toKey); }} activeOpacity={0.7}>
-                <View style={styles.pathHead}>
-                  <ModeIcon mode={p.mode} size={16} color={colors.primaryStrong} />
-                  <Text style={styles.pathRoute} numberOfLines={1}>
-                    {p.fromName} <Text style={styles.arrow}>→</Text> {p.toName}
-                  </Text>
-                  <Text style={styles.pathSamples}>{t('insights.samples', { n: p.sampleCount })}</Text>
-                </View>
-                <View style={styles.pathStats}>
-                  <Text style={styles.pathBig}>{formatDuration(p.medianSec, lang)}</Text>
-                  <Text style={styles.pathRange}>{formatDuration(p.p25Sec, lang)} – {formatDuration(p.p75Sec, lang)}</Text>
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
 
           {/* 历史出行记录（已合并入行程主页） */}
           <HistoryView records={travelRecords} onShowMap={setMapTrip} onShowReceipt={setReceiptTrip} />
@@ -1749,70 +1855,233 @@ const makeStyles = (colors) => StyleSheet.create({
   },
 
   card: {
-    backgroundColor: colors.surface, borderRadius: radius.lg, padding: 16,
-    marginBottom: 16, borderWidth: 1, borderColor: colors.line, ...shadow.card,
-  },
-  queryTitle: { fontSize: 13, color: colors.ink2, fontWeight: '700', marginBottom: 12 },
-  queryRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  queryPlace: {
-    flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: 12,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 14,
+    ...shadow.card,
     borderWidth: 1,
     borderColor: colors.line,
-    ...shadow.sm,
   },
-  queryPlaceText: { fontSize: 14.5, color: colors.ink, fontWeight: '700' },
-  queryPlaceEmpty: { color: colors.ink3, fontWeight: '500' },
-  swapBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.chip,
-    alignItems: 'center',
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  cardSubText: {
+    fontSize: 12,
+    color: colors.ink2,
+  },
+  cardSubBold: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  linkBtn: {
+    minHeight: 44,
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.line,
+    paddingHorizontal: 4,
+  },
+  linkBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primaryStrong,
   },
 
-  result: { marginTop: 16, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 14 },
-  routeHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  routeTitle: { fontSize: 18, color: colors.ink, fontWeight: '800', flex: 1 },
-  arrow: { color: colors.primary, fontWeight: '800' },
+  weekChartRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 12,
+  },
+  weekCol: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+  },
+  weekBarWrap: {
+    height: 76,
+    width: '100%',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 3,
+  },
+  weekBarMins: {
+    fontSize: 10,
+    color: colors.ink2,
+    fontVariant: ['tabular-nums'],
+    height: 14,
+  },
+  weekBarFill: {
+    width: '100%',
+    maxWidth: 24,
+    borderRadius: 6,
+  },
+  weekDayLabel: {
+    fontSize: 11,
+    color: colors.ink2,
+  },
+  weekDayLabelToday: {
+    color: colors.primaryStrong,
+    fontWeight: '700',
+  },
 
-  statRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  statMain: { flex: 1 },
-  statSubCol: { alignItems: 'flex-end' },
-  statLabel: { fontSize: 12, color: colors.ink3, marginBottom: 2 },
-  statBig: { fontSize: 28, fontWeight: '800', color: colors.primaryStrong, letterSpacing: -1 },
-  statHint: { fontSize: 11, color: colors.ink3, marginTop: 2 },
-  statSub: { fontSize: 13, color: colors.ink2, fontWeight: '600', marginTop: 2 },
+  shareBlock: {
+    marginTop: 4,
+    gap: 10,
+  },
+  shareBarRow: {
+    flexDirection: 'row',
+    height: 10,
+    borderRadius: 5,
+    overflow: 'hidden',
+    gap: 3,
+  },
+  shareBarSeg: {
+    height: 10,
+    borderRadius: 5,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  legendDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 3,
+  },
+  legendText: {
+    fontSize: 12,
+    color: colors.ink,
+  },
 
-  breakdown: { marginBottom: 12 },
-  breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
-  breakdownText: { fontSize: 13, color: colors.ink2, flex: 1, marginRight: 8 },
-  breakdownDur: { fontSize: 13, color: colors.ink, fontWeight: '700' },
+  routeChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 4,
+    marginBottom: 12,
+  },
+  routeChip: {
+    minHeight: 44,
+    paddingVertical: 4,
+    paddingHorizontal: 14,
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: '#EADFD7',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  routeChipActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primaryStrong,
+  },
+  routeChipName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.ink,
+  },
+  routeChipNameActive: {
+    color: colors.primaryStrong,
+  },
+  routeChipMode: {
+    fontSize: 11,
+    color: colors.ink2,
+    marginTop: 1,
+  },
+  routeChipModeActive: {
+    color: colors.primaryStrong,
+    opacity: 0.9,
+  },
+
+  routeBody: {
+    gap: 14,
+  },
+  routeStatRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  routeStatLeft: {
+    flex: 1,
+  },
+  routeStatLabel: {
+    fontSize: 12,
+    color: colors.ink2,
+  },
+  routeBigRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginVertical: 2,
+  },
+  routeBigNum: {
+    fontSize: 44,
+    fontWeight: '800',
+    color: colors.primaryStrong,
+    lineHeight: 48,
+    fontVariant: ['tabular-nums'],
+  },
+  routeBigUnit: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primaryStrong,
+  },
+  routeTransferText: {
+    fontSize: 12,
+    color: colors.ink2,
+  },
+  routeStatRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  routeMetaText: {
+    fontSize: 12,
+    color: colors.ink2,
+    lineHeight: 18,
+  },
+  routeMetaBold: {
+    color: colors.ink,
+    fontWeight: '700',
+  },
+  tipGray: {
+    backgroundColor: colors.chip,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  tipGrayText: {
+    fontSize: 13,
+    color: colors.ink2,
+    lineHeight: 18,
+  },
+  tipSoft: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  tipSoftText: {
+    fontSize: 13,
+    color: colors.primaryStrong,
+    lineHeight: 18,
+  },
 
   chartBlock: { marginTop: 8 },
   chartTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   chartTitle: { fontSize: 12, color: colors.ink2, fontWeight: '700', marginBottom: 8 },
   delta: { fontSize: 13, fontWeight: '800', marginBottom: 8 },
-
-  sectionTitle: { fontSize: 13, color: colors.ink2, fontWeight: '700', letterSpacing: 0.4, marginBottom: 10, marginLeft: 4 },
-  noData: { fontSize: 13, color: colors.ink3, marginTop: 8, textAlign: 'center' },
-
-  pathCard: {
-    backgroundColor: colors.surface, borderRadius: radius.lg, padding: 14,
-    marginBottom: 10, ...shadow.sm,
-  },
-  pathHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  pathRoute: { fontSize: 15, color: colors.ink, fontWeight: '700', flex: 1 },
-  pathSamples: { fontSize: 12, color: colors.ink3 },
-  pathStats: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  pathBig: { fontSize: 20, fontWeight: '800', color: colors.primaryStrong, letterSpacing: -0.5 },
-  pathRange: { fontSize: 12, color: colors.ink3 },
 
   clearBtn: { marginTop: 20, alignItems: 'center', paddingVertical: 12 },
   clearText: { fontSize: 13, color: colors.danger, fontWeight: '600' },

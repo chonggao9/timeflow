@@ -239,3 +239,100 @@ export function groupTripsByDate(trips) {
   }
   return [...map.entries()].map(([ts, list]) => ({ ts, list })).sort((a, b) => b.ts - a.ts);
 }
+
+// 交通方式标准调色盘（图例与占比条）
+export const MODE_COLORS = {
+  drive: '#B3262C',
+  bike: '#EF6B63',
+  walk: '#F7B9B2',
+  subway: '#8A7D76',
+  transit: '#5C93C4',
+  taxi: '#E67E22',
+  train: '#4CAE7F',
+  flight: '#9B59B6',
+  boat: '#3498DB',
+  other: '#B6A99E',
+};
+
+// 计算近 7 天每日出行耗时与出行方式占比
+export function computeWeekTravelStats(records, lang = 'zh') {
+  const travelRecords = records || [];
+  const trips = groupTrips(travelRecords);
+  const now = new Date();
+  const todayZero = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+  const days = [];
+  const weekStartTs = todayZero - 6 * 86400000;
+  let totalMins = 0;
+
+  for (let i = 0; i < 7; i++) {
+    const dayStart = weekStartTs + i * 86400000;
+    const dayEnd = dayStart + 86400000;
+    const d = new Date(dayStart);
+    const dayOfWeek = d.getDay(); // 0 is Sun, 1 is Mon...
+    const dayMapZh = ['日', '一', '二', '三', '四', '五', '六'];
+    const dayMapEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const isToday = i === 6;
+
+    let dayMs = 0;
+    for (const t of trips) {
+      if (t.startTs >= dayStart && t.startTs < dayEnd) {
+        dayMs += t.durationMs > 0 ? t.durationMs : 0;
+      }
+    }
+    const mins = Math.round(dayMs / 60000);
+    totalMins += mins;
+    days.push({
+      label: isToday ? (lang === 'zh' ? '今天' : 'Today') : (lang === 'zh' ? dayMapZh[dayOfWeek] : dayMapEn[dayOfWeek]),
+      mins,
+      isToday,
+      dayStart,
+    });
+  }
+
+  // 方式占比计算：优先取近 7 天出行，无数据则退回全部行程
+  let targetTrips = trips.filter(t => t.startTs >= weekStartTs);
+  if (!targetTrips.length) targetTrips = trips;
+
+  const modeDurMap = {};
+  let shareTotalMs = 0;
+  for (const t of targetTrips) {
+    const m = t.mode || 'walk';
+    const dur = t.durationMs > 0 ? t.durationMs : 60000; // 最低计 1 分钟权重
+    modeDurMap[m] = (modeDurMap[m] || 0) + dur;
+    shareTotalMs += dur;
+  }
+
+  const shares = [];
+  if (shareTotalMs > 0) {
+    for (const [m, ms] of Object.entries(modeDurMap)) {
+      const p = Math.round((ms / shareTotalMs) * 100);
+      if (p > 0) {
+        shares.push({
+          mode: m,
+          pct: p,
+          color: MODE_COLORS[m] || MODE_COLORS.other,
+        });
+      }
+    }
+    shares.sort((a, b) => b.pct - a.pct);
+  }
+
+  return { days, totalMins, shares };
+}
+
+// 查找指定路线（fromKey -> toKey）最近一次出行行程
+export function findLatestTripForRoute(records, fromKey, toKey) {
+  if (!fromKey || !toKey) return null;
+  const trips = groupTrips(records);
+  for (const trip of trips) {
+    const keys = trip.records.map(r => placeKey(r));
+    const fIdx = keys.indexOf(fromKey);
+    const tIdx = keys.lastIndexOf(toKey);
+    if (fIdx >= 0 && tIdx > fIdx) {
+      return trip;
+    }
+  }
+  return trips[0] || null;
+}
+
