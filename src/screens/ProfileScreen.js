@@ -1,28 +1,29 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Modal, TextInput, Linking, Switch,
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  Modal,
+  TextInput,
+  Linking,
+  Platform,
 } from 'react-native';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import * as DocumentPicker from 'expo-document-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getRecords, clearAll } from '../storage/store';
+import { getRecords } from '../storage/store';
 import { getProfile, saveProfile } from '../storage/profile';
 import { getAmapKey, setAmapKey, getAmapLocKeyRaw, setAmapLocKey } from '../config';
 import { checkForUpdate } from '../utils/updater';
 import { diagnoseLocation } from '../utils/location';
 import { refreshWidget } from '../utils/widgetRefresh';
-import { makeLocalBackup, shareBackup, readAndRestore, readAndRestoreFromRaw } from '../backup/backup';
-import {
-  backupNow, getBackupPassphrase, setBackupPassphrase, setAutoBackup, isAutoBackupEnabled, getLastBackupTime,
-} from '../backup/schedule';
-import {
-  getWebDavConfig, saveWebDavConfig, clearWebDavConfig, testConnectionWith, getLatestBackupRaw, WebDavError,
-} from '../backup/webdav';
+import { useBackupState } from '../backup/state';
+import BackupScreen from './BackupScreen';
 import { useI18n } from '../i18n/LanguageContext';
-import { radius, shadow } from '../theme';
+import { radius } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import PrivacyAgreement from './PrivacyAgreement';
 
@@ -30,7 +31,7 @@ import PrivacyAgreement from './PrivacyAgreement';
 function calculateStreakDays(records) {
   if (!records || records.length === 0) return 0;
   const dateSet = new Set();
-  records.forEach(r => {
+  records.forEach((r) => {
     if (r.timestamp) {
       const d = new Date(r.timestamp);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -46,7 +47,6 @@ function calculateStreakDays(records) {
   let current = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   let todayKey = formatDay(current);
 
-  // 如果今天未打卡，检查昨天（允许昨天连续）
   if (!dateSet.has(todayKey)) {
     current.setDate(current.getDate() - 1);
     const yesterdayKey = formatDay(current);
@@ -61,13 +61,27 @@ function calculateStreakDays(records) {
   return streak;
 }
 
+// 统一列表 Row 项：默认统一暖色调图标风格
 function Row({ icon, label, value, onPress, danger, iconColor, iconBg }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const defaultIconColor = '#9A6B4B';
+  const defaultIconBg = '#F6ECE2';
+
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6}>
-      <View style={[styles.iconHolder, iconBg && { backgroundColor: iconBg }]}>
-        <Ionicons name={icon} size={17} color={danger ? colors.danger : (iconColor || colors.primary)} />
+      <View
+        style={[
+          styles.iconHolder,
+          { backgroundColor: danger ? 'rgba(239, 68, 68, 0.12)' : (iconBg || defaultIconBg) },
+        ]}
+      >
+        <Ionicons
+          name={icon}
+          size={17}
+          color={danger ? colors.danger : (iconColor || defaultIconColor)}
+        />
       </View>
       <Text style={[styles.rowLabel, danger && { color: colors.danger }]}>{label}</Text>
       {value != null && <Text style={styles.rowValue}>{value}</Text>}
@@ -76,72 +90,165 @@ function Row({ icon, label, value, onPress, danger, iconColor, iconBg }) {
   );
 }
 
-function BackupStatusBanner({ cloudSet, autoEnabled, hasPassphrase, lastBackup, fmtTime, onPress }) {
+// 现代五态 BackupStatusCard 组件
+function BackupStatusCard({ backupState, onPress }) {
   const { colors } = useTheme();
   const { t } = useI18n();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  let statusType = 'none';
-  if (cloudSet && autoEnabled) {
-    statusType = 'cloud';
-  } else if (cloudSet && !autoEnabled) {
-    statusType = 'paused';
-  } else if (hasPassphrase || lastBackup > 0) {
-    statusType = 'local';
-  }
+  const st = backupState?.status || 'notConfigured';
 
-  let iconName = 'shield-checkmark';
-  let badgeColor = colors.ink3;
-  let bgTint = colors.chip;
-  let title = t('backup.statusNone');
-  let sub = t('backup.statusDescNone');
+  const formatRelTime = (timeMs) => {
+    if (!timeMs) return '从未';
+    const diff = Date.now() - timeMs;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return '刚刚';
+    if (mins < 60) return `${mins} 分钟前`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} 小时前`;
+    const days = Math.floor(hours / 24);
+    return `${days} 天前`;
+  };
 
-  if (statusType === 'cloud') {
-    iconName = 'shield-checkmark';
-    badgeColor = '#10B981';
-    bgTint = 'rgba(16, 185, 129, 0.09)';
-    title = t('backup.statusCloudActive');
-    sub = lastBackup > 0 ? `${t('backup.last')}: ${fmtTime(lastBackup)}` : t('profile.cloudSecurity');
-  } else if (statusType === 'paused') {
-    iconName = 'cloud-outline';
-    badgeColor = '#F59E0B';
-    bgTint = 'rgba(245, 158, 11, 0.09)';
-    title = t('backup.statusCloudPaused');
-    sub = lastBackup > 0 ? `${t('backup.last')}: ${fmtTime(lastBackup)}` : t('backup.webdavSaved');
-  } else if (statusType === 'local') {
-    iconName = 'shield-checkmark';
-    badgeColor = colors.primary;
-    bgTint = colors.primarySoft || 'rgba(59, 130, 246, 0.09)';
-    title = t('backup.statusLocal');
-    sub = lastBackup > 0 ? `${t('backup.last')}: ${fmtTime(lastBackup)}` : t('backup.statusDescLocal');
+  const formatShortTime = (timeMs) => {
+    if (!timeMs) return '';
+    const d = new Date(timeMs);
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${m}-${day} ${h}:${min}`;
+  };
+
+  let cfg = {
+    bg: '#E5F4EA',
+    border: 'rgba(37, 145, 95, 0.22)',
+    color: '#25915F',
+    icon: 'shield-checkmark',
+    title: t('backup.navTitle', '备份与恢复'),
+    sub: t('backup.lastBackupPrefix', {
+      time: formatRelTime(backupState?.lastSuccessAt),
+      n: (backupState?.lastCounts?.records || 0).toLocaleString(),
+    }),
+    btn: null,
+  };
+
+  if (st === 'stale') {
+    cfg = {
+      bg: '#FCF1D9',
+      border: 'rgba(169, 106, 11, 0.22)',
+      color: '#A96A0B',
+      icon: 'time-outline',
+      title: t('backup.statusStale', '已 3 天未备份'),
+      sub: backupState?.lastSuccessAt
+        ? `上次备份 ${formatShortTime(backupState.lastSuccessAt)}`
+        : t('backup.descNotConfigured', '建议现在备份一次'),
+      btn: t('backup.btnQuick', '立即备份'),
+    };
+  } else if (st === 'failed') {
+    cfg = {
+      bg: '#FDE7E4',
+      border: 'rgba(207, 59, 59, 0.22)',
+      color: '#CF3B3B',
+      icon: 'alert-circle',
+      title: t('backup.statusFailed', '云端备份失败'),
+      sub: t('backup.descFailed', '授权已过期，本地备份正常'),
+      btn: t('backup.btnFix', '去修复'),
+    };
+  } else if (st === 'needConfirm') {
+    cfg = {
+      bg: '#FCF1D9',
+      border: 'rgba(169, 106, 11, 0.22)',
+      color: '#A96A0B',
+      icon: 'pause-circle-outline',
+      title: t('backup.statusNeedConfirm', '自动备份已暂停'),
+      sub: '记录数明显减少',
+      btn: t('backup.btnOpen', '查看'),
+    };
+  } else if (st === 'notConfigured') {
+    cfg = {
+      bg: '#EEE9E3',
+      border: 'rgba(111, 100, 92, 0.22)',
+      color: '#6F645C',
+      icon: 'lock-closed-outline',
+      title: t('backup.statusNotConfigured', '尚未开启备份'),
+      sub: t('backup.descNotConfigured', '设置备份密码，保护你的打卡数据'),
+      btn: t('backup.btnSetup', '去设置'),
+    };
   }
 
   return (
     <TouchableOpacity
-      style={[styles.statusBanner, { backgroundColor: bgTint, borderColor: badgeColor + '35' }]}
+      style={[
+        cardStyles.scard,
+        { backgroundColor: cfg.bg, borderColor: cfg.border },
+      ]}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={[styles.statusIconWrap, { backgroundColor: badgeColor + '1F' }]}>
-        <Ionicons name={iconName} size={20} color={badgeColor} />
+      <View style={cardStyles.sic}>
+        <Ionicons name={cfg.icon} size={22} color={cfg.color} />
       </View>
-      <View style={styles.statusTextWrap}>
-        <View style={styles.statusHeaderRow}>
-          <Text style={[styles.statusTitle, { color: colors.ink }]}>{title}</Text>
-          {statusType === 'cloud' && (
-            <View style={[styles.statusTag, { backgroundColor: '#10B98122' }]}>
-              <Text style={[styles.statusTagText, { color: '#10B981' }]}>{t('backup.statusSafe')}</Text>
-            </View>
-          )}
-        </View>
-        <Text style={[styles.statusSub, { color: colors.ink2 }]} numberOfLines={1}>
-          {sub}
+      <View style={cardStyles.stx}>
+        <Text style={[cardStyles.stxTitle, { color: cfg.color }]}>{cfg.title}</Text>
+        <Text style={[cardStyles.stxSub, { color: colors.ink }]} numberOfLines={1}>
+          {cfg.sub}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.ink3} />
+      {cfg.btn ? (
+        <View style={[cardStyles.pill, { backgroundColor: cfg.color }]}>
+          <Text style={cardStyles.pillText}>{cfg.btn}</Text>
+        </View>
+      ) : (
+        <Ionicons name="chevron-forward" size={18} color={colors.ink3} />
+      )}
     </TouchableOpacity>
   );
 }
+
+const cardStyles = StyleSheet.create({
+  scard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  sic: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stx: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  stxTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  stxSub: {
+    fontSize: 12.5,
+    lineHeight: 16,
+  },
+  pill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pillText: {
+    color: '#FFFFFF',
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+});
 
 const LANG_OPTIONS = [
   { key: 'system', labelKey: 'language.system' },
@@ -160,49 +267,29 @@ export default function ProfileScreen() {
   const { t, lang, isSystem, setLang } = useI18n();
   const { colors, theme, isSystem: themeIsSystem, setTheme } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const backupState = useBackupState();
+  const [showBackupModal, setShowBackupModal] = useState(false);
+
   const [nickname, setNickname] = useState('');
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLang, setShowLang] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [showTheme, setShowTheme] = useState(false);
+
   const [showAmapKey, setShowAmapKey] = useState(false);
   const [amapKeyDraft, setAmapKeyDraft] = useState('');
   const [amapKeySet, setAmapKeySet] = useState(false);
   const [amapKeyInvalid, setAmapKeyInvalid] = useState(false);
-  const [diagRunning, setDiagRunning] = useState(false);
-  const [showTheme, setShowTheme] = useState(false);
+
   const [showLocKey, setShowLocKey] = useState(false);
   const [locKeyDraft, setLocKeyDraft] = useState('');
-  const [locKeyState, setLocKeyState] = useState('default'); // 'default' | 'set' | 'disabled'
+  const [locKeyState, setLocKeyState] = useState('default');
   const [locKeyInvalid, setLocKeyInvalid] = useState(false);
+
   const [showLocationDebug, setShowLocationDebug] = useState(false);
   const [showWidgetGuide, setShowWidgetGuide] = useState(false);
+  const [diagRunning, setDiagRunning] = useState(false);
 
-  // 数据备份
-  const [autoEnabled, setAutoEnabled] = useState(false);
-  const [hasPassphrase, setHasPassphrase] = useState(false);
-  const [cloudSet, setCloudSet] = useState(false);
-  const [lastBackup, setLastBackup] = useState(0);
-  const [backupBusy, setBackupBusy] = useState(false);
-  const pendingActionRef = useRef(null); // 'auto' | 'backup' | 'export' 待口令设置后执行
-  // 综合备份与安全设置弹窗
-  const [showBackupSettings, setShowBackupSettings] = useState(false);
-  const [showPassSection, setShowPassSection] = useState(false);
-  // 备份口令快捷弹窗
-  const [showPassphrase, setShowPassphrase] = useState(false);
-  const [passDraft, setPassDraft] = useState('');
-  const [passConfirm, setPassConfirm] = useState('');
-  const [passError, setPassError] = useState('');
-  // WebDAV 状态
-  const [webdavUrl, setWebdavUrl] = useState('');
-  const [webdavUser, setWebdavUser] = useState('');
-  const [webdavPass, setWebdavPass] = useState('');
-  const [webdavTesting, setWebdavTesting] = useState(false);
-  // 恢复弹窗
-  const [showRestore, setShowRestore] = useState(false);
-  const [restorePassDraft, setRestorePassDraft] = useState('');
-  const [restoreBusy, setRestoreBusy] = useState(false);
-
-  // 连续打卡与个人信息
   const [streakDays, setStreakDays] = useState(0);
   const [showEditNickname, setShowEditNickname] = useState(false);
   const [nicknameDraft, setNicknameDraft] = useState('');
@@ -233,271 +320,51 @@ export default function ProfileScreen() {
   }, []);
   React.useEffect(() => { loadLocKey(); }, [loadLocKey]);
 
-  // ---------- 数据备份 ----------
-  const WEBDAV_FAIL_KEY = {
-    auth: 'backup.webdavFailAuth',
-    network: 'backup.webdavFailNet',
-    notFound: 'backup.webdavFailNotFound',
-    server: 'backup.webdavFailServer',
-    conflict: 'backup.webdavFailConflict',
-    unknown: 'backup.webdavFailUnknown',
-  };
-
-  const loadBackupState = useCallback(async () => {
-    const [auto, pass, cloud, last] = await Promise.all([
-      isAutoBackupEnabled(), getBackupPassphrase(), getWebDavConfig(), getLastBackupTime(),
-    ]);
-    setAutoEnabled(auto);
-    setHasPassphrase(!!pass);
-    setCloudSet(!!(cloud && cloud.url));
-    setLastBackup(last || 0);
-  }, []);
-  React.useEffect(() => { loadBackupState(); }, [loadBackupState]);
-
-  const fmtBackupTime = (ms) => {
-    if (!ms) return t('backup.never');
-    const d = new Date(ms);
-    const p = n => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-  };
-
-  // 需要口令的动作用 withPassphrase 包一层：有口令直接跑，否则开弹窗并记录待执行动作（存证在 pendingActionRef）。
-  const runAction = async (action) => {
-    if (action === 'auto') {
-      await setAutoBackup(true);
-      await loadBackupState();
-    } else if (action === 'backup') {
-      setBackupBusy(true);
-      try {
-        const res = await backupNow({});
-        if (!res) { Alert.alert(t('backup.failTitle'), t('backup.fail')); return; }
-        Alert.alert(
-          t('backup.successTitle'),
-          res.uploaded ? t('backup.successUploaded') : t('backup.successLocal'),
-          [
-            { text: t('common.done') || '完成', style: 'default' },
-            {
-              text: t('backup.shareAction'),
-              onPress: () => shareBackup(res.uri, t('backup.exportTitle')),
-            },
-          ]
-        );
-        await loadBackupState();
-      } finally { setBackupBusy(false); }
-    } else if (action === 'export') {
-      setBackupBusy(true);
-      try {
-        const pass = await getBackupPassphrase();
-        const uri = await makeLocalBackup({ passphrase: pass });
-        await shareBackup(uri, t('backup.exportTitle'));
-        await loadBackupState();
-      } finally { setBackupBusy(false); }
-    }
-  };
-  const withPassphrase = async (action) => {
-    const pass = await getBackupPassphrase();
-    if (!pass) { pendingActionRef.current = action; setShowPassphrase(true); return; }
-    await runAction(action);
-  };
-
-  const toggleAuto = () => {
-    if (autoEnabled) { setAutoBackup(false).then(loadBackupState); }
-    else withPassphrase('auto');
-  };
-
-  // 备份口令弹窗（主界面直接立即备份时的快捷设置）
-  const confirmPassphrase = async () => {
-    const p = passDraft;
-    if (!p) { setPassError(t('backup.passphraseEmpty')); return; }
-    if (p.length < 4) { setPassError(t('backup.passphraseShort')); return; }
-    if (p !== passConfirm) { setPassError(t('backup.passphraseMismatch')); return; }
-    await setBackupPassphrase(p);
-    setShowPassphrase(false); setPassDraft(''); setPassConfirm(''); setPassError('');
-    await loadBackupState();
-    if (pendingActionRef.current) {
-      const a = pendingActionRef.current; pendingActionRef.current = null; await runAction(a);
-    }
-  };
-
-  // 综合设置面板中设置/修改口令
-  const confirmPassphraseInSettings = async () => {
-    const p = passDraft;
-    if (!p) { setPassError(t('backup.passphraseEmpty')); return; }
-    if (p.length < 4) { setPassError(t('backup.passphraseShort')); return; }
-    if (p !== passConfirm) { setPassError(t('backup.passphraseMismatch')); return; }
-    await setBackupPassphrase(p);
-    setShowPassSection(false); setPassDraft(''); setPassConfirm(''); setPassError('');
-    await loadBackupState();
-    Alert.alert(t('common.done') || '成功', t('backup.passphraseConfigured'));
-  };
-
-  const clearPassphrase = () => {
-    Alert.alert(t('backup.clearPassTitle'), t('backup.clearPassBody'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('backup.passphraseClear'), style: 'destructive', onPress: async () => {
-        await setBackupPassphrase(null); await setAutoBackup(false); await loadBackupState();
-        setShowPassphrase(false); setShowPassSection(false); setPassDraft(''); setPassConfirm(''); setPassError('');
-      } },
-    ]);
-  };
-
-  // WebDAV / 综合设置
-  const openBackupSettings = async () => {
-    const cfg = await getWebDavConfig();
-    setWebdavUrl(cfg ? cfg.url : '');
-    setWebdavUser(cfg ? cfg.username : '');
-    setWebdavPass('');
-    setShowPassSection(false);
-    setShowBackupSettings(true);
-  };
-  const closeBackupSettings = () => {
-    setShowBackupSettings(false);
-    setWebdavTesting(false);
-    setShowPassSection(false);
-    setPassDraft('');
-    setPassConfirm('');
-    setPassError('');
-  };
-
-  const confirmWebdav = async () => {
-    if (!webdavUrl.trim() || !webdavUser.trim()) {
-      Alert.alert(t('backup.webdavFailTitle'), t('backup.webdavFailAuth')); return;
-    }
-    setWebdavTesting(true);
-    try {
-      await testConnectionWith(webdavUrl, webdavUser, webdavPass);
-      await saveWebDavConfig({ url: webdavUrl, username: webdavUser, appPassword: webdavPass });
-      Alert.alert(t('common.done') || '成功', t('backup.webdavSaved'));
-      await loadBackupState();
-    } catch (e) {
-      const code = e instanceof WebDavError ? e.code : 'unknown';
-      Alert.alert(t('backup.webdavFailTitle'), t(WEBDAV_FAIL_KEY[code] || 'backup.webdavFailUnknown'));
-    } finally { setWebdavTesting(false); }
-  };
-  const clearWebdav = () => {
-    Alert.alert(t('backup.webdavClear'), t('backup.webdavNoConfig'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('backup.webdavClear'), style: 'destructive', onPress: async () => {
-        await clearWebDavConfig();
-        setWebdavUrl('');
-        setWebdavUser('');
-        setWebdavPass('');
-        await loadBackupState();
-      } },
-    ]);
-  };
-
-  // 恢复弹窗
-  const openRestore = () => { setRestorePassDraft(''); setShowRestore(true); };
-  const closeRestore = () => { setShowRestore(false); setRestorePassDraft(''); };
-
-  // 拿到数据源（uri 或 raw 串）后：确认 → 拿口令 → 恢复 → 提示结果。
-  const doRestore = (restoreFn) => {
-    if (!restorePassDraft) { Alert.alert(t('backup.restoreTitle'), t('backup.passphraseEmpty')); return; }
-    Alert.alert(t('backup.restoreConfirmTitle'), t('backup.restoreConfirmBody'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('backup.confirmRestore'), onPress: async () => {
-        setRestoreBusy(true);
-        try {
-          const { imported, skipped } = await restoreFn(restorePassDraft);
-          Alert.alert(t('backup.restoreTitle'), t('backup.restoreDone', { imported, skipped }));
-          setShowRestore(false);
-          await loadBackupState();
-        } catch (e) {
-          Alert.alert(t('backup.restoreTitle'), t('backup.restoreWrongPass'));
-        } finally { setRestoreBusy(false); }
-      } },
-    ]);
-  };
-
-  const pickRestoreFile = async () => {
-    try {
-      const res = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true });
-      if (res.canceled || !res.assets || !res.assets[0]) return;
-      const uri = res.assets[0].uri;
-      await doRestore((pass) => readAndRestore(uri, pass));
-    } catch (e) {
-      Alert.alert(t('backup.restoreTitle'), t('backup.restoreNoFile'));
-    }
-  };
-
-  const restoreFromCloud = async () => {
-    if (!cloudSet) { Alert.alert(t('backup.webdavTitle'), t('backup.webdavNoConfig')); return; }
-    setRestoreBusy(true);
-    try {
-      const raw = await getLatestBackupRaw();
-      setRestoreBusy(false);
-      await doRestore((pass) => readAndRestoreFromRaw(raw, pass));
-    } catch (e) {
-      setRestoreBusy(false);
-      const code = e instanceof WebDavError ? e.code : 'unknown';
-      Alert.alert(t('backup.webdavFailTitle'), t(WEBDAV_FAIL_KEY[code] || 'backup.webdavFailUnknown'));
-    }
-  };
-
-  const openAmapKey = async () => {
-    setAmapKeyDraft(await getAmapKey());
-    setAmapKeyInvalid(false);
-    setShowAmapKey(true);
-  };
-  const closeAmapKey = () => { setShowAmapKey(false); setAmapKeyInvalid(false); };
-  const confirmAmapKey = async () => {
-    const k = amapKeyDraft.trim();
-    if (!k || /\s/.test(k)) { setAmapKeyInvalid(true); return; }
-    const saved = await setAmapKey(k);
-    if (!saved) {
-      Alert.alert(t('profile.amapKeySaveFailTitle'), t('profile.amapKeySaveFailBody'));
+  // 高德 Key 保存
+  const persistAmapKey = async () => {
+    const val = amapKeyDraft.trim();
+    if (val && !/^[a-zA-Z0-9]{16,64}$/.test(val)) {
+      setAmapKeyInvalid(true);
       return;
     }
-    setAmapKeySet(true);
-    setShowAmapKey(false);
     setAmapKeyInvalid(false);
+    await setAmapKey(val || null);
+    setAmapKeySet(!!val);
+    setShowAmapKey(false);
     Alert.alert(t('profile.amapKeySavedTitle'), t('profile.amapKeySavedBody'));
   };
-  const clearAmapKey = async () => {
-    const saved = await setAmapKey('');
-    if (!saved) {
-      Alert.alert(t('profile.amapKeySaveFailTitle'), t('profile.amapKeySaveFailBody'));
-      return;
-    }
+
+  const clearAmapKeyAction = async () => {
+    await setAmapKey(null);
     setAmapKeySet(false);
-    setAmapKeyDraft('');
     setShowAmapKey(false);
-    setAmapKeyInvalid(false);
-  };
-
-  const openLocKey = async () => {
-    setLocKeyDraft(await getAmapLocKeyRaw() || '');
-    setLocKeyInvalid(false);
-    setShowLocKey(true);
-  };
-  const closeLocKey = () => { setShowLocKey(false); setLocKeyInvalid(false); };
-  const confirmLocKey = async () => {
-    const k = locKeyDraft.trim();
-    if (!k || /\s/.test(k)) { setLocKeyInvalid(true); return; }
-    const saved = await setAmapLocKey(k);
-    if (!saved) {
-      Alert.alert(t('profile.amapKeySaveFailTitle'), t('profile.amapKeySaveFailBody'));
-      return;
-    }
-    setLocKeyState('set');
-    setShowLocKey(false);
-    setLocKeyInvalid(false);
     Alert.alert(t('profile.amapKeySavedTitle'), t('profile.amapKeySavedBody'));
   };
-  const clearLocKey = async () => {
-    const saved = await setAmapLocKey('');
-    if (!saved) {
-      Alert.alert(t('profile.amapKeySaveFailTitle'), t('profile.amapKeySaveFailBody'));
-      return;
+
+  // 高德定位 Key 保存
+  const persistLocKey = async (mode) => {
+    if (mode === 'default') {
+      await setAmapLocKey(null);
+      setLocKeyState('default');
+      setShowLocKey(false);
+    } else if (mode === 'disabled') {
+      await setAmapLocKey('');
+      setLocKeyState('disabled');
+      setShowLocKey(false);
+    } else {
+      const val = locKeyDraft.trim();
+      if (!val || !/^[a-zA-Z0-9]{16,64}$/.test(val)) {
+        setLocKeyInvalid(true);
+        return;
+      }
+      setLocKeyInvalid(false);
+      await setAmapLocKey(val);
+      setLocKeyState('set');
+      setShowLocKey(false);
     }
-    setLocKeyState('disabled');
-    setLocKeyDraft('');
-    setShowLocKey(false);
-    setLocKeyInvalid(false);
   };
 
-  // 定位排查：逐项自检每一环（系统服务/权限/缓存/实时/反查），把失败点找出来
+  // 定位自检排查
   const handleLocationDiag = async () => {
     if (diagRunning) return;
     setDiagRunning(true);
@@ -522,38 +389,7 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const handleExport = async () => {
-    setExporting(true);
-    try {
-      const data = await getRecords();
-      const json = JSON.stringify({ app: 'TimeFlow', version, exportedAt: new Date().toISOString(), records: data }, null, 2);
-      const file = `${FileSystem.cacheDirectory}timeflow-export.json`;
-      await FileSystem.writeAsStringAsync(file, json);
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(file, { mimeType: 'application/json', dialogTitle: t('profile.exportDialog') });
-      } else {
-        Alert.alert(t('profile.exportFailTitle'), t('profile.exportFailShare'));
-      }
-    } catch (e) {
-      Alert.alert(t('profile.exportFailTitle'), t('profile.exportFail'));
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const handleClear = () => {
-    Alert.alert(t('common.clearTitle'), t('profile.clearBody'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.delete'), style: 'destructive', onPress: async () => {
-        await clearAll();
-        Alert.alert(t('profile.clearedTitle'), t('profile.clearedBody'));
-      } },
-    ]);
-  };
-
-  const currentLangKey = isSystem ? 'system' : lang;
   const languageValue = isSystem ? t('language.system') : (lang === 'zh' ? t('language.zh') : t('language.en'));
-  const currentThemeKey = themeIsSystem ? 'system' : theme;
   const themeValue = themeIsSystem ? t('theme.system') : theme === 'dark' ? t('theme.dark') : t('theme.light');
 
   return (
@@ -563,7 +399,7 @@ export default function ProfileScreen() {
         <Text style={styles.subtitle}>{t('profile.subtitle')}</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
         {/* 1. 现代个人身份卡片 */}
         <View style={styles.fancyProfileCard}>
           <View style={styles.avatarFancyWrap}>
@@ -598,71 +434,19 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 2. 数据安全守护卡片 */}
-        <BackupStatusBanner
-          cloudSet={cloudSet}
-          autoEnabled={autoEnabled}
-          hasPassphrase={hasPassphrase}
-          lastBackup={lastBackup}
-          fmtTime={fmtBackupTime}
-          onPress={openBackupSettings}
+        {/* 2. 单张五态备份守护卡片（点击打开备份与恢复二级页） */}
+        <BackupStatusCard
+          backupState={backupState}
+          onPress={() => setShowBackupModal(true)}
         />
 
-        {/* 3. 分组一：数据管理与备份 */}
-        <Text style={styles.sectionHeader}>{t('profile.sectionDataManage')}</Text>
-        <View style={styles.card}>
-          <Row
-            icon={cloudSet ? 'cloud-upload-outline' : 'save-outline'}
-            label={t('backup.now')}
-            value={backupBusy ? '…' : (cloudSet ? t('backup.typeCloudAndLocal') : t('backup.typeLocalOnly'))}
-            iconColor={colors.primary}
-            iconBg={colors.primarySoft}
-            onPress={() => withPassphrase('backup')}
-          />
-          <View style={styles.divider} />
-          <Row
-            icon="refresh-outline"
-            label={t('backup.restore')}
-            iconColor="#3B82F6"
-            iconBg="rgba(59, 130, 246, 0.12)"
-            onPress={openRestore}
-          />
-          <View style={styles.divider} />
-          <Row
-            icon="key-outline"
-            label={t('backup.settings')}
-            value={cloudSet ? t('backup.cloudSet') : (hasPassphrase ? t('backup.passphraseConfigured') : t('backup.cloudEmpty'))}
-            iconColor="#F59E0B"
-            iconBg="rgba(245, 158, 11, 0.12)"
-            onPress={openBackupSettings}
-          />
-          <View style={styles.divider} />
-          <Row
-            icon="download-outline"
-            label={t('profile.export')}
-            iconColor="#8B5CF6"
-            iconBg="rgba(139, 92, 246, 0.12)"
-            onPress={handleExport}
-          />
-          <View style={styles.divider} />
-          <Row
-            icon="trash-outline"
-            label={t('profile.clear')}
-            danger
-            iconBg="rgba(239, 68, 68, 0.12)"
-            onPress={handleClear}
-          />
-        </View>
-
-        {/* 4. 分组二：偏好与关于 */}
-        <Text style={styles.sectionHeader}>{t('profile.sectionPreferences')}</Text>
+        {/* 3. 分组一：通用 */}
+        <Text style={styles.sectionHeader}>{t('profile.sectionGeneral', '通用')}</Text>
         <View style={styles.card}>
           <Row
             icon="language-outline"
             label={t('profile.language')}
             value={languageValue}
-            iconColor="#06B6D4"
-            iconBg="rgba(6, 182, 212, 0.12)"
             onPress={() => setShowLang(true)}
           />
           <View style={styles.divider} />
@@ -670,480 +454,303 @@ export default function ProfileScreen() {
             icon="color-palette-outline"
             label={t('profile.theme')}
             value={themeValue}
-            iconColor="#EC4899"
-            iconBg="rgba(236, 72, 153, 0.12)"
             onPress={() => setShowTheme(true)}
+          />
+        </View>
+
+        {/* 4. 分组二：打卡 */}
+        <Text style={styles.sectionHeader}>{t('profile.sectionCheckin', '打卡')}</Text>
+        <View style={styles.card}>
+          <Row
+            icon="shapes-outline"
+            label={t('profile.sectionWidget')}
+            value="查看说明"
+            onPress={() => setShowWidgetGuide(true)}
           />
           <View style={styles.divider} />
           <Row
             icon="locate-outline"
             label={t('profile.locationDebug')}
-            iconColor="#10B981"
-            iconBg="rgba(16, 185, 129, 0.12)"
             onPress={() => setShowLocationDebug(true)}
           />
           <View style={styles.divider} />
           <Row
-            icon="grid-outline"
-            label={t('widget.desc')}
-            iconColor="#6366F1"
-            iconBg="rgba(99, 102, 241, 0.12)"
-            onPress={() => { refreshWidget(); setShowWidgetGuide(true); }}
+            icon="map-outline"
+            label={t('profile.amapKey')}
+            value={amapKeySet ? t('profile.amapKeySet') : t('profile.amapKeyEmpty')}
+            onPress={async () => {
+              const k = await getAmapKey();
+              setAmapKeyDraft(k || '');
+              setAmapKeyInvalid(false);
+              setShowAmapKey(true);
+            }}
           />
           <View style={styles.divider} />
           <Row
-            icon="sparkles-outline"
+            icon="navigate-circle-outline"
+            label={t('profile.amapLocKey')}
+            value={
+              locKeyState === 'default'
+                ? t('profile.amapLocKeyDefault')
+                : locKeyState === 'disabled'
+                ? t('profile.amapLocKeyDisabled')
+                : t('profile.amapKeySet')
+            }
+            onPress={async () => {
+              const raw = await getAmapLocKeyRaw();
+              setLocKeyDraft(raw && raw !== '' ? raw : '');
+              setLocKeyInvalid(false);
+              setShowLocKey(true);
+            }}
+          />
+        </View>
+
+        {/* 5. 分组三：关于 */}
+        <Text style={styles.sectionHeader}>{t('profile.sectionAbout')}</Text>
+        <View style={styles.card}>
+          <Row
+            icon="cloud-download-outline"
             label={t('profile.checkUpdate')}
-            value={`v${version}`}
-            iconColor={colors.primary}
-            iconBg={colors.primarySoft}
             onPress={handleCheckUpdate}
           />
           <View style={styles.divider} />
           <Row
-            icon="shield-checkmark-outline"
+            icon="shield-outline"
             label={t('profile.privacy')}
-            iconColor="#64748B"
-            iconBg="rgba(100, 116, 139, 0.12)"
             onPress={() => setShowPrivacy(true)}
-          />
-          <View style={styles.divider} />
-          <Row
-            icon="mail-outline"
-            label={t('profile.contact')}
-            value="chonggao9@gmail.com"
-            iconColor="#94A3B8"
-            iconBg="rgba(148, 163, 184, 0.12)"
           />
         </View>
 
         <Text style={styles.footer}>{t('profile.version', { v: version })}</Text>
       </ScrollView>
 
-      <Modal visible={showPrivacy} animationType="slide" onRequestClose={() => setShowPrivacy(false)}>
-        <PrivacyAgreement onClose={() => setShowPrivacy(false)} />
-      </Modal>
+      {/* 备份与恢复二级页 */}
+      <BackupScreen
+        visible={showBackupModal}
+        onBack={() => setShowBackupModal(false)}
+      />
 
-      {/* 高德 Key 配置弹窗 */}
-      <Modal visible={showAmapKey} transparent animationType="fade" onRequestClose={closeAmapKey}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('profile.amapKeyTitle')}</Text>
-            <Text style={styles.dialogSub}>{t('profile.amapKeySub')}</Text>
-            <TextInput
-              style={styles.input}
-              value={amapKeyDraft}
-              onChangeText={setAmapKeyDraft}
-              placeholder={t('profile.amapKeyPlaceholder')}
-              placeholderTextColor={colors.ink3}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus
-            />
-            {amapKeyInvalid && <Text style={styles.errorText}>{t('profile.amapKeyInvalid')}</Text>}
-            <View style={styles.dialogRow}>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogGhost]} onPress={clearAmapKey}>
-                <Text style={styles.dialogGhostText}>{t('profile.amapKeyClear')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeAmapKey}>
-                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmAmapKey}>
-                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* 隐私协议 */}
+      <PrivacyAgreement visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
 
-      {/* 高德定位 Key 配置弹窗 */}
-      <Modal visible={showLocKey} transparent animationType="fade" onRequestClose={closeLocKey}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('profile.amapLocKeyTitle')}</Text>
-            <Text style={styles.dialogSub}>{t('profile.amapLocKeySub')}</Text>
-            <TextInput
-              style={styles.input}
-              value={locKeyDraft}
-              onChangeText={setLocKeyDraft}
-              placeholder={t('profile.amapLocKeyPlaceholder')}
-              placeholderTextColor={colors.ink3}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus
-            />
-            {locKeyInvalid && <Text style={styles.errorText}>{t('profile.amapKeyInvalid')}</Text>}
-            <View style={styles.dialogRow}>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogGhost]} onPress={clearLocKey}>
-                <Text style={styles.dialogGhostText}>{t('profile.amapKeyClear')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeLocKey}>
-                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmLocKey}>
-                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 位置调试弹窗：第二层级，收敛三个定位相关入口 */}
-      <Modal visible={showLocationDebug} transparent animationType="fade" onRequestClose={() => setShowLocationDebug(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('profile.locationDebug')}</Text>
-            <Row
-              icon="map-outline"
-              label={t('profile.amapKey')}
-              value={amapKeySet ? t('profile.amapKeySet') : t('profile.amapKeyEmpty')}
-              onPress={() => { setShowLocationDebug(false); openAmapKey(); }}
-            />
-            <View style={styles.divider} />
-            <Row
-              icon="navigate-outline"
-              label={t('profile.amapLocKey')}
-              value={locKeyState === 'default' ? t('profile.amapLocKeyDefault') : locKeyState === 'disabled' ? t('profile.amapLocKeyDisabled') : t('profile.amapKeySet')}
-              onPress={() => { setShowLocationDebug(false); openLocKey(); }}
-            />
-            <View style={styles.divider} />
-            <Row
-              icon="locate-outline"
-              label={t('profile.locationDiag')}
-              value={diagRunning ? '…' : undefined}
-              onPress={() => { setShowLocationDebug(false); handleLocationDiag(); }}
-            />
-            <View style={styles.dialogRow}>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={() => setShowLocationDebug(false)}>
-                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 桌面小组件说明弹窗 */}
-      <Modal visible={showWidgetGuide} transparent animationType="fade" onRequestClose={() => setShowWidgetGuide(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('widget.desc')}</Text>
-            <Text style={styles.dialogSub}>{t('widget.guide')}</Text>
-            <Text style={styles.dialogSub}>{t('widget.howto')}</Text>
-            <View style={styles.dialogRow}>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={() => setShowWidgetGuide(false)}>
-                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 备份口令弹窗 */}
-      <Modal visible={showPassphrase} transparent animationType="fade" onRequestClose={() => { setShowPassphrase(false); pendingActionRef.current = null; }}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('backup.passphraseTitle')}</Text>
-            <Text style={styles.dialogSub}>{t('backup.passphraseSub')}</Text>
-            <TextInput
-              style={styles.input}
-              value={passDraft}
-              onChangeText={setPassDraft}
-              placeholder={t('backup.passphrasePlaceholder')}
-              placeholderTextColor={colors.ink3}
-              secureTextEntry
-              autoFocus
-            />
-            <TextInput
-              style={styles.input}
-              value={passConfirm}
-              onChangeText={setPassConfirm}
-              placeholder={t('backup.passphraseConfirm')}
-              placeholderTextColor={colors.ink3}
-              secureTextEntry
-            />
-            {!!passError && <Text style={styles.errorText}>{passError}</Text>}
-            <View style={styles.dialogRow}>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogGhost]} onPress={clearPassphrase}>
-                <Text style={styles.dialogGhostText}>{t('backup.passphraseClear')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.dialogBtn, styles.dialogCancel]}
-                onPress={() => { setShowPassphrase(false); setPassDraft(''); setPassConfirm(''); setPassError(''); pendingActionRef.current = null; }}
-              >
-                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmPassphrase}>
-                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 备份与同步综合设置弹窗 */}
-      <Modal visible={showBackupSettings} transparent animationType="slide" onRequestClose={closeBackupSettings}>
-        <View style={styles.settingsModalOverlay}>
-          <View style={styles.settingsSheet}>
-            <View style={styles.settingsHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.settingsTitle}>{t('backup.settings')}</Text>
-                <Text style={styles.dialogSub}>{t('backup.settingsSub')}</Text>
-              </View>
-              <TouchableOpacity onPress={closeBackupSettings} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="close-circle" size={26} color={colors.ink3} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView contentContainerStyle={styles.settingsScroll} showsVerticalScrollIndicator={false}>
-              {/* WebDAV 云存储 */}
-              <Text style={styles.settingsSectionTitle}>{t('backup.webdavTitle')}</Text>
-              <View style={styles.settingsCard}>
-                <Text style={styles.dialogSub}>{t('backup.webdavSub')}</Text>
-                <TextInput
-                  style={styles.input}
-                  value={webdavUrl}
-                  onChangeText={setWebdavUrl}
-                  placeholder={t('backup.webdavUrlPlaceholder')}
-                  placeholderTextColor={colors.ink3}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="url"
-                />
-                <TextInput
-                  style={styles.input}
-                  value={webdavUser}
-                  onChangeText={setWebdavUser}
-                  placeholder={t('backup.webdavUser')}
-                  placeholderTextColor={colors.ink3}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={webdavPass}
-                  onChangeText={setWebdavPass}
-                  placeholder={t('backup.webdavPassPlaceholder')}
-                  placeholderTextColor={colors.ink3}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                {webdavTesting && <Text style={styles.errorText}>{t('backup.webdavTesting')}</Text>}
-                <View style={styles.dialogRow}>
-                  {cloudSet && (
-                    <TouchableOpacity style={[styles.dialogBtn, styles.dialogGhost]} onPress={clearWebdav}>
-                      <Text style={styles.dialogGhostText}>{t('backup.webdavClear')}</Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmWebdav} disabled={webdavTesting}>
-                    <Text style={styles.dialogOkText}>{t('backup.webdavSave')}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* 自动备份 */}
-              <Text style={styles.settingsSectionTitle}>{t('backup.auto')}</Text>
-              <View style={styles.settingsCard}>
-                <View style={styles.settingsRowBetween}>
-                  <View style={{ flex: 1, paddingRight: 12 }}>
-                    <Text style={styles.settingsRowLabel}>{t('backup.auto')}</Text>
-                    <Text style={styles.settingsRowSub}>{t('backup.autoBackupSub')}</Text>
-                  </View>
-                  <Switch
-                    value={autoEnabled}
-                    onValueChange={toggleAuto}
-                    trackColor={{ true: colors.primary, false: colors.line2 }}
-                    thumbColor={autoEnabled ? '#fff' : colors.chip}
-                  />
-                </View>
-              </View>
-
-              {/* 加密安全口令 */}
-              <Text style={styles.settingsSectionTitle}>{t('backup.passphraseTitle')}</Text>
-              <View style={styles.settingsCard}>
-                <View style={styles.settingsRowBetween}>
-                  <View style={{ flex: 1, paddingRight: 8 }}>
-                    <Text style={styles.settingsRowLabel}>{t('backup.passphraseTitle')}</Text>
-                    <Text style={styles.settingsRowSub}>{t('backup.passphraseSub')}</Text>
-                  </View>
-                  <Text style={{ fontSize: 13, color: hasPassphrase ? '#10B981' : colors.ink3, fontWeight: '700' }}>
-                    {hasPassphrase ? t('backup.passphraseConfigured') : t('backup.passphraseNotSet')}
-                  </Text>
-                </View>
-
-                {!showPassSection ? (
-                  <View style={[styles.dialogRow, { marginTop: 12 }]}>
-                    {hasPassphrase && (
-                      <TouchableOpacity style={[styles.dialogBtn, styles.dialogGhost]} onPress={clearPassphrase}>
-                        <Text style={styles.dialogGhostText}>{t('backup.passphraseClear')}</Text>
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity
-                      style={[styles.dialogBtn, styles.dialogCancel]}
-                      onPress={() => { setShowPassSection(true); setPassDraft(''); setPassConfirm(''); setPassError(''); }}
-                    >
-                      <Text style={styles.dialogCancelText}>
-                        {hasPassphrase ? t('backup.passphraseChange') : t('backup.passphraseSet')}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View style={{ marginTop: 12 }}>
-                    <TextInput
-                      style={styles.input}
-                      value={passDraft}
-                      onChangeText={setPassDraft}
-                      placeholder={t('backup.passphrasePlaceholder')}
-                      placeholderTextColor={colors.ink3}
-                      secureTextEntry
-                      autoFocus
-                    />
-                    <TextInput
-                      style={styles.input}
-                      value={passConfirm}
-                      onChangeText={setPassConfirm}
-                      placeholder={t('backup.passphraseConfirm')}
-                      placeholderTextColor={colors.ink3}
-                      secureTextEntry
-                    />
-                    {!!passError && <Text style={styles.errorText}>{passError}</Text>}
-                    <View style={styles.dialogRow}>
-                      <TouchableOpacity
-                        style={[styles.dialogBtn, styles.dialogCancel]}
-                        onPress={() => { setShowPassSection(false); setPassDraft(''); setPassConfirm(''); setPassError(''); }}
-                      >
-                        <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmPassphraseInSettings}>
-                        <Text style={styles.dialogOkText}>{t('common.save')}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              {/* 辅助操作：导出备份 */}
-              <Text style={styles.settingsSectionTitle}>{t('backup.exportTitle')}</Text>
-              <View style={styles.settingsCard}>
-                <TouchableOpacity
-                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 }}
-                  onPress={() => withPassphrase('export')}
-                >
-                  <View>
-                    <Text style={styles.settingsRowLabel}>{t('backup.export')}</Text>
-                    <Text style={styles.settingsRowSub}>{t('backup.shareAction')}</Text>
-                  </View>
-                  <Ionicons name="share-outline" size={20} color={colors.primary} />
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 从备份恢复弹窗 */}
-      <Modal visible={showRestore} transparent animationType="fade" onRequestClose={closeRestore}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('backup.restoreTitle')}</Text>
-            <Text style={styles.dialogSub}>{t('backup.restoreSub')}</Text>
-            <TextInput
-              style={styles.input}
-              value={restorePassDraft}
-              onChangeText={setRestorePassDraft}
-              placeholder={t('backup.passphrasePlaceholder')}
-              placeholderTextColor={colors.ink3}
-              secureTextEntry
-            />
-            {restoreBusy && <Text style={styles.errorText}>{t('backup.restoreBusy')}</Text>}
-            <View style={styles.dialogRow}>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={pickRestoreFile} disabled={restoreBusy}>
-                <Text style={styles.dialogCancelText}>{t('backup.restoreFile')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={restoreFromCloud} disabled={restoreBusy}>
-                <Text style={styles.dialogOkText}>{t('backup.restoreCloud')}</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.dialogRow}>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={closeRestore}>
-                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
+      {/* 语言选择 Modal */}
       <Modal visible={showLang} transparent animationType="fade" onRequestClose={() => setShowLang(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowLang(false)}>
+          <View style={styles.dialog} onStartShouldSetResponder={() => true}>
             <Text style={styles.dialogTitle}>{t('profile.languageTitle')}</Text>
-            {LANG_OPTIONS.map(opt => {
-              const active = currentLangKey === opt.key;
+            {LANG_OPTIONS.map((opt) => {
+              const active = isSystem ? opt.key === 'system' : lang === opt.key;
               return (
                 <TouchableOpacity
                   key={opt.key}
                   style={[styles.langOption, active && styles.langOptionActive]}
-                  onPress={() => { setLang(opt.key); setShowLang(false); }}
-                  activeOpacity={0.7}
+                  onPress={async () => {
+                    await setLang(opt.key);
+                    setShowLang(false);
+                  }}
                 >
-                  <Text style={[styles.langOptionText, active && styles.langOptionTextActive]}>{t(opt.labelKey)}</Text>
-                  {active && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+                  <Text style={[styles.langOptionText, active && styles.langOptionTextActive]}>
+                    {t(opt.labelKey)}
+                  </Text>
+                  {active && <Ionicons name="checkmark" size={18} color={colors.primaryStrong} />}
                 </TouchableOpacity>
               );
             })}
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
 
-      {/* 主题选择弹窗 */}
+      {/* 主题选择 Modal */}
       <Modal visible={showTheme} transparent animationType="fade" onRequestClose={() => setShowTheme(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('profile.themeTitle')}</Text>
-            {THEME_OPTIONS.map(opt => {
-              const active = currentThemeKey === opt.key;
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowTheme(false)}>
+          <View style={styles.dialog} onStartShouldSetResponder={() => true}>
+            <Text style={styles.dialogTitle}>{t('profile.theme')}</Text>
+            {THEME_OPTIONS.map((opt) => {
+              const active = themeIsSystem ? opt.key === 'system' : theme === opt.key;
               return (
                 <TouchableOpacity
                   key={opt.key}
                   style={[styles.langOption, active && styles.langOptionActive]}
-                  onPress={async () => { await setTheme(opt.key); setShowTheme(false); }}
-                  activeOpacity={0.7}
+                  onPress={async () => {
+                    await setTheme(opt.key);
+                    setShowTheme(false);
+                  }}
                 >
-                  <Text style={[styles.langOptionText, active && styles.langOptionTextActive]}>{t(opt.labelKey)}</Text>
-                  {active && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+                  <Text style={[styles.langOptionText, active && styles.langOptionTextActive]}>
+                    {t(opt.labelKey)}
+                  </Text>
+                  {active && <Ionicons name="checkmark" size={18} color={colors.primaryStrong} />}
                 </TouchableOpacity>
               );
             })}
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
 
-      {/* 修改昵称弹窗 */}
+      {/* 桌面小组件指南 Modal */}
+      <Modal visible={showWidgetGuide} transparent animationType="fade" onRequestClose={() => setShowWidgetGuide(false)}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowWidgetGuide(false)}>
+          <View style={styles.dialog} onStartShouldSetResponder={() => true}>
+            <Text style={styles.dialogTitle}>{t('profile.sectionWidget')}</Text>
+            <Text style={styles.dialogSub}>
+              长按桌面空白处 → 添加「微件/小组件」→ 找到「TimeFlow 时空流」并拖至桌面，即可无需打开应用一键打卡或查看今日足迹。
+            </Text>
+            <View style={styles.dialogRow}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, styles.dialogOk]}
+                onPress={async () => {
+                  await refreshWidget();
+                  setShowWidgetGuide(false);
+                }}
+              >
+                <Text style={styles.dialogOkText}>{t('common.done') || '知道了'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 昵称编辑 Modal */}
       <Modal visible={showEditNickname} transparent animationType="fade" onRequestClose={() => setShowEditNickname(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowEditNickname(false)}>
+          <View style={styles.dialog} onStartShouldSetResponder={() => true}>
             <Text style={styles.dialogTitle}>{t('profile.nickname')}</Text>
-            <Text style={styles.dialogSub}>{t('profile.nicknamePlaceholder')}</Text>
             <TextInput
               style={styles.input}
               value={nicknameDraft}
               onChangeText={setNicknameDraft}
               placeholder={t('profile.nicknamePlaceholder')}
               placeholderTextColor={colors.ink3}
+              maxLength={20}
               autoFocus
-              returnKeyType="done"
-              onSubmitEditing={persistNickname}
             />
             <View style={styles.dialogRow}>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={() => setShowEditNickname(false)}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, styles.dialogCancel]}
+                onPress={() => setShowEditNickname(false)}
+              >
                 <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={persistNickname}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, styles.dialogOk]}
+                onPress={persistNickname}
+              >
                 <Text style={styles.dialogOkText}>{t('common.save')}</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 高德 Web 服务 Key 设置 Modal */}
+      <Modal visible={showAmapKey} transparent animationType="fade" onRequestClose={() => setShowAmapKey(false)}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowAmapKey(false)}>
+          <View style={styles.dialog} onStartShouldSetResponder={() => true}>
+            <Text style={styles.dialogTitle}>{t('profile.amapKeyTitle')}</Text>
+            <Text style={styles.dialogSub}>{t('profile.amapKeySub')}</Text>
+            <TextInput
+              style={styles.input}
+              value={amapKeyDraft}
+              onChangeText={(text) => {
+                setAmapKeyDraft(text);
+                setAmapKeyInvalid(false);
+              }}
+              placeholder={t('profile.amapKeyPlaceholder')}
+              placeholderTextColor={colors.ink3}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {amapKeyInvalid && <Text style={styles.errorText}>{t('profile.amapKeyInvalid')}</Text>}
+            <View style={styles.dialogRow}>
+              {amapKeySet && (
+                <TouchableOpacity
+                  style={styles.dialogGhost}
+                  onPress={clearAmapKeyAction}
+                >
+                  <Text style={styles.dialogGhostText}>{t('profile.amapKeyClear')}</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.dialogBtn, styles.dialogCancel]}
+                onPress={() => setShowAmapKey(false)}
+              >
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, styles.dialogOk]}
+                onPress={persistAmapKey}
+              >
+                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 高德定位 SDK Key 设置 Modal */}
+      <Modal visible={showLocKey} transparent animationType="fade" onRequestClose={() => setShowLocKey(false)}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowLocKey(false)}>
+          <View style={styles.dialog} onStartShouldSetResponder={() => true}>
+            <Text style={styles.dialogTitle}>{t('profile.amapLocKeyTitle')}</Text>
+            <Text style={styles.dialogSub}>{t('profile.amapLocKeySub')}</Text>
+            <TextInput
+              style={styles.input}
+              value={locKeyDraft}
+              onChangeText={(text) => {
+                setLocKeyDraft(text);
+                setLocKeyInvalid(false);
+              }}
+              placeholder={t('profile.amapLocKeyPlaceholder')}
+              placeholderTextColor={colors.ink3}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {locKeyInvalid && <Text style={styles.errorText}>{t('profile.amapKeyInvalid')}</Text>}
+            <View style={styles.dialogRow}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, styles.dialogCancel]}
+                onPress={() => setShowLocKey(false)}
+              >
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, styles.dialogOk]}
+                onPress={() => persistLocKey('custom')}
+              >
+                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 位置排查诊断 Modal */}
+      <Modal visible={showLocationDebug} transparent animationType="fade" onRequestClose={() => setShowLocationDebug(false)}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowLocationDebug(false)}>
+          <View style={styles.dialog} onStartShouldSetResponder={() => true}>
+            <Text style={styles.dialogTitle}>{t('profile.locationDebug')}</Text>
+            <Text style={styles.dialogSub}>
+              检测当前设备的系统定位服务、运行时权限、高德定位 SDK 及逆地理编码状态。
+            </Text>
+            <View style={styles.dialogRow}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, styles.dialogCancel]}
+                onPress={() => setShowLocationDebug(false)}
+              >
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, styles.dialogOk]}
+                onPress={async () => {
+                  setShowLocationDebug(false);
+                  await handleLocationDiag();
+                }}
+              >
+                <Text style={styles.dialogOkText}>{diagRunning ? '检测中…' : t('profile.locationDiag')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -1151,261 +758,140 @@ export default function ProfileScreen() {
 
 const makeStyles = (colors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: 20, paddingBottom: 8 },
-  title: { fontSize: 28, fontWeight: '800', color: colors.ink, letterSpacing: -0.6, lineHeight: 32 },
-  subtitle: { fontSize: 13, color: colors.ink2, marginTop: 4, fontWeight: '500' },
+  header: { paddingHorizontal: 20, paddingBottom: 12 },
+  title: { fontSize: 24, fontWeight: '700', color: colors.ink },
+  subtitle: { fontSize: 13, color: colors.ink3, marginTop: 2, fontWeight: '500' },
+  content: { paddingHorizontal: 16, paddingTop: 4 },
 
-  content: { padding: 16, paddingBottom: 40 },
-  section: { fontSize: 13, color: colors.ink2, fontWeight: '700', letterSpacing: 0.3, marginBottom: 8, marginTop: 6, marginLeft: 4 },
-
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...shadow.card,
-  },
-
-  // 现代个人身份卡片
   fancyProfileCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: radius.xl,
+    padding: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.line,
-    ...shadow.card,
   },
-  avatarFancyWrap: {
-    position: 'relative',
-    marginRight: 12,
-  },
+  avatarFancyWrap: { position: 'relative', marginRight: 14 },
   avatarFancy: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadow.sm,
   },
   badgeStar: {
     position: 'absolute',
     bottom: -2,
     right: -2,
-    width: 17,
-    height: 17,
-    borderRadius: 8.5,
-    backgroundColor: '#FFB300',
-    borderWidth: 2,
-    borderColor: colors.surface,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#F59E0B',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
   },
-  badgeStarText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#FFFFFF',
-  },
-  profileTextWrap: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  profileNickname: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.ink,
-    letterSpacing: -0.2,
-  },
+  badgeStarText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  profileTextWrap: { flex: 1, justifyContent: 'center' },
+  profileNickname: { fontSize: 17, fontWeight: '700', color: colors.ink, marginBottom: 4 },
   streakBadge: {
     alignSelf: 'flex-start',
     backgroundColor: colors.primarySoft,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 999,
-    marginTop: 4,
-    borderWidth: 0.5,
-    borderColor: colors.line,
+    borderRadius: 10,
   },
-  streakBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.primaryStrong,
-  },
+  streakBadgeText: { fontSize: 11, fontWeight: '600', color: colors.primaryStrong },
   editProfileBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
     backgroundColor: colors.chip,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 999,
+  },
+  editProfileBtnText: { fontSize: 12, fontWeight: '600', color: colors.ink2 },
+
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingVertical: 4,
+    paddingHorizontal: 14,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.line,
   },
-  editProfileBtnText: {
-    fontSize: 11.5,
-    fontWeight: '600',
-    color: colors.ink2,
-  },
-
   sectionHeader: {
     fontSize: 12.5,
     color: colors.ink2,
     fontWeight: '700',
-    marginTop: 10,
+    marginTop: 8,
     marginBottom: 8,
     marginLeft: 4,
   },
-
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 4 },
   iconHolder: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    backgroundColor: colors.chip,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rowLabel: { flex: 1, fontSize: 14, color: colors.ink, fontWeight: '600' },
   rowValue: { fontSize: 12.5, color: colors.ink3, marginRight: 4, fontWeight: '500' },
   divider: { height: 1, backgroundColor: colors.line, marginHorizontal: 6 },
-
-  footer: { textAlign: 'center', fontSize: 12, color: colors.ink3, marginTop: 8, fontWeight: '500' },
+  footer: { textAlign: 'center', fontSize: 12, color: colors.ink3, marginTop: 12, fontWeight: '500' },
 
   overlay: {
-    flex: 1, backgroundColor: colors.scrim,
-    alignItems: 'center', justifyContent: 'center', padding: 28,
-  },
-  dialog: { width: '100%', backgroundColor: colors.surface, borderRadius: 20, padding: 16 },
-  dialogTitle: { fontSize: 17, fontWeight: '700', color: colors.ink, textAlign: 'center', marginBottom: 8 },
-  dialogSub: { fontSize: 12, color: colors.ink3, marginTop: 2, marginBottom: 4, lineHeight: 17 },
-  input: {
-    marginTop: 8, borderWidth: 1.5, borderColor: colors.line2, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: colors.ink,
-    backgroundColor: colors.chip,
-  },
-  errorText: { marginTop: 8, fontSize: 12, color: colors.danger },
-  dialogGhost: {
-    flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.line,
-  },
-  dialogGhostText: { fontSize: 15, color: colors.danger, fontWeight: '600' },
-  dialogRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  dialogBtn: { flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  dialogCancel: { backgroundColor: colors.chip },
-  dialogCancelText: { fontSize: 15, color: colors.ink2, fontWeight: '600' },
-  dialogOk: { backgroundColor: colors.primary },
-  dialogOkText: { fontSize: 15, color: '#fff', fontWeight: '700' },
-  langOption: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12,
-  },
-  langOptionActive: { backgroundColor: colors.primarySofter },
-  langOptionText: { fontSize: 16, color: colors.ink },
-  langOptionTextActive: { color: colors.primaryStrong, fontWeight: '700' },
-
-  statusBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    marginBottom: 12,
-    gap: 12,
-  },
-  statusIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusTextWrap: {
-    flex: 1,
-  },
-  statusHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  statusTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  statusTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  statusTagText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  statusSub: {
-    fontSize: 12,
-    marginTop: 3,
-  },
-
-  settingsModalOverlay: {
     flex: 1,
     backgroundColor: colors.scrim,
-    justifyContent: 'flex-end',
-  },
-  settingsSheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
-    paddingBottom: 24,
-  },
-  settingsHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
+    justifyContent: 'center',
+    padding: 28,
   },
-  settingsTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.ink,
-  },
-  settingsScroll: {
-    paddingBottom: 24,
-  },
-  settingsSectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.ink2,
-    marginTop: 18,
-    marginBottom: 8,
-    paddingHorizontal: 20,
-  },
-  settingsCard: {
-    backgroundColor: colors.chip,
-    borderRadius: radius.md,
-    marginHorizontal: 16,
-    padding: 14,
-  },
-  settingsRowBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  settingsRowLabel: {
+  dialog: { width: '100%', backgroundColor: colors.surface, borderRadius: 20, padding: 18 },
+  dialogTitle: { fontSize: 17, fontWeight: '700', color: colors.ink, textAlign: 'center', marginBottom: 8 },
+  dialogSub: { fontSize: 12.5, color: colors.ink3, marginTop: 2, marginBottom: 8, lineHeight: 18 },
+  input: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     fontSize: 15,
-    fontWeight: '600',
     color: colors.ink,
+    backgroundColor: colors.chip,
   },
-  settingsRowSub: {
-    fontSize: 12,
-    color: colors.ink3,
-    marginTop: 2,
-    maxWidth: '85%',
+  errorText: { marginTop: 6, fontSize: 12, color: colors.danger },
+  dialogGhost: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
+  dialogGhostText: { fontSize: 14, color: colors.danger, fontWeight: '600' },
+  dialogRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  dialogBtn: { flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  dialogCancel: { backgroundColor: colors.chip },
+  dialogCancelText: { fontSize: 14, color: colors.ink2, fontWeight: '600' },
+  dialogOk: { backgroundColor: colors.primary },
+  dialogOkText: { fontSize: 14, color: '#fff', fontWeight: '700' },
+  langOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  langOptionActive: { backgroundColor: colors.primarySofter },
+  langOptionText: { fontSize: 15, color: colors.ink },
+  langOptionTextActive: { color: colors.primaryStrong, fontWeight: '700' },
 });
