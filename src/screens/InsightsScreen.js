@@ -4,9 +4,9 @@ import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getRecords, clearAll, getRecordsFingerprint, updateFocusSession, getFocusSessions } from '../storage/store';
-import { computePathStats, formatDuration } from '../utils/stats';
-import { getPlaceOptions, queryJourney, buildDurationHistogram, computeWeekTravelStats, findLatestTripForRoute } from '../utils/analytics';
+import { getRecords, clearAll, getRecordsFingerprint, updateFocusSession, getFocusSessions, updateRecord } from '../storage/store';
+import { computePathStats, formatDuration, formatTime, isPlaceholderName, placeKey } from '../utils/stats';
+import { getPlaceOptions, queryJourney, buildDurationHistogram, computeWeekTravelStats, findLatestTripForRoute, groupTrips, groupTripsByDate } from '../utils/analytics';
 import { radius, shadow } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
@@ -18,14 +18,13 @@ import {
   getCategoryMeta,
 } from '../utils/focusCategories';
 import BarChart from '../components/charts/BarChart';
-import HistoryView from '../components/HistoryView';
 import RouteMapScreen from './RouteMapScreen';
 import TripReceiptModal from '../components/TripReceiptModal';
 
 export default function InsightsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { t, lang } = useI18n();
+  const { t, lang, formatDate } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -118,6 +117,68 @@ export default function InsightsScreen() {
       Alert.alert(t('insights.noData'), t('insights.noDataHint'));
     }
   }, [travelRecords, fromKey, toKey, t]);
+
+  const PLACE_PRESETS = ['家', '公司', '健身房', '学校', '商场', '地铁站'];
+  const TRIP_MODES = ['all', 'walk', 'bike', 'drive', 'taxi', 'subway', 'transit', 'train', 'flight', 'boat'];
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [modeFilter, setModeFilter] = useState('all');
+  const [namingRecord, setNamingRecord] = useState(null);
+  const [placeDraftName, setPlaceDraftName] = useState('');
+
+  const handleStartRename = useCallback((rec) => {
+    if (!rec) return;
+    setNamingRecord(rec);
+    setPlaceDraftName(isPlaceholderName(rec.locationName) ? '' : (rec.locationName || ''));
+  }, []);
+
+  const confirmRenamePlace = useCallback(async () => {
+    if (!namingRecord) return;
+    const name = placeDraftName.trim();
+    if (!name) {
+      Alert.alert(t('common.tip', '提示'), t('home.renameEmpty', '地名不能为空'));
+      return;
+    }
+    await updateRecord(namingRecord.id, { locationName: name });
+    setNamingRecord(null);
+    setPlaceDraftName('');
+    lastFingerprintRef.current = null;
+    await loadData();
+  }, [namingRecord, placeDraftName, t, loadData]);
+
+  const unnamedRecords = useMemo(() => {
+    return travelRecords.filter(r => isPlaceholderName(r.locationName));
+  }, [travelRecords]);
+
+  const allTrips = useMemo(() => groupTrips(travelRecords), [travelRecords]);
+
+  const filteredTrips = useMemo(() => {
+    let list = allTrips;
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter(t =>
+        t.route.some(nm => (nm || '').toLowerCase().includes(q)) ||
+        t.records.some(r => (r.locationName || '').toLowerCase().includes(q))
+      );
+    }
+    if (modeFilter && modeFilter !== 'all') {
+      list = list.filter(t => t.mode === modeFilter || t.records.some(r => (r.mode || 'walk') === modeFilter));
+    }
+    return list;
+  }, [allTrips, searchQuery, modeFilter]);
+
+  const dateGroupedTrips = useMemo(() => {
+    return groupTripsByDate(filteredTrips);
+  }, [filteredTrips]);
+
+  const isDiscoveredTrip = useCallback((trip) => {
+    if (!trip || trip.route.length < 2) return false;
+    const first = trip.records[0];
+    const last = trip.records[trip.records.length - 1];
+    const fk = placeKey(first);
+    const tk = placeKey(last);
+    return discoveredRoutes.some(dr => dr.fromKey === fk && dr.toKey === tk);
+  }, [discoveredRoutes]);
 
   // 选定出发地+目的地后自动查询端到端 A→B
   useEffect(() => {
@@ -1072,8 +1133,175 @@ export default function InsightsScreen() {
             )}
           </View>
 
-          {/* 历史出行记录（已合并入行程主页） */}
-          <HistoryView records={travelRecords} onShowMap={setMapTrip} onShowReceipt={setReceiptTrip} />
+          {/* 6. 未命名地点提示条 */}
+          {unnamedRecords.length > 0 && (
+            <View style={styles.banner}>
+              <View style={styles.bannerTextCol}>
+                <Text style={styles.bannerTitle}>
+                  {t('insights.unnamedBannerTitle', { n: unnamedRecords.length })}
+                </Text>
+                <Text style={styles.bannerHint}>
+                  {t('insights.unnamedBannerHint')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.bannerBtn}
+                onPress={() => handleStartRename(unnamedRecords[0])}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.bannerBtnText}>{t('insights.goName')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* 7. 出行记录模块 */}
+          <View style={styles.historySection}>
+            <View style={styles.historyHeaderRow}>
+              <Text style={styles.historySectionTitle}>{t('insights.tripRecords')}</Text>
+              <Text style={styles.historyCountText}>{t('insights.recordsCount', { n: filteredTrips.length })}</Text>
+            </View>
+
+            {/* 地名搜索框 */}
+            <View style={styles.searchBox}>
+              <Ionicons name="search" size={18} color={colors.ink2} />
+              <TextInput
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder={t('history.searchPlaceholder', '搜索地名')}
+                placeholderTextColor={colors.ink3}
+                returnKeyType="search"
+              />
+              {searchQuery ? (
+                <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={16} color={colors.ink3} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {/* 交通方式筛选 chips */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modeChipsRow}>
+              {TRIP_MODES.map((m) => {
+                const isCur = modeFilter === m;
+                const label = m === 'all' ? t('history.all') : t('mode.' + m, m);
+                return (
+                  <TouchableOpacity
+                    key={`mode-filter-${m}`}
+                    style={[styles.modeChip, isCur && styles.modeChipActive]}
+                    onPress={() => setModeFilter(m)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.modeChipText, isCur && styles.modeChipTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* 按日期分组的出行列表 */}
+            {dateGroupedTrips.length === 0 ? (
+              <View style={styles.emptyListBox}>
+                <Text style={styles.emptyListText}>
+                  {modeFilter !== 'all'
+                    ? t('insights.noModeMatch')
+                    : searchQuery
+                    ? t('history.noMatch')
+                    : t('history.empty')}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.daysListContainer}>
+                {dateGroupedTrips.map(({ ts, list }) => {
+                  const dayTotalSec = Math.round(list.reduce((sum, t) => sum + (t.durationMs > 0 ? t.durationMs : 0), 0) / 1000);
+                  const daySummary = dayTotalSec > 0
+                    ? t('insights.timesDuration', { n: list.length, d: formatDuration(dayTotalSec, lang) })
+                    : t('insights.timesCount', { n: list.length });
+
+                  return (
+                    <View key={`day-group-${ts}`} style={styles.dayGroup}>
+                      <View style={styles.dayGroupHeader}>
+                        <Text style={styles.dayGroupTitle}>{formatDate(new Date(ts))}</Text>
+                        <Text style={styles.dayGroupSummary}>{daySummary}</Text>
+                      </View>
+
+                      <View style={styles.dayCardsList}>
+                        {list.map((trip, tripIdx) => {
+                          const isDiscovered = isDiscoveredTrip(trip);
+                          const from = trip.route[0] || (isPlaceholderName(trip.records[0]?.locationName) ? t('common.unnamed') : trip.records[0]?.locationName);
+                          const to = trip.route[trip.route.length - 1];
+                          const tripTitle = trip.route.length > 1 ? `${from} → ${to}` : from;
+                          const hasDuration = trip.durationMs > 0;
+                          const isUnnamedSingle = !hasDuration && trip.records.length === 1 && isPlaceholderName(trip.records[0]?.locationName);
+                          const canOpenDetail = trip.records.length > 1;
+
+                          return (
+                            <TouchableOpacity
+                              key={trip.tripId || `trip-${tripIdx}`}
+                              style={[styles.tripItem, tripIdx > 0 && styles.tripItemBorder]}
+                              onPress={() => {
+                                if (canOpenDetail) {
+                                  setReceiptTrip(trip);
+                                }
+                              }}
+                              activeOpacity={canOpenDetail ? 0.7 : 1}
+                            >
+                              <View style={styles.tripIconBox}>
+                                <ModeIcon mode={trip.mode} size={18} color={colors.primaryStrong} />
+                              </View>
+
+                              <View style={styles.tripMid}>
+                                <View style={styles.tripTitleRow}>
+                                  <Text style={styles.tripTitleText} numberOfLines={1}>
+                                    {tripTitle}
+                                  </Text>
+                                  {isDiscovered && (
+                                    <View style={styles.badgeDiscovered}>
+                                      <Text style={styles.badgeDiscoveredText}>
+                                        {t('insights.discoveredRouteBadge')}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                                <Text style={styles.tripMetaLine}>
+                                  {formatTime(trip.startTs)} · {t('history.stops', { n: trip.records.length })}
+                                </Text>
+                              </View>
+
+                              <View style={styles.tripRightCol}>
+                                {hasDuration ? (
+                                  <>
+                                    <Text style={styles.tripDurBig}>
+                                      {formatDuration(Math.round(trip.durationMs / 1000), lang)}
+                                    </Text>
+                                    {trip.records.length > 2 && (
+                                      <Text style={styles.tripViaSmall}>
+                                        {t('history.via', { n: trip.records.length - 2 })}
+                                      </Text>
+                                    )}
+                                  </>
+                                ) : isUnnamedSingle ? (
+                                  <TouchableOpacity
+                                    style={styles.nameBtn}
+                                    onPress={() => handleStartRename(trip.records[0])}
+                                    activeOpacity={0.7}
+                                  >
+                                    <Text style={styles.nameBtnText}>{t('insights.nameBtn')}</Text>
+                                  </TouchableOpacity>
+                                ) : (
+                                  <Text style={styles.dashText}>—</Text>
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
 
           <TouchableOpacity style={styles.clearBtn} onPress={handleClear}>
             <Text style={styles.clearText}>{t('profile.clear')}</Text>
@@ -1233,6 +1461,52 @@ export default function InsightsScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* 给未命名地点命名弹窗 */}
+      <Modal visible={!!namingRecord} transparent animationType="fade" onRequestClose={() => setNamingRecord(null)}>
+        <View style={styles.overlay}>
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>{t('insights.renamePlaceTitle')}</Text>
+            <TextInput
+              style={styles.input}
+              value={placeDraftName}
+              onChangeText={setPlaceDraftName}
+              placeholder={t('insights.renamePlacePlaceholder')}
+              placeholderTextColor={colors.ink3}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={confirmRenamePlace}
+            />
+            <View style={styles.quickPlaceWrap}>
+              <View style={styles.chipRow}>
+                {PLACE_PRESETS.map((p, pIdx) => {
+                  const isSelected = placeDraftName === p;
+                  return (
+                    <TouchableOpacity
+                      key={'place-preset-' + pIdx}
+                      style={[styles.quickChip, isSelected && styles.quickChipActive]}
+                      onPress={() => setPlaceDraftName(p)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.quickChipText, isSelected && styles.quickChipTextActive]}>
+                        {p}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+            <View style={styles.dialogRow}>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={() => setNamingRecord(null)}>
+                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmRenamePlace}>
+                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -1240,6 +1514,244 @@ export default function InsightsScreen() {
 const makeStyles = (colors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 40 },
+
+  banner: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 16,
+  },
+  bannerTextCol: {
+    flex: 1,
+  },
+  bannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  bannerHint: {
+    fontSize: 12,
+    color: colors.ink2,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  bannerBtn: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 22,
+    backgroundColor: colors.primaryStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  historySection: {
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  historyHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  historySectionTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  historyCountText: {
+    fontSize: 12,
+    color: colors.ink2,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 14,
+    backgroundColor: colors.surface,
+    borderRadius: 22,
+    ...shadow.sm,
+    borderWidth: 1,
+    borderColor: colors.line,
+    marginBottom: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.ink,
+    paddingVertical: 0,
+  },
+  modeChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 4,
+    marginBottom: 14,
+  },
+  modeChip: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: '#EADFD7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeChipActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primaryStrong,
+  },
+  modeChipText: {
+    fontSize: 13,
+    color: colors.ink,
+    fontWeight: '500',
+  },
+  modeChipTextActive: {
+    color: colors.primaryStrong,
+    fontWeight: '700',
+  },
+  emptyListBox: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.sm,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  emptyListText: {
+    fontSize: 13,
+    color: colors.ink2,
+    textAlign: 'center',
+  },
+  daysListContainer: {
+    gap: 14,
+  },
+  dayGroup: {
+    gap: 8,
+  },
+  dayGroupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    paddingHorizontal: 4,
+  },
+  dayGroupTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  dayGroupSummary: {
+    fontSize: 12,
+    color: colors.ink2,
+  },
+  dayCardsList: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    ...shadow.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    overflow: 'hidden',
+  },
+  tripItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    minHeight: 56,
+  },
+  tripItemBorder: {
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
+  tripIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FDEDEA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tripMid: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tripTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  tripTitleText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.ink,
+    maxWidth: '80%',
+  },
+  badgeDiscovered: {
+    backgroundColor: '#FDEDEA',
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+    marginLeft: 6,
+  },
+  badgeDiscoveredText: {
+    fontSize: 11,
+    color: colors.primaryStrong,
+    fontWeight: '600',
+  },
+  tripMetaLine: {
+    fontSize: 12,
+    color: colors.ink2,
+    marginTop: 3,
+  },
+  tripRightCol: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  tripDurBig: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primaryStrong,
+  },
+  tripViaSmall: {
+    fontSize: 11,
+    color: colors.ink2,
+    marginTop: 2,
+  },
+  nameBtn: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#F0C9C5',
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nameBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primaryStrong,
+  },
+  dashText: {
+    fontSize: 15,
+    color: colors.ink3,
+  },
 
   headerRow: {
     flexDirection: 'row',
