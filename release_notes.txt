@@ -4,17 +4,16 @@ TimeFlow v1.2.4 Release Notes (Google Play - versionCode: 26)
 
 【1. 简体中文版 (zh-CN) - 适用于 Google Play 更新说明，已严格控制在 500 字符以内】
 v1.2.4 更新说明：
-• 🍅 番茄专注交互革新：转盘手势丝滑调节时长，番茄视觉放大居中，档位下移至拇指热区，单手操作更顺畅。
-• 🚀 首页架构与模式重构：默认优先「室内专注」；模式切换升级为精致分段控件；行程与专注数据深度隔离。
-• ✨ 启动页全新设计与零色差：原生窗口、状态栏与首页底色数学级对齐，冷启动零闪变；自适应中英文品牌副标；兼容 Android 12+。
-• 🚗 行程轨迹与打卡优化：支持出行方式横滑选择，长按充能结程防误触，补记抽屉快速回溯。
-• 📊 洞察统计与数据安全：修复分类重命名与计数统计，优化前台重入定位拦截，提升本地备份稳定性。
+• 🍅 番茄专注交互革新：转盘手势丝滑调节时长，番茄视觉放大居中，档位下移至拇指热区，8款治愈白噪音陪伴。
+• 🚀 首页架构与模式重构：分段控件丝滑切换室内专注与出行轨迹；双域数据深度隔离。
+• 💾 极简免密备份系统：移除密码心智负担，秒级免密恢复；支持条数对照预览与恢复前快照一键回退。
+• 🗺️ 深度洞察与详情升级：原生行程详情页、路线简图拓扑、同路线耗时智能对比、未命名地点快速补齐。
+• ✨ 启动体验与细节修复：窗口与状态栏零色差对齐冷启动；沉浸式隐私协议弹窗修复；出行方式横滑胶囊条。
 
 【2. 英文版 (en-US) - For Google Play Console "What's new", within 500 characters】
 v1.2.4 What's New:
-• 🍅 Focus Upgrade: Smooth circular dial gesture for timer adjustment, enlarged hero tomato, thumb-friendly presets.
-• 🚀 Home Redesign: Default to Indoor Focus; refined segmented mode control; full data isolation between trips & focus.
-• ✨ Seamless Splash Screen: 100% matched color palette across Android window & home for zero-flicker launch; localized taglines; Android 12+ ready.
-• 📊 Insights & Stability: Fixed category rename, refined stats, safer local backups.
-
-
+• 🍅 Focus Upgrade: Smooth circular dial gesture for timer adjustment, enlarged hero tomato, 8 soothing ambient soundscapes.
+• 🚀 Redesigned Home: Refined segmented control to switch between Indoor Focus and Travel Trips; isolated data domains.
+• 💾 Passwordless Fast Backup: Instant zero-delay restore with record diff preview, safety snapshot, and one-tap undo.
+• 🗺️ Native Trip Insights: Native trip detail view with route schematics, same-route trip comparisons, and quick unnamed-place backfill.
+• ✨ Seamless Launch & Polish: Zero-flicker launch screen matching Android window color; full-screen privacy modal fix.
