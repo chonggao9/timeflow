@@ -95,7 +95,7 @@ function BackupStatusCard({ backupState, onPress, onActionPress }) {
   const { colors } = useTheme();
   const { t } = useI18n();
 
-  const st = backupState?.status || 'notConfigured';
+  const st = backupState?.status || 'ok';
 
   const formatRelTime = (timeMs) => {
     if (!timeMs) return '从未';
@@ -125,10 +125,12 @@ function BackupStatusCard({ backupState, onPress, onActionPress }) {
     color: '#25915F',
     icon: 'shield-checkmark',
     title: t('backup.navTitle', '备份与恢复'),
-    sub: t('backup.lastBackupPrefix', {
-      time: formatRelTime(backupState?.lastSuccessAt),
-      n: (backupState?.lastCounts?.records || 0).toLocaleString(),
-    }),
+    sub: backupState?.lastSuccessAt
+      ? t('backup.lastBackupPrefix', {
+          time: formatRelTime(backupState?.lastSuccessAt),
+          n: (backupState?.lastCounts?.records || 0).toLocaleString(),
+        })
+      : '本地沙盒自动守护中',
     btn: null,
   };
 
@@ -141,7 +143,7 @@ function BackupStatusCard({ backupState, onPress, onActionPress }) {
       title: t('backup.statusStale', '已 3 天未备份'),
       sub: backupState?.lastSuccessAt
         ? `上次备份 ${formatShortTime(backupState.lastSuccessAt)}`
-        : t('backup.descNotConfigured', '建议现在备份一次'),
+        : '建议现在备份一次',
       btn: t('backup.btnQuick', '立即备份'),
     };
   } else if (st === 'failed') {
@@ -163,16 +165,6 @@ function BackupStatusCard({ backupState, onPress, onActionPress }) {
       title: t('backup.statusNeedConfirm', '自动备份已暂停'),
       sub: '记录数明显减少',
       btn: t('backup.btnOpen', '查看'),
-    };
-  } else if (st === 'notConfigured') {
-    cfg = {
-      bg: '#EEE9E3',
-      border: 'rgba(111, 100, 92, 0.22)',
-      color: '#6F645C',
-      icon: 'lock-closed-outline',
-      title: t('backup.statusNotConfigured', '尚未开启备份'),
-      sub: t('backup.descNotConfigured', '设置备份密码，保护你的打卡数据'),
-      btn: t('backup.btnSetup', '去设置'),
     };
   }
 
@@ -448,7 +440,7 @@ export default function ProfileScreen() {
           }}
           onActionPress={() => {
             const st = backupState?.status;
-            const act = st === 'notConfigured' ? 'setup' : st === 'failed' ? 'cloud' : st === 'stale' ? 'backupNow' : null;
+            const act = st === 'failed' ? 'cloud' : st === 'stale' ? 'backupNow' : null;
             setBackupInitialAction(act);
             setShowBackupModal(true);
           }}

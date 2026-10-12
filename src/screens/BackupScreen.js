@@ -27,8 +27,6 @@ import {
 } from '../backup/backup';
 import {
   useBackupState,
-  getBackupPassphrase,
-  setBackupPassphrase,
   updateBackupState,
 } from '../backup/state';
 import {
@@ -61,17 +59,6 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
   // 恢复弹层
   const [selectedVersion, setSelectedVersion] = useState(null);
   const [showRestoreSheet, setShowRestoreSheet] = useState(false);
-
-  // 首次设置 / 密码弹层
-  const [showSetupModal, setShowSetupModal] = useState(false);
-  const [setupStep, setSetupStep] = useState(1);
-  const [setupPw, setSetupPw] = useState('');
-  const [setupPw2, setSetupPw2] = useState('');
-  const [setupDavUrl, setSetupDavUrl] = useState('https://dav.jianguoyun.com/dav/');
-  const [setupDavUser, setSetupDavUser] = useState('');
-  const [setupDavPass, setSetupDavPass] = useState('');
-  const [setupDavTesting, setSetupDavTesting] = useState(false);
-  const [setupDavTested, setSetupDavTested] = useState(false);
 
   // 云端独立设置弹层
   const [showCloudModal, setShowCloudModal] = useState(false);
@@ -126,9 +113,7 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
   useEffect(() => {
     if (visible) {
       reloadData();
-      if (initialAction === 'setup') {
-        openSetup();
-      } else if (initialAction === 'cloud') {
+      if (initialAction === 'setup' || initialAction === 'cloud') {
         openCloudSettings();
       } else if (initialAction === 'backupNow') {
         setTimeout(() => {
@@ -161,15 +146,9 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
     return `${days} 天前`;
   };
 
-  // 手动备份逻辑
+  // 手动备份逻辑（免密直接备份）
   const handleManualBackup = async (forceOverwriteSafety = false) => {
     if (backingUp) return;
-    const pass = await getBackupPassphrase();
-    if (!pass) {
-      openSetup();
-      return;
-    }
-
     setBackingUp(true);
     try {
       const result = await executeBackupPipeline({
@@ -187,7 +166,7 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
           ? '备份完成 · 云端 + 本地'
           : result.cloudError
           ? `本地已备份；云端失败：${result.cloudError.message}`
-          : '本地已加密备份';
+          : '本地已安全备份';
         showToastMsg(msg);
       }
       await reloadData();
@@ -208,21 +187,6 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
     setAutoBackupOn(val);
     await setAutoBackup(val);
     showToastMsg(val ? '已开启自动备份' : '已关闭自动备份');
-  };
-
-  // 打开首次设置/修改密码
-  const openSetup = async () => {
-    const dav = await getWebDavConfig();
-    const pass = await getWebDavPassword();
-    setSetupStep(1);
-    setSetupPw('');
-    setSetupPw2('');
-    setSetupDavUrl(dav?.url || 'https://dav.jianguoyun.com/dav/');
-    setSetupDavUser(dav?.username || '');
-    setSetupDavPass(pass || '');
-    setSetupDavTesting(false);
-    setSetupDavTested(false);
-    setShowSetupModal(true);
   };
 
   // 打开云端独立设置
@@ -294,7 +258,7 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
 
   if (!visible) return null;
 
-  const st = backupState.status || 'notConfigured';
+  const st = backupState.status || 'ok';
 
   // Hero 卡片色彩与文字映射
   let heroTheme = {
@@ -302,10 +266,9 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
     color: '#25915F',
     icon: 'shield-checkmark',
     title: t('backup.statusNormal', '备份正常'),
-    subtitle: t('backup.lastBackupPrefix', {
-      time: getRelativeTime(backupState.lastSuccessAt),
-      n: (backupState.lastCounts?.records || currentCounts.records).toLocaleString(),
-    }),
+    subtitle: cloudConfigured
+      ? '云端与本地实时同步'
+      : '本地沙盒自动守护中',
   };
 
   if (st === 'stale') {
@@ -338,14 +301,6 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
         remote: backupState.lastCounts?.records || 0,
       }),
     };
-  } else if (st === 'notConfigured') {
-    heroTheme = {
-      bg: '#EEE9E3',
-      color: '#6F645C',
-      icon: 'lock-closed-outline',
-      title: t('backup.statusNotConfigured', '尚未开启备份'),
-      subtitle: t('backup.descNotConfigured', '设置备份密码，保护你的打卡数据'),
-    };
   }
 
   // 胶囊标签状态
@@ -355,13 +310,7 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
     ? { err: true, label: '云端 需修复' }
     : { ok: true, label: '云端 正常' };
 
-  const localChip = st === 'notConfigured'
-    ? { ok: false, label: '本地 未开启' }
-    : { ok: true, label: '本地 正常' };
-
-  const encChip = st === 'notConfigured'
-    ? { ok: false, label: t('backup.tagUnencrypted', '未加密') }
-    : { ok: true, label: t('backup.tagEncrypted', '端到端加密') };
+  const localChip = { ok: true, label: '本地 正常' };
 
   return (
     <Modal visible={visible} animationType="slide" statusBarTranslucent onRequestClose={onBack}>
@@ -397,9 +346,9 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
               </View>
             </View>
 
-            {/* 3 枚状态胶囊 */}
+            {/* 状态胶囊 */}
             <View style={styles.chipRow}>
-              {[cloudChip, localChip, encChip].map((chip, idx) => (
+              {[cloudChip, localChip].map((chip, idx) => (
                 <View
                   key={idx}
                   style={[
@@ -488,17 +437,9 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
               <View style={[styles.progressBox, { backgroundColor: colors.chip }]}>
                 <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: 8 }} />
                 <Text style={[styles.progressText, { color: colors.ink }]}>
-                  {t('backup.backingUp', '正在加密并上传…')}
+                  {t('backup.backingUp', '正在备份…')}
                 </Text>
               </View>
-            ) : st === 'notConfigured' ? (
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: colors.primary }]}
-                onPress={openSetup}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.actionBtnText}>{t('backup.btnSetup', '去设置备份')}</Text>
-              </TouchableOpacity>
             ) : st === 'needConfirm' ? null : (
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: colors.primary }]}
@@ -602,7 +543,7 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
             )}
           </View>
           <Text style={[styles.noteText, { color: colors.ink3 }]}>
-            {t('backup.historyTip', '点任意版本即可预览并恢复，无需先输入密码。')}
+            {t('backup.historyTip', '点任意版本即可预览并恢复，恢复前自动生成快照保障安全。')}
           </Text>
 
           {/* 设置区 */}
@@ -636,26 +577,6 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
                 ]}
               >
                 {!cloudConfigured ? '未开启' : st === 'failed' ? '需修复' : '已配置'}
-              </Text>
-              <Ionicons name="chevron-forward" size={17} color={colors.ink3} />
-            </TouchableOpacity>
-
-            <View style={[styles.divider, { backgroundColor: colors.line }]} />
-
-            {/* 备份密码 */}
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={openSetup}
-              activeOpacity={0.6}
-            >
-              <View style={[styles.rowIcon, { backgroundColor: colors.chip }]}>
-                <Ionicons name="key-outline" size={18} color={colors.ink} />
-              </View>
-              <Text style={[styles.settingLabel, { color: colors.ink }]}>
-                {t('backup.password', '备份密码')}
-              </Text>
-              <Text style={[styles.settingValue, { color: colors.ink3 }]}>
-                {st === 'notConfigured' ? '未设置' : '已设置'}
               </Text>
               <Ionicons name="chevron-forward" size={17} color={colors.ink3} />
             </TouchableOpacity>
@@ -750,183 +671,6 @@ export default function BackupScreen({ visible, onBack, initialAction }) {
             reloadData();
           }}
         />
-
-        {/* 首次设置 / 密码修改 Modal */}
-        <Modal
-          visible={showSetupModal}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowSetupModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
-              {setupStep === 1 ? (
-                <View>
-                  <Text style={[styles.modalTitle, { color: colors.ink }]}>设置备份密码</Text>
-                  <Text style={[styles.modalSub, { color: colors.ink3 }]}>
-                    备份文件在本机加密，云端只保存密文。
-                  </Text>
-
-                  <Text style={[styles.fieldLbl, { color: colors.ink2 }]}>备份密码（至少 6 位）</Text>
-                  <TextInput
-                    style={[styles.modalInput, { borderColor: colors.line, color: colors.ink }]}
-                    value={setupPw}
-                    onChangeText={setSetupPw}
-                    placeholder="输入密码"
-                    placeholderTextColor={colors.ink3}
-                    secureTextEntry
-                  />
-
-                  {/* 强度指示条 */}
-                  <View style={styles.strengthBarBg}>
-                    <View
-                      style={[
-                        styles.strengthBar,
-                        {
-                          width: setupPw.length < 6 ? (setupPw.length ? '25%' : '0%') : setupPw.length < 10 ? '60%' : '100%',
-                          backgroundColor: setupPw.length < 6 ? '#CF3B3B' : setupPw.length < 10 ? '#A96A0B' : '#25915F',
-                        },
-                      ]}
-                    />
-                  </View>
-
-                  <Text style={[styles.fieldLbl, { color: colors.ink2, marginTop: 12 }]}>再输一次</Text>
-                  <TextInput
-                    style={[styles.modalInput, { borderColor: colors.line, color: colors.ink }]}
-                    value={setupPw2}
-                    onChangeText={setSetupPw2}
-                    placeholder="确认密码"
-                    placeholderTextColor={colors.ink3}
-                    secureTextEntry
-                  />
-
-                  <View style={[styles.banner, { backgroundColor: '#FCF1D9', marginTop: 12 }]}>
-                    <Text style={[styles.bannerTitle, { color: '#A96A0B' }]}>忘记密码无法找回备份</Text>
-                    <Text style={[styles.bannerDesc, { color: colors.ink }]}>
-                      我们不保存你的密码，也无法为你重置。建议记在密码管理器里。
-                    </Text>
-                  </View>
-
-                  <View style={styles.bannerBtnRow}>
-                    <TouchableOpacity
-                      style={[styles.bannerBtn, { backgroundColor: colors.chip }]}
-                      onPress={() => setShowSetupModal(false)}
-                    >
-                      <Text style={[styles.bannerBtnText, { color: colors.ink }]}>取消</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.bannerBtn,
-                        { backgroundColor: colors.primary },
-                        (setupPw.length < 6 || setupPw !== setupPw2) && { opacity: 0.4 },
-                      ]}
-                      disabled={setupPw.length < 6 || setupPw !== setupPw2}
-                      onPress={() => setSetupStep(2)}
-                    >
-                      <Text style={[styles.bannerBtnText, { color: '#FFFFFF' }]}>下一步</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <View>
-                  <Text style={[styles.modalTitle, { color: colors.ink }]}>云端同步（可选）</Text>
-                  <Text style={[styles.modalSub, { color: colors.ink3 }]}>
-                    用任意 WebDAV 服务（坚果云、Nextcloud 等）同步备份。
-                  </Text>
-
-                  <Text style={[styles.fieldLbl, { color: colors.ink2 }]}>服务器地址</Text>
-                  <TextInput
-                    style={[styles.modalInput, { borderColor: colors.line, color: colors.ink }]}
-                    value={setupDavUrl}
-                    onChangeText={setSetupDavUrl}
-                    placeholder="https://dav.jianguoyun.com/dav/"
-                    placeholderTextColor={colors.ink3}
-                  />
-
-                  <Text style={[styles.fieldLbl, { color: colors.ink2, marginTop: 8 }]}>账号</Text>
-                  <TextInput
-                    style={[styles.modalInput, { borderColor: colors.line, color: colors.ink }]}
-                    value={setupDavUser}
-                    onChangeText={setSetupDavUser}
-                    placeholder="name@example.com"
-                    placeholderTextColor={colors.ink3}
-                  />
-
-                  <Text style={[styles.fieldLbl, { color: colors.ink2, marginTop: 8 }]}>应用密码（不是登录密码）</Text>
-                  <TextInput
-                    style={[styles.modalInput, { borderColor: colors.line, color: colors.ink }]}
-                    value={setupDavPass}
-                    onChangeText={setSetupDavPass}
-                    placeholder="应用专用密码"
-                    placeholderTextColor={colors.ink3}
-                    secureTextEntry
-                  />
-
-                  {setupDavTesting && (
-                    <Text style={{ fontSize: 13, color: colors.ink2, marginTop: 6 }}>测试中…</Text>
-                  )}
-                  {setupDavTested && (
-                    <Text style={{ fontSize: 13, color: '#25915F', marginTop: 6 }}>✓ 连接成功，已可写入</Text>
-                  )}
-
-                  <View style={[styles.bannerBtnRow, { marginTop: 14 }]}>
-                    <TouchableOpacity
-                      style={[styles.bannerBtn, { backgroundColor: colors.chip }]}
-                      onPress={async () => {
-                        setSetupDavTesting(true);
-                        const res = await testConnectionWith(setupDavUrl, setupDavUser, setupDavPass);
-                        setSetupDavTesting(false);
-                        if (res.ok) {
-                          setSetupDavTested(true);
-                          showToastMsg('连接成功');
-                        } else {
-                          Alert.alert('连接失败', res.error?.message || '请检查配置');
-                        }
-                      }}
-                    >
-                      <Text style={[styles.bannerBtnText, { color: colors.ink }]}>测试连接</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.bannerBtn, { backgroundColor: colors.primary }]}
-                      onPress={async () => {
-                        await setBackupPassphrase(setupPw);
-                        if (setupDavTested && setupDavUser) {
-                          await saveWebDavConfig({
-                            url: setupDavUrl,
-                            username: setupDavUser,
-                            appPassword: setupDavPass,
-                          });
-                          await updateBackupState((s) => ({ ...s, cloud: { ...s.cloud, enabled: true, lastError: null } }));
-                          showToastMsg('备份已开启 · 云端 + 本地');
-                        } else {
-                          showToastMsg('备份已开启 · 仅本地');
-                        }
-                        setShowSetupModal(false);
-                        await reloadData();
-                      }}
-                    >
-                      <Text style={[styles.bannerBtnText, { color: '#FFFFFF' }]}>完成</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <TouchableOpacity
-                    style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
-                    onPress={async () => {
-                      await setBackupPassphrase(setupPw);
-                      showToastMsg('备份已开启 · 仅本地');
-                      setShowSetupModal(false);
-                      await reloadData();
-                    }}
-                  >
-                    <Text style={{ fontSize: 13, color: colors.ink3 }}>跳过，仅本地备份</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </View>
-        </Modal>
 
         {/* WebDAV 独立配置 Modal */}
         <Modal

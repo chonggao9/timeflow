@@ -25,12 +25,9 @@ function notifyListeners() {
 }
 
 /**
- * 计算动态衍生状态（如 3 天未备份变为 stale，未设密码变为 notConfigured）
+ * 计算动态衍生状态（如 3 天未备份变为 stale，云端异常为 failed）
  */
-export function deriveStatus(rawState, hasPassphrase) {
-  if (!hasPassphrase) {
-    return 'notConfigured';
-  }
+export function deriveStatus(rawState) {
   if (rawState.status === 'needConfirm') {
     return 'needConfirm';
   }
@@ -51,17 +48,15 @@ export function deriveStatus(rawState, hasPassphrase) {
  */
 export async function getBackupState() {
   if (cachedState) {
-    const hasPass = !!(await getBackupPassphrase());
     return {
       ...cachedState,
-      status: deriveStatus(cachedState, hasPass),
+      status: deriveStatus(cachedState),
     };
   }
 
   try {
     const raw = await AsyncStorage.getItem(STATE_STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : DEFAULT_STATE;
-    const hasPass = !!(await getBackupPassphrase());
     cachedState = {
       ...DEFAULT_STATE,
       ...parsed,
@@ -70,10 +65,10 @@ export async function getBackupState() {
     };
     return {
       ...cachedState,
-      status: deriveStatus(cachedState, hasPass),
+      status: deriveStatus(cachedState),
     };
   } catch (e) {
-    return { ...DEFAULT_STATE, status: 'notConfigured' };
+    return { ...DEFAULT_STATE, status: 'ok' };
   }
 }
 
@@ -83,11 +78,10 @@ export async function getBackupState() {
 export async function updateBackupState(updater) {
   const current = await getBackupState();
   const nextRaw = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
-  const hasPass = !!(await getBackupPassphrase());
 
   cachedState = {
     ...nextRaw,
-    status: deriveStatus(nextRaw, hasPass),
+    status: deriveStatus(nextRaw),
   };
 
   try {

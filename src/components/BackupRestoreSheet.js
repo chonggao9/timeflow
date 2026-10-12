@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Modal,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -15,7 +14,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useI18n } from '../i18n/LanguageContext';
 import { useTheme } from '../theme/ThemeContext';
-import { decrypt, BadPassphraseError } from '../backup/crypto';
 import {
   createPreRestoreSnapshot,
   restoreFromRaw,
@@ -32,28 +30,32 @@ export default function BackupRestoreSheet({
   const { t } = useI18n();
   const { colors } = useTheme();
 
-  const [step, setStep] = useState(1); // 1: 验密, 2: 模式, 3: 对照确认, 4: 恢复中, 5: 完成
-  const [passphrase, setPassphrase] = useState('');
-  const [passError, setPassError] = useState(false);
-  const [verifying, setVerifying] = useState(false);
+  const [step, setStep] = useState(1); // 1: 模式选择, 2: 对照确认, 3: 恢复中, 4: 完成
   const [mode, setMode] = useState('merge'); // 'merge' | 'overwrite'
   const [rawContent, setRawContent] = useState(null);
-  const [decryptedPlaintext, setDecryptedPlaintext] = useState(null);
+  const [loadingRaw, setLoadingRaw] = useState(false);
   const [createdSnapshotName, setCreatedSnapshotName] = useState(null);
   const [restoredResult, setRestoredResult] = useState(null);
 
   // 每次打开时重置状态
   useEffect(() => {
-    if (visible) {
+    if (visible && versionItem) {
       setStep(1);
-      setPassphrase('');
-      setPassError(false);
-      setVerifying(false);
       setMode('merge');
-      setRawContent(null);
-      setDecryptedPlaintext(null);
       setCreatedSnapshotName(null);
       setRestoredResult(null);
+      setLoadingRaw(true);
+
+      getVersionRawContent(versionItem)
+        .then((raw) => {
+          setRawContent(raw);
+          setLoadingRaw(false);
+        })
+        .catch((e) => {
+          setLoadingRaw(false);
+          Alert.alert(t('common.tip', '提示'), '获取备份文件失败: ' + (e.message || ''));
+          onClose();
+        });
     }
   }, [visible, versionItem]);
 
@@ -84,59 +86,28 @@ export default function BackupRestoreSheet({
   const addEstimate = Math.max(0, backupTotal - currentTotal);
   const delEstimate = Math.max(0, currentTotal - backupTotal);
 
-  // 1. 验证密码
-  const handleVerifyPass = async () => {
-    if (!passphrase.trim() || verifying) return;
-    setVerifying(true);
-    setPassError(false);
-
-    try {
-      const raw = await getVersionRawContent(versionItem);
-      let parsed;
-      try {
-        parsed = JSON.parse(raw);
-      } catch (e) {
-        throw new BadPassphraseError('备份文件损坏');
-      }
-
-      const plaintext = decrypt(passphrase.trim(), parsed);
-      setRawContent(raw);
-      setDecryptedPlaintext(plaintext);
-      setStep(2);
-    } catch (e) {
-      setPassError(true);
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  // 2. 选择恢复方式 -> 确认对照
-  const handleToStep3 = () => {
-    setStep(3);
-  };
-
-  // 3. 开始恢复（先保存快照，再恢复）
+  // 开始恢复（先保存免密快照，再恢复）
   const handleDoRestore = async () => {
-    setStep(4);
+    setStep(3);
     try {
-      // 3.1 保存快照
-      const snapName = await createPreRestoreSnapshot(passphrase.trim()).catch(() => null);
+      // 1. 保存快照
+      const snapName = await createPreRestoreSnapshot().catch(() => null);
       setCreatedSnapshotName(snapName);
 
-      // 3.2 执行恢复
-      const res = await restoreFromRaw(rawContent, passphrase.trim(), mode);
+      // 2. 执行恢复
+      const res = await restoreFromRaw(rawContent, mode);
       setRestoredResult(res);
-      setStep(5);
+      setStep(4);
       if (onRestored) {
         onRestored(res);
       }
     } catch (err) {
       Alert.alert(t('common.tip', '提示'), err.message || '恢复失败，请重试');
-      setStep(3);
+      setStep(2);
     }
   };
 
-  // 4. 回退到恢复前快照
+  // 回退到恢复前快照
   const handleUndo = async () => {
     if (!createdSnapshotName) {
       onClose();
@@ -147,7 +118,7 @@ export default function BackupRestoreSheet({
         name: createdSnapshotName,
         sources: ['local'],
       });
-      await restoreFromRaw(raw, passphrase.trim(), 'overwrite');
+      await restoreFromRaw(raw, 'overwrite');
       showToastMsg(t('backup.undoDoneToast', '已回退到恢复前的状态'));
       if (onRestored) {
         onRestored();
@@ -167,11 +138,11 @@ export default function BackupRestoreSheet({
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
 
         <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
-          {/* STEP 1: 验证密码 */}
+          {/* STEP 1: 选择恢复方式 */}
           {step === 1 && (
             <View>
               <Text style={[styles.title, { color: colors.ink }]}>
-                {t('backup.restoreSheetTitle', '恢复这个版本')}
+                {t('backup.restoreModeTitle', '选择恢复方式')}
               </Text>
               <Text style={[styles.subText, { color: colors.ink3 }]}>
                 {formatTimeStr(versionItem.createdAt || versionItem.modifiedAt)} · {versionItem.device || '设备'}
@@ -192,73 +163,6 @@ export default function BackupRestoreSheet({
                   <Text style={[styles.vsumLbl, { color: colors.ink3 }]}>{t('home.sceneTravel', '行程').replace(/[^\u4e00-\u9fa5]/g, '') || '行程'}</Text>
                 </View>
               </View>
-
-              <Text style={[styles.fieldLabel, { color: colors.ink2 }]}>
-                {t('backup.password', '备份密码')}
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: passError ? '#CF3B3B' : colors.line,
-                    color: colors.ink,
-                  },
-                ]}
-                value={passphrase}
-                onChangeText={(val) => {
-                  setPassphrase(val);
-                  setPassError(false);
-                }}
-                secureTextEntry
-                placeholder={t('backup.password', '输入备份密码')}
-                placeholderTextColor={colors.ink3}
-                autoFocus
-              />
-              {passError && (
-                <Text style={styles.errText}>
-                  {t('backup.restoreWrongPass', '密码不正确，请重试')}
-                </Text>
-              )}
-
-              <View style={styles.btnRow}>
-                <TouchableOpacity
-                  style={[styles.btnSec, { backgroundColor: colors.chip }]}
-                  onPress={onClose}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.btnSecText, { color: colors.ink }]}>{t('common.cancel', '取消')}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.btnPri,
-                    { backgroundColor: colors.primary },
-                    (!passphrase.trim() || verifying) && { opacity: 0.5 },
-                  ]}
-                  onPress={handleVerifyPass}
-                  disabled={!passphrase.trim() || verifying}
-                  activeOpacity={0.7}
-                >
-                  {verifying ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.btnPriText}>验证</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          {/* STEP 2: 选择恢复方式 */}
-          {step === 2 && (
-            <View>
-              <Text style={[styles.title, { color: colors.ink }]}>
-                {t('backup.restoreModeTitle', '选择恢复方式')}
-              </Text>
-              <Text style={[styles.subText, { color: colors.ink3 }]}>
-                {formatTimeStr(versionItem.createdAt || versionItem.modifiedAt)} · {backupTotal.toLocaleString()} 条打卡
-              </Text>
 
               {/* 方式 1: 合并 */}
               <TouchableOpacity
@@ -328,18 +232,27 @@ export default function BackupRestoreSheet({
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.btnPri, { backgroundColor: colors.primary }]}
-                  onPress={handleToStep3}
+                  style={[
+                    styles.btnPri,
+                    { backgroundColor: colors.primary },
+                    loadingRaw && { opacity: 0.6 },
+                  ]}
+                  onPress={() => setStep(2)}
+                  disabled={loadingRaw}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.btnPriText}>下一步</Text>
+                  {loadingRaw ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.btnPriText}>下一步</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
-          {/* STEP 3: 对照确认 */}
-          {step === 3 && (
+          {/* STEP 2: 对照确认 */}
+          {step === 2 && (
             <View>
               <Text style={[styles.title, { color: colors.ink }]}>
                 {t('backup.restoreConfirmBtn', '开始恢复')}
@@ -381,10 +294,10 @@ export default function BackupRestoreSheet({
               <View style={styles.btnRow}>
                 <TouchableOpacity
                   style={[styles.btnSec, { backgroundColor: colors.chip }]}
-                  onPress={onClose}
+                  onPress={() => setStep(1)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.btnSecText, { color: colors.ink }]}>{t('common.cancel', '取消')}</Text>
+                  <Text style={[styles.btnSecText, { color: colors.ink }]}>{t('common.cancel', '上一步')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -405,8 +318,8 @@ export default function BackupRestoreSheet({
             </View>
           )}
 
-          {/* STEP 4: 正在恢复中 */}
-          {step === 4 && (
+          {/* STEP 3: 正在恢复中 */}
+          {step === 3 && (
             <View style={styles.loadingBox}>
               <ActivityIndicator size="large" color={colors.primary} style={{ marginBottom: 16 }} />
               <Text style={[styles.title, { textAlign: 'center', color: colors.ink }]}>
@@ -418,8 +331,8 @@ export default function BackupRestoreSheet({
             </View>
           )}
 
-          {/* STEP 5: 恢复完成 */}
-          {step === 5 && (
+          {/* STEP 4: 恢复完成 */}
+          {step === 4 && (
             <View>
               <View style={styles.doneIconWrap}>
                 <View style={styles.doneCircle}>

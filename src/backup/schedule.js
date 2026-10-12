@@ -44,13 +44,12 @@ export async function backupNow({ force = false } = {}) {
  */
 async function runAutoBackupInternal() {
   if (isRunning) return false;
-  const [autoEnabled, pass, state] = await Promise.all([
+  const [autoEnabled, state] = await Promise.all([
     isAutoBackupEnabled(),
-    getBackupPassphrase(),
     getBackupState(),
   ]);
 
-  if (!autoEnabled || !pass) return false;
+  if (!autoEnabled) return false;
 
   // 节流检查：距上次备份是否已满 30 分钟
   const lastAt = state.lastSuccessAt || 0;
@@ -89,13 +88,12 @@ export function notifyDataChanged() {
  * 兼容旧调用的 runBackupIfDue（App 启动时执行一次）
  */
 export async function runBackupIfDue({ force = false } = {}) {
-  const [autoEnabled, pass, state] = await Promise.all([
+  const [autoEnabled, state] = await Promise.all([
     isAutoBackupEnabled(),
-    getBackupPassphrase(),
     getBackupState(),
   ]);
 
-  if (!autoEnabled || !pass) return false;
+  if (!autoEnabled) return false;
 
   const lastAt = state.lastSuccessAt || 0;
   if (!force && Date.now() - lastAt < THROTTLE_MS) {

@@ -47,10 +47,6 @@ export async function executeBackupPipeline({
   forceBypassConfirm = false,
 } = {}) {
   const auto = isAuto || !isManual;
-  const pass = passphrase || (await getBackupPassphrase());
-  if (!pass) {
-    return { success: false, error: 'NO_PASSPHRASE' };
-  }
 
   // 1. 收集数据与偏好
   const [trips, records, focusSessions] = await Promise.all([
@@ -86,7 +82,6 @@ export async function executeBackupPipeline({
   if (auto && !forceBypassConfirm && cloudTarget) {
     try {
       const cloudList = await cloudTarget.list();
-      // 获取最新云端文件的条数
       let remoteLatestRecords = 0;
       for (const item of cloudList) {
         if (!item.isLegacy) {
@@ -113,24 +108,25 @@ export async function executeBackupPipeline({
         return {
           success: false,
           needConfirm: true,
+          skippedReason: 'needConfirm',
           local: records.length,
           remote: remoteLatestRecords,
         };
       }
-    } catch (e) {
-      // 检查异常不阻断，继续
-    }
+    } catch (e) {}
   }
 
-  // 4. 加密打包为 .tfb 格式
+  // 4. 打包为结构化 JSON 格式
   const deviceName = Platform.OS === 'android' ? 'Android Device' : 'iOS Device';
   const plaintext = buildPlaintext({ trips, records, focusSessions }, prefs);
-  const envelope = encrypt(pass, plaintext, {
+  const envelope = {
+    v: 1,
+    ...plaintext,
     device: deviceName,
     counts,
     hash: contentHash,
-  });
-  const envelopeStr = JSON.stringify(envelope);
+  };
+  const envelopeStr = JSON.stringify(envelope, null, 2);
   const filename = makeBackupFilename(false);
 
   // 5. 写入本地目标
@@ -184,12 +180,9 @@ export async function executeBackupPipeline({
 export const performBackup = executeBackupPipeline;
 
 /**
- * 创建本地“恢复前快照”（标记 snap）
+ * 创建本地“恢复前快照”（标记 snap，免密）
  */
-export async function createPreRestoreSnapshot(passphrase) {
-  const pass = passphrase || (await getBackupPassphrase());
-  if (!pass) return null;
-
+export async function createPreRestoreSnapshot() {
   const [trips, records, focusSessions] = await Promise.all([
     getTrips(),
     getRecords(),
@@ -204,26 +197,28 @@ export async function createPreRestoreSnapshot(passphrase) {
   const hash = computeContentHash({ trips, records, focusSessions, preferences: prefs });
 
   const plaintext = buildPlaintext({ trips, records, focusSessions }, prefs);
-  const envelope = encrypt(pass, plaintext, {
+  const envelope = {
+    v: 1,
+    ...plaintext,
     device: '本机快照',
     counts,
     hash,
-  });
+  };
 
   const localTarget = new LocalTarget();
   const filename = makeBackupFilename(true);
-  await localTarget.put(filename, JSON.stringify(envelope));
+  await localTarget.put(filename, JSON.stringify(envelope, null, 2));
   await localTarget.prune();
   return filename;
 }
 
 /**
- * 从原始 JSON 字符串执行解密并恢复
- * @param {string} raw - 密文包字符串
- * @param {string} passphrase - 密码
+ * 从原始 JSON 字符串执行恢复（免密直接秒级恢复）
+ * @param {string} raw - 备份包字符串
  * @param {'merge'|'overwrite'} mode - 恢复模式
+ * @param {string} [passphrase] - 可选密码（仅在遇到历史加密备份时）
  */
-export async function restoreFromRaw(raw, passphrase, mode = 'merge') {
+export async function restoreFromRaw(raw, mode = 'merge', passphrase = '') {
   let envelope;
   try {
     envelope = JSON.parse(raw);
@@ -231,8 +226,18 @@ export async function restoreFromRaw(raw, passphrase, mode = 'merge') {
     throw new BadPassphraseError('无效的备份文件');
   }
 
-  // 1. 解密明文
-  const plaintext = decrypt(passphrase, envelope);
+  // 1. 如果包含 ciphertext 且是旧版加密包
+  let plaintext;
+  if (envelope.ciphertext) {
+    if (!passphrase) {
+      throw new BadPassphraseError('该备份文件来自历史加密版本，需要输入原密码解密');
+    }
+    plaintext = decrypt(passphrase, envelope);
+  } else {
+    // 免密新版本
+    plaintext = envelope;
+  }
+
   if (!validatePlaintext(plaintext)) {
     throw new BadPassphraseError('备份数据格式不符合规范');
   }
