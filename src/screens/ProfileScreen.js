@@ -91,7 +91,7 @@ function Row({ icon, label, value, onPress, danger, iconColor, iconBg }) {
 }
 
 // 现代五态 BackupStatusCard 组件
-function BackupStatusCard({ backupState, onPress }) {
+function BackupStatusCard({ backupState, onPress, onActionPress }) {
   const { colors } = useTheme();
   const { t } = useI18n();
 
@@ -195,9 +195,13 @@ function BackupStatusCard({ backupState, onPress }) {
         </Text>
       </View>
       {cfg.btn ? (
-        <View style={[cardStyles.pill, { backgroundColor: cfg.color }]}>
+        <TouchableOpacity
+          style={[cardStyles.pill, { backgroundColor: cfg.color }]}
+          onPress={onActionPress || onPress}
+          activeOpacity={0.8}
+        >
           <Text style={cardStyles.pillText}>{cfg.btn}</Text>
-        </View>
+        </TouchableOpacity>
       ) : (
         <Ionicons name="chevron-forward" size={18} color={colors.ink3} />
       )}
@@ -270,6 +274,7 @@ export default function ProfileScreen() {
 
   const backupState = useBackupState();
   const [showBackupModal, setShowBackupModal] = useState(false);
+  const [backupInitialAction, setBackupInitialAction] = useState(null);
 
   const [nickname, setNickname] = useState('');
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -437,7 +442,16 @@ export default function ProfileScreen() {
         {/* 2. 单张五态备份守护卡片（点击打开备份与恢复二级页） */}
         <BackupStatusCard
           backupState={backupState}
-          onPress={() => setShowBackupModal(true)}
+          onPress={() => {
+            setBackupInitialAction(null);
+            setShowBackupModal(true);
+          }}
+          onActionPress={() => {
+            const st = backupState?.status;
+            const act = st === 'notConfigured' ? 'setup' : st === 'failed' ? 'cloud' : st === 'stale' ? 'backupNow' : null;
+            setBackupInitialAction(act);
+            setShowBackupModal(true);
+          }}
         />
 
         {/* 3. 分组一：通用 */}
@@ -527,7 +541,11 @@ export default function ProfileScreen() {
       {/* 备份与恢复二级页 */}
       <BackupScreen
         visible={showBackupModal}
-        onBack={() => setShowBackupModal(false)}
+        initialAction={backupInitialAction}
+        onBack={() => {
+          setShowBackupModal(false);
+          setBackupInitialAction(null);
+        }}
       />
 
       {/* 隐私协议 */}

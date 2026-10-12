@@ -44,7 +44,7 @@ import {
 } from '../backup/webdav';
 import BackupRestoreSheet from '../components/BackupRestoreSheet';
 
-export default function BackupScreen({ visible, onBack }) {
+export default function BackupScreen({ visible, onBack, initialAction }) {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { colors } = useTheme();
@@ -126,8 +126,17 @@ export default function BackupScreen({ visible, onBack }) {
   useEffect(() => {
     if (visible) {
       reloadData();
+      if (initialAction === 'setup') {
+        openSetup();
+      } else if (initialAction === 'cloud') {
+        openCloudSettings();
+      } else if (initialAction === 'backupNow') {
+        setTimeout(() => {
+          handleManualBackup(false);
+        }, 350);
+      }
     }
-  }, [visible, reloadData]);
+  }, [visible, initialAction, reloadData]);
 
   // 时间格式化
   const formatTimeStr = (isoOrMs) => {

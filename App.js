@@ -16,7 +16,7 @@ import PrivacyAgreement from './src/screens/PrivacyAgreement';
 import { LanguageProvider, useI18n } from './src/i18n/LanguageContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { checkForUpdate } from './src/utils/updater';
-import { runBackupIfDue } from './src/backup/schedule';
+import { runBackupIfDue, initAppStateBackupListener } from './src/backup/schedule';
 
 const Tab = createBottomTabNavigator();
 
@@ -239,6 +239,7 @@ function AppInner() {
       );
     });
 
+    initAppStateBackupListener();
     runBackupIfDue().catch(() => {});
   }, [privacyAgreed, t]);
 
