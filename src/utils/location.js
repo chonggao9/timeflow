@@ -72,14 +72,87 @@ async function systemGetPosition({ maxAge, timeoutMs }) {
   }
 }
 
-// 系统反查地名（Google Geocoder）：坐标 → 地名，失败/无数据返回 null。
-// 独立封装，可与高德反查并行竞速；超时/无GMS/空结果一律视为"无效"，不抛错。
-async function systemReverseGeocode(lat, lng, timeout = 5000) {
+// 深度解析系统 (Google) Geocoder 返回的地址对象
+// 兼顾国内与海外多层级结构：区县/道路/标志地名/formattedAddress 兜底，避免有效地址被误丢弃
+function formatSystemAddress(addr) {
+  if (!addr) return null;
+
+  // 1. 尝试精细组合：区/县/子行政区 + 道路 + 标志地名/门牌
+  const dist = addr.district || addr.subregion;
+  const road = addr.street;
+  const poi = (addr.name && addr.name !== addr.streetNumber && addr.name !== addr.postalCode) ? addr.name : null;
+  const num = addr.streetNumber;
+
+  const parts = [];
+  if (dist) parts.push(dist);
+  if (road) parts.push(road);
+  if (poi) parts.push(poi);
+  else if (num) parts.push(num);
+
+  const uniqueParts = parts.filter((p, i) => parts.indexOf(p) === i);
+  if (uniqueParts.length >= 2) {
+    return uniqueParts.join(' ');
+  }
+
+  // 2. 完整格式化地址兜底（如 Android Geocoder 的 getAddressLine(0)）
+  if (addr.formattedAddress && typeof addr.formattedAddress === 'string') {
+    const cleaned = addr.formattedAddress
+      .replace(/^(中国|China)[,，\s]*/i, '')
+      .trim();
+    if (cleaned) return cleaned;
+  }
+
+  // 3. 次级组合：城市 + 区/路/地名
+  if (uniqueParts.length === 1) {
+    if (addr.city && !uniqueParts.includes(addr.city)) {
+      return `${addr.city} ${uniqueParts[0]}`;
+    }
+    return uniqueParts[0];
+  }
+
+  // 4. 最终兜底
+  const fallback = [addr.city, addr.region, addr.country].filter(Boolean).join(' ');
+  return fallback || addr.name || null;
+}
+
+// 系统反查地名详细诊断版：坐标 → { name, error, detail }
+async function systemReverseGeocodeDetailed(lat, lng, timeout = 8000) {
   try {
-    const [addr] = await withTimeout(Location.reverseGeocodeAsync({ latitude: lat, longitude: lng }), timeout);
-    if (addr) return [addr.street, addr.district, addr.city].filter(Boolean).join(' ') || addr.name || null;
-    return null;
-  } catch (e) { /* 忽略：网络/禁用/无数据 */ return null; }
+    const list = await withTimeout(Location.reverseGeocodeAsync({ latitude: lat, longitude: lng }), timeout);
+    if (!list || list.length === 0) {
+      return { name: null, error: 'empty', detail: 'Geocoder returned 0 results' };
+    }
+    const name = formatSystemAddress(list[0]);
+    if (name) {
+      return { name, error: null, detail: null };
+    }
+    return { name: null, error: 'empty-fields', detail: 'All address fields were empty' };
+  } catch (e) {
+    const msg = (e && e.message) || String(e || '');
+    let error = 'failed';
+    let detail = msg;
+    if (msg === 'timeout') {
+      error = 'timeout';
+      detail = 'Request timed out (8s)';
+    } else if (/NoGeocode|not available|unavailable/i.test(msg)) {
+      error = 'no-service';
+      detail = 'No Geocoder service on device (Missing GMS)';
+    } else if (/IOException|grpc|Service not Available|network/i.test(msg)) {
+      error = 'network';
+      detail = 'Network unreachable (Google servers blocked)';
+    } else if (/Unauthorized|permission/i.test(msg)) {
+      error = 'permission';
+      detail = 'Location permission missing';
+    }
+    return { name: null, error, detail };
+  }
+}
+
+// 系统反查地名（Google Geocoder）：坐标 → 地名，失败/无数据返回 null。
+// 独立封装，可与高德反查并行竞速；超时放宽至 8000ms（适应 IPC 与网络代理延迟）。
+async function systemReverseGeocode(lat, lng, timeout = 8000) {
+  const res = await systemReverseGeocodeDetailed(lat, lng, timeout);
+  return res.name;
 }
 
 // 双后端定位：返回 { loc, reason, provider }。并行竞速，谁先成功用谁。
@@ -97,10 +170,10 @@ export async function getPositionFast({ maxAge = 5 * 60 * 1000, timeoutMs = 2500
     : { loc: null, reason: winner?.reason || 'failed', detail: winner?.detail || '', provider: winner?.provider || null };
 }
 
-// 高德逆地理编码（坐标 → 附近地名），作为 SDK 未返回地址时的兜底；失败返回 null
-async function amapReverseGeocode(lat, lng, timeout = 4000) {
+// 高德逆地理编码（坐标 → 附近地名），带诊断信息
+async function amapReverseGeocodeDetailed(lat, lng, timeout = 4000) {
   const key = await getAmapKey();
-  if (!key) return null;
+  if (!key) return { name: null, error: 'not-configured', detail: 'Web key not configured' };
   try {
     const url = `https://restapi.amap.com/v3/geocode/regeo?key=${encodeURIComponent(key)}&location=${lng},${lat}&extensions=base&radius=1000`;
     const res = await withTimeout(fetch(url), timeout);
@@ -110,21 +183,30 @@ async function amapReverseGeocode(lat, lng, timeout = 4000) {
       const c = r.addressComponent || {};
       // 1) 商业区/著名地点（如「王府井」）—— 最像附近地名
       const biz = (c.businessAreas || []).find(b => b && b.name)?.name;
-      if (biz) return biz;
+      if (biz) return { name: biz, error: null, detail: null };
       // 2) 区 + 街道
       const street = c.streetNumber?.street;
-      if (c.district && street) return `${c.district}${street}`;
+      if (c.district && street) return { name: `${c.district}${street}`, error: null, detail: null };
       // 3) 区 + 乡镇/街道
-      if (c.district && (c.township || c.roadName)) return `${c.district}${c.township || c.roadName}`;
+      if (c.district && (c.township || c.roadName)) return { name: `${c.district}${c.township || c.roadName}`, error: null, detail: null };
       // 4) 完整地址兜底
-      if (r.formatted_address) return r.formatted_address;
+      if (r.formatted_address) return { name: r.formatted_address, error: null, detail: null };
       const part = [c.district, c.roadName, c.neighbourhood].filter(Boolean);
-      if (part.length) return part.join('');
+      if (part.length) return { name: part.join(''), error: null, detail: null };
+      return { name: null, error: 'empty', detail: 'No recognizable address in response' };
     }
-    return null;
+    const info = data.info || data.infocode || 'status 0';
+    return { name: null, error: 'amap-api-error', detail: info };
   } catch (e) {
-    return null;
+    const msg = (e && e.message) || String(e || '');
+    return { name: null, error: msg === 'timeout' ? 'timeout' : 'network', detail: msg };
   }
+}
+
+// 高德逆地理编码（坐标 → 附近地名），作为 SDK 未返回地址时的兜底；失败返回 null
+async function amapReverseGeocode(lat, lng, timeout = 4000) {
+  const res = await amapReverseGeocodeDetailed(lat, lng, timeout);
+  return res.name;
 }
 
 // 并行反查地名：高德(国内) + 系统(Google/国外) 同时跑，谁先拿到地名用谁 —— 无需区分地域，自动适配。
@@ -231,19 +313,50 @@ export async function diagnoseLocation(lang = 'zh') {
   }
 
   if (lat != null && lng != null) {
-    const race = await reverseGeocode(lat, lng);
-    const addr = loc.address || (race && race.name);
-    if (addr) {
-      const from = loc.address
-        ? (isEn ? 'Amap SDK built-in' : '高德SDK自带')
-        : (race.provider === 'amap' ? (isEn ? 'Amap' : '高德') : (isEn ? 'System/Google' : '系统/Google'));
-      lines.push(isEn ? `• Reverse Geo: ✅ ${addr} (${from})` : `• 地名反查：✅ ${addr}（${from}）`);
+    const [amapRes, sysRes] = await Promise.all([
+      amapReverseGeocodeDetailed(lat, lng),
+      systemReverseGeocodeDetailed(lat, lng),
+    ]);
+
+    const finalAddr = loc.address || amapRes.name || sysRes.name;
+    const finalFrom = loc.address
+      ? (isEn ? 'Amap SDK built-in' : '高德SDK原生自带')
+      : (amapRes.name
+        ? (isEn ? 'Amap Web API' : '高德Web接口')
+        : (sysRes.name ? (isEn ? 'System/Google' : '系统/Google Geocoder') : null));
+
+    if (finalAddr) {
+      lines.push(isEn ? `• Final Address: ✅ ${finalAddr} (${finalFrom})` : `• 打卡综合地名：✅ ${finalAddr}（${finalFrom}）`);
     } else {
-      lines.push(isEn
-        ? '• Reverse Geo: ❌ No address resolved (name can be edited manually)'
-        : (amapWebKey
-          ? '• 地名反查：❌ 高德与系统都未反查到地名（可能确无地名，可手动改）'
-          : '• 地名反查：❌ 未配高德WebKey，系统(Google)反查也无效（可手动改地名）'));
+      lines.push(isEn ? '• Final Address: ❌ Failed to resolve' : '• 打卡综合地名：❌ 未能反查到地名（可手动改）');
+    }
+
+    // 分项诊断 1：高德 Web
+    if (amapRes.name) {
+      lines.push(isEn ? `  - Amap Web: ✅ ${amapRes.name}` : `  - 高德Web反查：✅ ${amapRes.name}`);
+    } else {
+      const amapErrText = {
+        'not-configured': isEn ? 'Not configured (Optional)' : '未配置WebKey（仅兜底反查需要）',
+        'timeout': isEn ? 'Request timeout' : '请求超时',
+        'network': isEn ? 'Network error' : '网络连接失败',
+        'amap-api-error': isEn ? `API error (${amapRes.detail})` : `接口报错（${amapRes.detail}）`,
+      }[amapRes.error] || (amapRes.detail || (isEn ? 'Failed' : '失败'));
+      lines.push(isEn ? `  - Amap Web: ⚪ ${amapErrText}` : `  - 高德Web反查：⚪ ${amapErrText}`);
+    }
+
+    // 分项诊断 2：系统 (Google)
+    if (sysRes.name) {
+      lines.push(isEn ? `  - Google Geocoder: ✅ ${sysRes.name}` : `  - 系统(Google)反查：✅ ${sysRes.name}`);
+    } else {
+      const sysErrText = {
+        'timeout': isEn ? 'Request timeout (8s)' : '请求超时（8s未响应）',
+        'network': isEn ? 'Network blocked (Google unreachable, need proxy)' : '网络不可达（Google服务器连接受阻/被墙，需代理系统服务）',
+        'no-service': isEn ? 'No Google Play Geocoder on device' : '设备无 Google Play 服务（缺少 Geocoder 组件）',
+        'permission': isEn ? 'Permission denied' : '定位权限未授予',
+        'empty': isEn ? 'No address for coordinates' : '该坐标无对应地址记录',
+        'empty-fields': isEn ? 'Returned empty address fields' : '返回地址字段全为空',
+      }[sysRes.error] || (sysRes.detail ? `${sysRes.detail}` : (isEn ? 'Failed' : '失败'));
+      lines.push(isEn ? `  - Google Geocoder: ❌ ${sysErrText}` : `  - 系统(Google)反查：❌ ${sysErrText}`);
     }
   }
 
