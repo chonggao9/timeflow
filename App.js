@@ -28,26 +28,26 @@ function TabNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: true,
+        tabBarShowLabel: false,
         tabBarActiveTintColor: colors.primaryStrong,
         tabBarInactiveTintColor: colors.ink2,
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.line,
           borderTopWidth: 1,
-          height: 58 + insets.bottom,
-          paddingTop: 5,
-          paddingBottom: Math.max(insets.bottom, 5),
+          height: 52 + insets.bottom,
+          paddingTop: 0,
+          paddingBottom: insets.bottom,
           elevation: 4,
           shadowColor: colors.ink,
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.04,
           shadowRadius: 6,
         },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-          marginTop: 2,
+        tabBarItemStyle: {
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingVertical: 0,
         },
         sceneStyle: { backgroundColor: colors.bg },
       }}
@@ -56,9 +56,9 @@ function TabNavigator() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarLabel: t('tab.checkin'),
+          tabBarAccessibilityLabel: t('tab.checkin'),
           tabBarIcon: ({ focused }) => (
-            <Ionicons name={focused ? 'time' : 'time-outline'} size={23} color={focused ? colors.primaryStrong : colors.ink2} />
+            <Ionicons name={focused ? 'time' : 'time-outline'} size={25} color={focused ? colors.primaryStrong : colors.ink2} />
           ),
         }}
       />
@@ -66,9 +66,9 @@ function TabNavigator() {
         name="Insights"
         component={InsightsScreen}
         options={{
-          tabBarLabel: t('tab.insights'),
+          tabBarAccessibilityLabel: t('tab.insights'),
           tabBarIcon: ({ focused }) => (
-            <Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={23} color={focused ? colors.primaryStrong : colors.ink2} />
+            <Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={25} color={focused ? colors.primaryStrong : colors.ink2} />
           ),
         }}
       />
@@ -76,9 +76,9 @@ function TabNavigator() {
         name="Profile"
         component={ProfileScreen}
         options={{
-          tabBarLabel: t('tab.profile'),
+          tabBarAccessibilityLabel: t('tab.profile'),
           tabBarIcon: ({ focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={23} color={focused ? colors.primaryStrong : colors.ink2} />
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={25} color={focused ? colors.primaryStrong : colors.ink2} />
           ),
         }}
       />
