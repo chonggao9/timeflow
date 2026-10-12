@@ -37,9 +37,16 @@ export function makeBackupFilename(isSnap = false, date = new Date()) {
 }
 
 /**
- * 统一备份流水线
+ * 统一备份流水线（同时导出 executeBackupPipeline 与 performBackup）
  */
-export async function performBackup({ passphrase, isAuto = false, force = false } = {}) {
+export async function executeBackupPipeline({
+  passphrase,
+  isManual = false,
+  isAuto = false,
+  force = false,
+  forceBypassConfirm = false,
+} = {}) {
+  const auto = isAuto || !isManual;
   const pass = passphrase || (await getBackupPassphrase());
   if (!pass) {
     return { success: false, error: 'NO_PASSPHRASE' };
@@ -66,6 +73,7 @@ export async function performBackup({ passphrase, isAuto = false, force = false 
     return {
       success: true,
       skipped: true,
+      skippedReason: 'content_hash_identical',
       reason: 'SAME_HASH',
       counts,
     };
@@ -74,8 +82,8 @@ export async function performBackup({ passphrase, isAuto = false, force = false 
   const localTarget = new LocalTarget();
   const cloudTarget = await createWebDavTarget();
 
-  // 3. 防覆盖保护检查（仅针对自动备份且已配置云端）
-  if (isAuto && cloudTarget) {
+  // 3. 防覆盖保护检查（仅针对自动备份且已配置云端，且未强制绕过）
+  if (auto && !forceBypassConfirm && cloudTarget) {
     try {
       const cloudList = await cloudTarget.list();
       // 获取最新云端文件的条数
@@ -172,6 +180,8 @@ export async function performBackup({ passphrase, isAuto = false, force = false 
     cloudError,
   };
 }
+
+export const performBackup = executeBackupPipeline;
 
 /**
  * 创建本地“恢复前快照”（标记 snap）

@@ -54,14 +54,16 @@ export async function createWebDavTarget() {
   });
 }
 
-/**
- * 测试 WebDAV 连通性
- */
 export async function testConnectionWith(url, username, appPassword) {
-  const target = new WebDavTarget({
-    url,
-    username,
-    password: appPassword,
-  });
-  return await target.testConnection();
+  try {
+    const target = new WebDavTarget({
+      url,
+      username,
+      password: appPassword,
+    });
+    await target.testConnection();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error };
+  }
 }
