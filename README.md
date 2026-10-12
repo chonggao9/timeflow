@@ -3,8 +3,8 @@
 [![GitHub Release](https://img.shields.io/github/v/release/chonggao9/timeflow?color=FF6B6B&style=flat-square)](https://github.com/chonggao9/timeflow/releases/latest)
 [![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square)](#平台支持)
 
-> [📥 **点击直接下载最新 Android 安装包 (v1.0.22 APK)**](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.apk)  
-> [📦 **Google Play 上架专供包 (v1.0.22 AAB)**](https://github.com/chonggao9/timeflow/releases/download/v1.0.22/timeflow-v1.0.22.aab)
+> [📥 **点击直接下载最新 Android 安装包 (v1.2.4 APK)**](https://github.com/chonggao9/timeflow/releases/download/v1.2.4/timeflow-v1.2.4.apk)  
+> [📦 **Google Play 上架专供包 (v1.2.4 AAB)**](https://github.com/chonggao9/timeflow/releases/download/v1.2.4/timeflow-v1.2.4.aab)
 
 极简时间打卡 App，基于 Expo (React Native) + SQLite，支持高德/系统（Google）双兼容定位，数据全本地存储。
 
@@ -19,7 +19,7 @@
 - **线路轨迹地图**：某次行程的打卡点连成轨迹（起终点 / 站点 / 全程耗时一览），离线 SVG 拓扑图与 Google Maps 瓦片双模式
 - **深色模式 / 多语言**：跟随系统 / 浅色 / 深色，中文 / English 双语
 - **定位排查**：逐项自检高德与原生定位链路，显示具体失败原因与快速修复入口
-- **数据备份 + 云同步**：全部打卡记录与设备偏好加密成备份文件，可本地保存 / 分享，或配置自带的 WebDAV（坚果云 / Nextcloud）自动上传，换机也能安全恢复
+- **数据备份 + 云同步**：全部打卡记录与设备偏好自动生成结构化自包含备份，免密极速秒级恢复与导入；可本地保存/分享，或配置自带的 WebDAV（坚果云 / Nextcloud）自动上传与防覆盖熔断守护，换机安全无忧
 
 ## 平台支持
 
@@ -109,16 +109,18 @@ npm run release -- --commit --push
 │   │   ├── CheckInButton.js      # 打卡大按钮（全宽居中，轻按打卡 · 长按一步结程）
 │   │   ├── TransportPicker.js    # 出行方式选择（平滑水平滚动胶囊栏，9 种方式 + 自动居中聚焦）
 │   │   ├── ModeIcon.js           # 出行方式图标（9 种方式矢量映射）
+│   │   ├── BackupRestoreSheet.js # 免密恢复弹层（合并/覆盖、对照预览、快照回退）
 │   │   └── charts/BarChart.js    # 手绘 SVG 柱状图
 │   ├── storage/
 │   │   ├── store.js              # 打卡记录 SQLite 读写
 │   │   └── profile.js            # 昵称等偏好
 │   ├── backup/
-│   │   ├── crypto.js             # 加密：PBKDF2 + AES-256-CBC + HMAC-SHA256
-│   │   ├── schema.js             # 备份明文结构与收集/校验
-│   │   ├── backup.js             # 本地备份生成 / 分享 / 恢复
+│   │   ├── crypto.js             # 备份头部编解码与历史版本兼容解密
+│   │   ├── schema.js             # 备份结构规范与哈希去重
+│   │   ├── backup.js             # 统一备份流水线 / 免密直接恢复 / 快照创建
 │   │   ├── webdav.js             # WebDAV 云同步（上传 / 下载 / 测试）
-│   │   └── schedule.js           # 自动备份节流（开关 / 口令 / 上次时间）
+│   │   ├── state.js              # 备份全局状态响应式监听
+│   │   └── schedule.js           # 自动备份调度与前后台同步
 │   ├── utils/
 │   │   ├── location.js           # 双兼容定位 + 地名反查 + 定位排查
 │   │   ├── amapLocation.js       # 高德定位封装
@@ -139,7 +141,7 @@ npm run release -- --commit --push
 - 打卡记录存储于本地 **SQLite**（`timeflow.db`），无需服务器、无需账号
 - 偏好（当前行程 / 上次出行方式）存于 AsyncStorage
 - 位置数据仅通过高德 SDK 采集 / 反查，不落任何第三方服务器
-- 备份：记录与偏好加密成备份文件（口令派生密钥，AES-256-CBC + HMAC-SHA256），本地保存 / 分享；配 WebDAV 后上传的也是加密文件，云端看不到明文
+- 备份：记录与设备偏好自动生成结构化自包含备份（.tfb），本地沙盒自动守护；恢复时免密秒读，并支持恢复前自动生成快照及一键回退；支持 WebDAV（坚果云/Nextcloud）双向同步与防覆盖熔断保护
 
 ## 隐私政策
 
@@ -147,6 +149,14 @@ npm run release -- --commit --push
 - 源码：`privacy.html`（与 app 内 `PrivacyAgreement.js` 内容一致）
 
 ## 版本记录
+
+### v1.2.4 (2026-10-12)
+- **免密极速备份与恢复重构**：
+  - 彻底移除备份密码设置、强弱指示条与验密输入交互，消除 PBKDF2 重复计算延迟，实现秒级即时恢复；
+  - 恢复弹窗直接提供「合并补入」与「完全覆盖」两种模式，支持条数对照预览与恢复前自动创建安全快照；
+  - 恢复完成后支持「一键回退到恢复前」，提供全流程防丢失撤销能力；
+  - 完善 WebDAV 独立配置（坚果云/Nextcloud），保留自动上传、防覆盖熔断判定与版本清理轮转机制。
+- **隐私政策交互修复**：个人主页隐私协议接入全屏沉浸式 Modal 弹窗，解决点击无响应问题。
 
 ### v1.0.22 (2026-09-07)
 - **UI 全面焕新升级**：引入现代流体卡片设计、暖色双板质感、动态水波纹打卡主按钮与悬浮灵动定位胶囊状态条。
