@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Alert, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Alert, TextInput, BackHandler } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -20,6 +20,7 @@ import {
 import BarChart from '../components/charts/BarChart';
 import RouteMapScreen from './RouteMapScreen';
 import TripReceiptModal from '../components/TripReceiptModal';
+import TripDetailView from '../components/TripDetailView';
 
 export default function InsightsScreen() {
   const insets = useSafeAreaInsets();
@@ -53,9 +54,19 @@ export default function InsightsScreen() {
   const [expandedCats, setExpandedCats] = useState({});
   const [mapTrip, setMapTrip] = useState(null); // 当前查看地图的行程
   const [receiptTrip, setReceiptTrip] = useState(null); // 当前查看小票的行程
+  const [detailTrip, setDetailTrip] = useState(null); // 当前查看详情的行程
   const [renameTarget, setRenameTarget] = useState(null);
   const [draftName, setDraftName] = useState('');
   const lastFingerprintRef = useRef(null);
+
+  useEffect(() => {
+    if (!detailTrip) return;
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      setDetailTrip(null);
+      return true;
+    });
+    return () => backHandler.remove();
+  }, [detailTrip]);
 
   const loadData = useCallback(async () => {
     const fp = await getRecordsFingerprint();
@@ -112,7 +123,7 @@ export default function InsightsScreen() {
     if (!fromKey || !toKey) return;
     const latest = findLatestTripForRoute(travelRecords, fromKey, toKey);
     if (latest) {
-      setReceiptTrip(latest);
+      setDetailTrip(latest);
     } else {
       Alert.alert(t('insights.noData'), t('insights.noDataHint'));
     }
@@ -151,6 +162,12 @@ export default function InsightsScreen() {
   }, [travelRecords]);
 
   const allTrips = useMemo(() => groupTrips(travelRecords), [travelRecords]);
+
+  const currentDetailTrip = useMemo(() => {
+    if (!detailTrip) return null;
+    const found = allTrips.find(tr => tr.tripId === detailTrip.tripId);
+    return found || detailTrip;
+  }, [detailTrip, allTrips]);
 
   const filteredTrips = useMemo(() => {
     let list = allTrips;
@@ -509,6 +526,78 @@ export default function InsightsScreen() {
     }
     setRenameTarget(null);
   };
+
+  const renderPlaceRenameModal = () => (
+    <Modal visible={!!namingRecord} transparent animationType="fade" onRequestClose={() => setNamingRecord(null)}>
+      <View style={styles.overlay}>
+        <View style={styles.dialog}>
+          <Text style={styles.dialogTitle}>{t('insights.renamePlaceTitle')}</Text>
+          <TextInput
+            style={styles.input}
+            value={placeDraftName}
+            onChangeText={setPlaceDraftName}
+            placeholder={t('insights.renamePlacePlaceholder')}
+            placeholderTextColor={colors.ink3}
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={confirmRenamePlace}
+          />
+          <View style={styles.quickPlaceWrap}>
+            <View style={styles.chipRow}>
+              {PLACE_PRESETS.map((p, pIdx) => {
+                const isSelected = placeDraftName === p;
+                return (
+                  <TouchableOpacity
+                    key={'place-preset-' + pIdx}
+                    style={[styles.quickChip, isSelected && styles.quickChipActive]}
+                    onPress={() => setPlaceDraftName(p)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.quickChipText, isSelected && styles.quickChipTextActive]}>
+                      {p}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+          <View style={styles.dialogRow}>
+            <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={() => setNamingRecord(null)}>
+              <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmRenamePlace}>
+              <Text style={styles.dialogOkText}>{t('common.save')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  if (currentDetailTrip) {
+    return (
+      <View style={styles.detailScreen}>
+        <TripDetailView
+          trip={currentDetailTrip}
+          allTrips={allTrips}
+          discoveredRoutes={discoveredRoutes}
+          onClose={() => setDetailTrip(null)}
+          onRenameStop={handleStartRename}
+          onShowMap={(tr) => setMapTrip(tr)}
+          onShowReceipt={(tr) => setReceiptTrip(tr)}
+        />
+
+        {/* 线路轨迹地图（全屏） */}
+        <RouteMapScreen visible={mapTrip != null} tripRecords={mapTrip?.records || []} onClose={() => setMapTrip(null)} />
+
+        {/* 行程小票卡片（弹窗） */}
+        <TripReceiptModal visible={receiptTrip != null} trip={receiptTrip} onClose={() => setReceiptTrip(null)} />
+
+        {/* 给未命名地点命名弹窗 */}
+        {renderPlaceRenameModal()}
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -1241,7 +1330,7 @@ export default function InsightsScreen() {
                               style={[styles.tripItem, tripIdx > 0 && styles.tripItemBorder]}
                               onPress={() => {
                                 if (canOpenDetail) {
-                                  setReceiptTrip(trip);
+                                  setDetailTrip(trip);
                                 }
                               }}
                               activeOpacity={canOpenDetail ? 0.7 : 1}
@@ -1463,55 +1552,13 @@ export default function InsightsScreen() {
       </Modal>
 
       {/* 给未命名地点命名弹窗 */}
-      <Modal visible={!!namingRecord} transparent animationType="fade" onRequestClose={() => setNamingRecord(null)}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('insights.renamePlaceTitle')}</Text>
-            <TextInput
-              style={styles.input}
-              value={placeDraftName}
-              onChangeText={setPlaceDraftName}
-              placeholder={t('insights.renamePlacePlaceholder')}
-              placeholderTextColor={colors.ink3}
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={confirmRenamePlace}
-            />
-            <View style={styles.quickPlaceWrap}>
-              <View style={styles.chipRow}>
-                {PLACE_PRESETS.map((p, pIdx) => {
-                  const isSelected = placeDraftName === p;
-                  return (
-                    <TouchableOpacity
-                      key={'place-preset-' + pIdx}
-                      style={[styles.quickChip, isSelected && styles.quickChipActive]}
-                      onPress={() => setPlaceDraftName(p)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.quickChipText, isSelected && styles.quickChipTextActive]}>
-                        {p}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-            <View style={styles.dialogRow}>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogCancel]} onPress={() => setNamingRecord(null)}>
-                <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.dialogBtn, styles.dialogOk]} onPress={confirmRenamePlace}>
-                <Text style={styles.dialogOkText}>{t('common.save')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {renderPlaceRenameModal()}
     </ScrollView>
   );
 }
 
 const makeStyles = (colors) => StyleSheet.create({
+  detailScreen: { flex: 1, backgroundColor: colors.bg },
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 40 },
 
