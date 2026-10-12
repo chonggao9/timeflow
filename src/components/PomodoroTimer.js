@@ -1179,8 +1179,8 @@ export default function PomodoroTimer({
           styles.doneContainer,
           {
             backgroundColor: animatedPageBg,
-            paddingTop: insets.top + 16,
-            paddingBottom: insets.bottom + 20,
+            paddingTop: 8,
+            paddingBottom: 0,
           },
         ]}
       >
@@ -2218,16 +2218,16 @@ const styles = StyleSheet.create({
   doneScroll: {
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 28,
+    paddingBottom: 24,
   },
   harvestVisualWrap: {
-    width: 240,
-    height: 240,
+    width: 200,
+    height: 200,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    marginTop: 20,
-    marginBottom: 12,
+    marginTop: 10,
+    marginBottom: 8,
   },
   burstDot: {
     position: 'absolute',
@@ -2236,25 +2236,25 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   harvestTitle: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
     color: '#2B211C',
-    marginTop: 8,
+    marginTop: 6,
   },
   harvestSub: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#5E4F44',
     marginTop: 4,
   },
   harvestTaskText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#5E4F44',
     marginTop: 2,
   },
   postCatHint: {
     fontSize: 12,
     color: '#5E4F44',
-    marginTop: 16,
+    marginTop: 12,
     marginBottom: 8,
     alignSelf: 'flex-start',
   },
@@ -2266,7 +2266,7 @@ const styles = StyleSheet.create({
   },
   catBtnDone: {
     width: '31.5%',
-    height: 44,
+    height: 42,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     flexDirection: 'row',
@@ -2283,7 +2283,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF1EC',
   },
   catBtnDoneText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#2B211C',
     fontWeight: '500',
   },
@@ -2292,12 +2292,12 @@ const styles = StyleSheet.create({
   },
   doneBtnGroup: {
     width: '100%',
-    marginTop: 20,
+    marginTop: 14,
     gap: 8,
   },
   doneSaveBtn: {
     width: '100%',
-    height: 56,
+    height: 52,
     borderRadius: 999,
     backgroundColor: '#C63D31',
     alignItems: 'center',
@@ -2305,19 +2305,19 @@ const styles = StyleSheet.create({
   },
   doneSaveBtnText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
   },
   doneRestBtn: {
     width: '100%',
-    height: 48,
+    height: 44,
     borderRadius: 999,
     backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
   doneRestBtnText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
     color: '#5E4F44',
   },
