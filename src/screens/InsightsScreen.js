@@ -95,10 +95,14 @@ export default function InsightsScreen() {
     loadData();
   }, [loadData]));
 
+  // 行程域记录：专注记录不属于行程，总览看板与下面的历史列表都只看各自域
+  const travelRecords = useMemo(() => records || [], [records]);
+  const noData = travelRecords.length === 0;
+
   const [selectedRouteIdx, setSelectedRouteIdx] = useState(0);
 
   const discoveredRoutes = useMemo(() => {
-    return paths.filter(p => p.fromKey !== p.toKey);
+    return (paths || []).filter(p => p.fromKey !== p.toKey);
   }, [paths]);
 
   useEffect(() => {
@@ -158,28 +162,29 @@ export default function InsightsScreen() {
   }, [namingRecord, placeDraftName, t, loadData]);
 
   const unnamedRecords = useMemo(() => {
-    return travelRecords.filter(r => isPlaceholderName(r.locationName));
+    return (travelRecords || []).filter(r => isPlaceholderName(r.locationName));
   }, [travelRecords]);
 
-  const allTrips = useMemo(() => groupTrips(travelRecords), [travelRecords]);
+  const allTrips = useMemo(() => groupTrips(travelRecords || []), [travelRecords]);
 
   const currentDetailTrip = useMemo(() => {
     if (!detailTrip) return null;
-    const found = allTrips.find(tr => tr.tripId === detailTrip.tripId);
+    const list = allTrips || [];
+    const found = list.find(tr => tr.tripId === detailTrip.tripId);
     return found || detailTrip;
   }, [detailTrip, allTrips]);
 
   const filteredTrips = useMemo(() => {
-    let list = allTrips;
+    let list = allTrips || [];
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       list = list.filter(t =>
-        t.route.some(nm => (nm || '').toLowerCase().includes(q)) ||
-        t.records.some(r => (r.locationName || '').toLowerCase().includes(q))
+        (t.route || []).some(nm => (nm || '').toLowerCase().includes(q)) ||
+        (t.records || []).some(r => (r.locationName || '').toLowerCase().includes(q))
       );
     }
     if (modeFilter && modeFilter !== 'all') {
-      list = list.filter(t => t.mode === modeFilter || t.records.some(r => (r.mode || 'walk') === modeFilter));
+      list = list.filter(t => t.mode === modeFilter || (t.records || []).some(r => (r.mode || 'walk') === modeFilter));
     }
     return list;
   }, [allTrips, searchQuery, modeFilter]);
@@ -238,9 +243,6 @@ export default function InsightsScreen() {
 
   const fromPlace = placeOptions.find(o => o.key === fromKey);
   const toPlace = placeOptions.find(o => o.key === toKey);
-  // 行程域记录：专注记录不属于行程，总览看板与下面的历史列表都只看各自域
-  const travelRecords = useMemo(() => records, [records]);
-  const noData = travelRecords.length === 0;
 
   // 结果派生
   const hist = result ? buildDurationHistogram(result.durations) : null;

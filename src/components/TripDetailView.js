@@ -44,7 +44,7 @@ export default function TripDetailView({
   // 同路线历史行程对比
   const sameRouteTrips = useMemo(() => {
     if (!fromKey || !toKey) return [trip];
-    const matched = allTrips.filter(tr => {
+    const matched = (allTrips || []).filter(tr => {
       if (!tr.records || tr.records.length < 2) return false;
       const f = placeKey(tr.records[0]);
       const l = placeKey(tr.records[tr.records.length - 1]);
@@ -54,7 +54,8 @@ export default function TripDetailView({
   }, [allTrips, fromKey, toKey, trip]);
 
   const maxCompareMins = useMemo(() => {
-    return Math.max(...sameRouteTrips.map(tr => Math.round((tr.durationMs || 0) / 60000)), durationMins, 1);
+    const list = sameRouteTrips || [trip];
+    return Math.max(...list.map(tr => Math.round((tr.durationMs || 0) / 60000)), durationMins, 1);
   }, [sameRouteTrips, durationMins]);
 
   // 检查是否有未命名站点
