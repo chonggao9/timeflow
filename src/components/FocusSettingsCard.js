@@ -30,6 +30,8 @@ export const STORAGE_KEY_LAST_AMBIENT = 'timeflow_last_focus_ambient';
 export const ITEM_WIDTH = 72;
 export const ITEM_GAP = 8;
 export const SNAP_STEP = ITEM_WIDTH + ITEM_GAP;
+export const PADDING_LEFT = 4;
+export const PADDING_RIGHT = 16;
 
 const hapticImpact = (style) => {
   try {
@@ -38,9 +40,50 @@ const hapticImpact = (style) => {
 };
 
 /**
+ * 智能居中聚焦算法：
+ * 计算将第 index 项滚动到最佳视野位置的目标 offset.x
+ * - 当选中前两项（无声、咖啡厅）时，由于 targetX <= 0，自动钳位为 0，自然靠左紧凑展示，左侧 0 死区！
+ * - 当选中靠后的项（雨声、海浪、森林等）时，平滑居中聚焦于视口中央。
+ */
+export const getTargetScrollX = (index, cWidth) => {
+  const maxScroll = Math.max(
+    0,
+    PADDING_LEFT + FOCUS_AMBIENT_OPTIONS.length * SNAP_STEP - ITEM_GAP + PADDING_RIGHT - cWidth
+  );
+  const itemCenter = PADDING_LEFT + index * SNAP_STEP + ITEM_WIDTH / 2;
+  const targetX = itemCenter - cWidth / 2;
+  return Math.max(0, Math.min(maxScroll, Math.round(targetX)));
+};
+
+/**
+ * 滑动停止时获取最靠近视口焦点的项索引
+ */
+export const getNearestOptionIndex = (offsetX, cWidth) => {
+  const maxScroll = Math.max(
+    0,
+    PADDING_LEFT + FOCUS_AMBIENT_OPTIONS.length * SNAP_STEP - ITEM_GAP + PADDING_RIGHT - cWidth
+  );
+  if (offsetX <= 20) return 0;
+  if (offsetX >= maxScroll - 20) return FOCUS_AMBIENT_OPTIONS.length - 1;
+
+  const viewportCenter = offsetX + cWidth / 2;
+  let nearestIdx = 0;
+  let minDiff = Infinity;
+  for (let i = 0; i < FOCUS_AMBIENT_OPTIONS.length; i++) {
+    const itemCenter = PADDING_LEFT + i * SNAP_STEP + ITEM_WIDTH / 2;
+    const diff = Math.abs(itemCenter - viewportCenter);
+    if (diff < minDiff) {
+      minDiff = diff;
+      nearestIdx = i;
+    }
+  }
+  return nearestIdx;
+};
+
+/**
  * FocusSettingsCard: 室内专注首页一体化设置卡
  * 第一行：常驻单行备注输入框（占位符、聚焦深红、清空按钮、键盘防遮挡）
- * 第二行：横向吸附式白噪音选择器（两端内边距、居中放大高亮、渐隐遮罩、微震动、150ms停稳试听、持久化）
+ * 第二行：横向自然流式白噪音选择器（左侧零死区自然对齐、智能居中聚焦、微震动、150ms停稳试听、持久化）
  */
 export default function FocusSettingsCard({
   goalName,
@@ -55,7 +98,7 @@ export default function FocusSettingsCard({
   const { width: winWidth } = useWindowDimensions();
   const [isNoteFocused, setIsNoteFocused] = useState(false);
 
-  // 初始估算卡片宽度为屏幕宽度 - 外部内边距(32) - 卡片内边距(20)
+  // 初始估算卡片内视口宽度为屏幕宽度 - 外部内边距(32) - 卡片内边距(20)
   const [containerWidth, setContainerWidth] = useState(Math.max(260, winWidth - 52));
 
   const scrollRef = useRef(null);
@@ -67,9 +110,6 @@ export default function FocusSettingsCard({
   const previewTimerRef = useRef(null);
   const previewSoundRef = useRef(null);
   const previewReqIdRef = useRef(0);
-
-  // 两侧内边距使首尾项恰好滑到视口正中
-  const spacerWidth = Math.max(0, (containerWidth - ITEM_WIDTH) / 2);
 
   const currentOption = FOCUS_AMBIENT_OPTIONS.find((a) => a.key === ambient);
   const currentAmbientLabel = currentOption
@@ -164,22 +204,23 @@ export default function FocusSettingsCard({
     [soundFiles, stopPreviewSound]
   );
 
-  // 点击小卡片平滑滚动到中间并选中
+  // 点击小卡片智能滚动到聚焦位置并选中
   const handleItemPress = useCallback(
     (key, index) => {
       onSelectAmbient(key);
       AsyncStorage.setItem(STORAGE_KEY_LAST_AMBIENT, key).catch(() => {});
       hapticImpact(Haptics.ImpactFeedbackStyle.Light);
+      const targetX = getTargetScrollX(index, containerWidth);
       scrollRef.current?.scrollTo?.({
-        x: index * SNAP_STEP,
+        x: targetX,
         animated: true,
       });
       triggerAmbientPreview(key);
     },
-    [onSelectAmbient, triggerAmbientPreview]
+    [onSelectAmbient, triggerAmbientPreview, containerWidth]
   );
 
-  // 恢复上次选择并在布局后滚动到中间
+  // 恢复上次选择并在布局后智能对齐
   useEffect(() => {
     (async () => {
       try {
@@ -190,8 +231,9 @@ export default function FocusSettingsCard({
           if (idx >= 0) {
             lastHapticIndexRef.current = idx;
             setTimeout(() => {
+              const targetX = getTargetScrollX(idx, containerWidth);
               scrollRef.current?.scrollTo?.({
-                x: idx * SNAP_STEP,
+                x: targetX,
                 animated: false,
               });
             }, 300);
@@ -199,7 +241,7 @@ export default function FocusSettingsCard({
         }
       } catch (e) {}
     })();
-  }, [onSelectAmbient]);
+  }, [onSelectAmbient, containerWidth]);
 
   // 组件卸载时释放试听资源
   useEffect(() => {
@@ -267,7 +309,7 @@ export default function FocusSettingsCard({
           ) : null}
         </View>
 
-        {/* 第二行：背景声音横向吸附选择器 */}
+        {/* 第二行：背景声音横向自然流式选择器 */}
         <View
           style={styles.carouselWrapper}
           onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
@@ -280,11 +322,10 @@ export default function FocusSettingsCard({
             horizontal
             showsHorizontalScrollIndicator={false}
             decelerationRate="fast"
-            snapToInterval={SNAP_STEP}
-            snapToAlignment="start"
             nestedScrollEnabled={true}
             contentContainerStyle={{
-              paddingHorizontal: spacerWidth,
+              paddingLeft: PADDING_LEFT,
+              paddingRight: PADDING_RIGHT,
               alignItems: 'center',
             }}
             onScroll={Animated.event(
@@ -293,13 +334,7 @@ export default function FocusSettingsCard({
                 useNativeDriver: false,
                 listener: (e) => {
                   const offsetX = e.nativeEvent.contentOffset.x;
-                  const nearestIndex = Math.max(
-                    0,
-                    Math.min(
-                      FOCUS_AMBIENT_OPTIONS.length - 1,
-                      Math.round(offsetX / SNAP_STEP)
-                    )
-                  );
+                  const nearestIndex = getNearestOptionIndex(offsetX, containerWidth);
                   if (nearestIndex !== lastHapticIndexRef.current) {
                     lastHapticIndexRef.current = nearestIndex;
                     hapticImpact(Haptics.ImpactFeedbackStyle.Light);
@@ -314,18 +349,17 @@ export default function FocusSettingsCard({
             onMomentumScrollEnd={(e) => {
               isScrollingRef.current = false;
               const offsetX = e.nativeEvent.contentOffset.x;
-              const index = Math.max(
-                0,
-                Math.min(
-                  FOCUS_AMBIENT_OPTIONS.length - 1,
-                  Math.round(offsetX / SNAP_STEP)
-                )
-              );
+              const index = getNearestOptionIndex(offsetX, containerWidth);
               const targetItem = FOCUS_AMBIENT_OPTIONS[index];
               if (targetItem) {
                 onSelectAmbient(targetItem.key);
                 AsyncStorage.setItem(STORAGE_KEY_LAST_AMBIENT, targetItem.key).catch(() => {});
                 triggerAmbientPreview(targetItem.key);
+                // 智能磁吸对齐焦点
+                const snapX = getTargetScrollX(index, containerWidth);
+                if (Math.abs(snapX - offsetX) > 4) {
+                  scrollRef.current?.scrollTo?.({ x: snapX, animated: true });
+                }
               }
             }}
             onScrollEndDrag={(e) => {
@@ -333,18 +367,16 @@ export default function FocusSettingsCard({
               if (Math.abs(velocity) < 0.1) {
                 isScrollingRef.current = false;
                 const offsetX = e.nativeEvent.contentOffset.x;
-                const index = Math.max(
-                  0,
-                  Math.min(
-                    FOCUS_AMBIENT_OPTIONS.length - 1,
-                    Math.round(offsetX / SNAP_STEP)
-                  )
-                );
+                const index = getNearestOptionIndex(offsetX, containerWidth);
                 const targetItem = FOCUS_AMBIENT_OPTIONS[index];
                 if (targetItem) {
                   onSelectAmbient(targetItem.key);
                   AsyncStorage.setItem(STORAGE_KEY_LAST_AMBIENT, targetItem.key).catch(() => {});
                   triggerAmbientPreview(targetItem.key);
+                  const snapX = getTargetScrollX(index, containerWidth);
+                  if (Math.abs(snapX - offsetX) > 4) {
+                    scrollRef.current?.scrollTo?.({ x: snapX, animated: true });
+                  }
                 }
               }
             }}
@@ -352,42 +384,20 @@ export default function FocusSettingsCard({
           >
             {FOCUS_AMBIENT_OPTIONS.map((item, idx) => {
               const isSelected = ambient === item.key;
-              const itemCenterPos = idx * SNAP_STEP;
-              const scale = scrollX.interpolate({
-                inputRange: [
-                  itemCenterPos - SNAP_STEP,
-                  itemCenterPos,
-                  itemCenterPos + SNAP_STEP,
-                ],
-                outputRange: [0.88, 1, 0.88],
-                extrapolate: 'clamp',
-              });
-              const opacity = scrollX.interpolate({
-                inputRange: [
-                  itemCenterPos - SNAP_STEP,
-                  itemCenterPos,
-                  itemCenterPos + SNAP_STEP,
-                ],
-                outputRange: [0.6, 1, 0.6],
-                extrapolate: 'clamp',
-              });
-
               return (
                 <TouchableOpacity
                   key={item.key}
                   onPress={() => handleItemPress(item.key, idx)}
-                  activeOpacity={0.8}
+                  activeOpacity={0.75}
                   style={{
                     marginRight: idx === FOCUS_AMBIENT_OPTIONS.length - 1 ? 0 : ITEM_GAP,
                   }}
                 >
-                  <Animated.View
+                  <View
                     style={[
                       styles.ambientCard,
                       {
                         width: ITEM_WIDTH,
-                        transform: [{ scale }],
-                        opacity,
                         backgroundColor: isSelected
                           ? '#C63D31'
                           : (isDark ? '#1F1915' : '#FAF6F0'),
@@ -414,24 +424,38 @@ export default function FocusSettingsCard({
                     >
                       {t(item.label, item.defaultLabel)}
                     </Text>
-                  </Animated.View>
+                  </View>
                 </TouchableOpacity>
               );
             })}
           </Animated.ScrollView>
 
-          {/* 左右两侧渐隐羽化遮罩 */}
-          <View style={styles.fadeLeft} pointerEvents="none">
-            <Svg width={24} height={50}>
+          {/* 左侧动态羽化遮罩（仅当列表向右滚动时淡入，scrollX=0时完全透明隐藏） */}
+          <Animated.View
+            style={[
+              styles.fadeLeft,
+              {
+                opacity: scrollX.interpolate({
+                  inputRange: [0, 20],
+                  outputRange: [0, 1],
+                  extrapolate: 'clamp',
+                }),
+              },
+            ]}
+            pointerEvents="none"
+          >
+            <Svg width={20} height={50}>
               <Defs>
                 <LinearGradient id="cardFadeL" x1="0" y1="0" x2="1" y2="0">
                   <Stop offset="0" stopColor={isDark ? '#261F1A' : '#FFFFFF'} stopOpacity="1" />
                   <Stop offset="1" stopColor={isDark ? '#261F1A' : '#FFFFFF'} stopOpacity="0" />
                 </LinearGradient>
               </Defs>
-              <Rect width={24} height={50} fill="url(#cardFadeL)" />
+              <Rect width={20} height={50} fill="url(#cardFadeL)" />
             </Svg>
-          </View>
+          </Animated.View>
+
+          {/* 右侧渐隐遮罩（提示右侧还有森林、篝火、白噪音可横向滑动） */}
           <View style={styles.fadeRight} pointerEvents="none">
             <Svg width={24} height={50}>
               <Defs>
@@ -500,7 +524,7 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 24,
+    width: 20,
     justifyContent: 'center',
   },
   fadeRight: {
@@ -512,3 +536,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
