@@ -1,6 +1,6 @@
 {
   "name": "timeflow",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
