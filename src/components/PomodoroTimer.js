@@ -240,6 +240,11 @@ export default function PomodoroTimer({
   const catChipLayoutsRef = useRef({});
   const catViewportWidthRef = useRef(0);
 
+  // 白噪音横滑 Chip 居中滚动计算相关
+  const ambientScrollRef = useRef(null);
+  const ambientChipLayoutsRef = useRef({});
+  const ambientViewportWidthRef = useRef(0);
+
   const setPhaseAndRef = useCallback((next) => {
     phaseRef.current = next;
     setPhase(next);
@@ -383,6 +388,29 @@ export default function PomodoroTimer({
     hapticImpact(Haptics.ImpactFeedbackStyle.Light);
     scrollToCategoryCenter(catKey);
   }, [scrollToCategoryCenter]);
+
+  // 平滑滚动选中白噪音 Chip 到视口居中
+  const scrollToAmbientCenter = useCallback((ambKey) => {
+    const layout = ambientChipLayoutsRef.current[ambKey];
+    const vpW = ambientViewportWidthRef.current;
+    if (layout && vpW && ambientScrollRef.current) {
+      const targetX = layout.x - (vpW - layout.width) / 2;
+      ambientScrollRef.current.scrollTo({
+        x: Math.max(0, targetX),
+        animated: true,
+      });
+    }
+  }, []);
+
+  // 进入专注运行页或切换时，自动将选中项居中
+  useEffect(() => {
+    if (phase === 'running' || phase === 'paused') {
+      const timer = setTimeout(() => {
+        scrollToAmbientCenter(ambient);
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [phase, ambient, scrollToAmbientCenter]);
 
   // ==================== Effects ====================
 
@@ -1059,14 +1087,18 @@ export default function PomodoroTimer({
     }
   };
 
-  const handleSelectAmbientInModal = async (key) => {
+  const handleSelectAmbient = useCallback(async (key) => {
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light);
     setAmbient(key);
+    scrollToAmbientCenter(key);
     if (key === 'none') {
       await stopAmbientSound();
     } else {
       await playAmbientSound(key);
     }
-  };
+  }, [playAmbientSound, stopAmbientSound, scrollToAmbientCenter]);
+
+  const handleSelectAmbientInModal = handleSelectAmbient;
 
   // ==================== 番茄标准 SVG 绘制 (240x240) ====================
   const renderTomatoSvg = (showCheckmark = false) => (
@@ -1405,18 +1437,58 @@ export default function PomodoroTimer({
             </TouchableOpacity>
           </View>
 
-          {/* 背景声音行 */}
-          <TouchableOpacity
-            style={styles.runAmbientRow}
-            onPress={() => setShowAmbientPicker(true)}
-            activeOpacity={0.7}
+          {/* 白噪音水平滑动选择条：横滑点选即切，无需弹窗 */}
+          <View
+            style={styles.ambientStripWrap}
+            onLayout={(e) => {
+              ambientViewportWidthRef.current = e.nativeEvent.layout.width;
+            }}
           >
-            <Ionicons name="volume-medium-outline" size={16} color="#6B5B4F" />
-            <Text style={styles.runAmbientText}>{currentAmbientLabel}</Text>
-            <Ionicons name="chevron-forward" size={13} color="#8C7D73" />
-          </TouchableOpacity>
-
-          {renderAmbientModal()}
+            <ScrollView
+              ref={ambientScrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              nestedScrollEnabled={true}
+              contentContainerStyle={styles.ambientStripContent}
+            >
+              {AMBIENT_OPTIONS.map((item) => {
+                const isActive = ambient === item.key;
+                return (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={[
+                      styles.ambientStripChip,
+                      {
+                        backgroundColor: isDark ? '#261F1A' : '#FFFFFF',
+                        borderColor: isDark ? '#3D332A' : '#EFE5D8',
+                      },
+                      isActive && styles.ambientStripChipActive,
+                    ]}
+                    onPress={() => handleSelectAmbient(item.key)}
+                    onLayout={(e) => {
+                      ambientChipLayoutsRef.current[item.key] = e.nativeEvent.layout;
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={item.icon}
+                      size={15}
+                      color={isActive ? '#FFFFFF' : (isDark ? colors.ink2 : '#6B5B4F')}
+                    />
+                    <Text
+                      style={[
+                        styles.ambientStripChipText,
+                        { color: isDark ? colors.ink2 : '#6B5B4F' },
+                        isActive && styles.ambientStripChipTextActive,
+                      ]}
+                    >
+                      {t(item.label, item.key)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
         </ScrollView>
       </Animated.View>
     );
@@ -2208,6 +2280,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6B5B4F',
     fontWeight: '500',
+  },
+  ambientStripWrap: {
+    width: '100%',
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  ambientStripContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  ambientStripChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    minHeight: 38,
+  },
+  ambientStripChipActive: {
+    backgroundColor: '#C63D31',
+    borderColor: '#C63D31',
+  },
+  ambientStripChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  ambientStripChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 
   // 收获页面
