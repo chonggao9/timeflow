@@ -43,6 +43,7 @@ import {
   normalizeCategory,
 } from '../utils/focusCategories';
 import FocusHistoryModal from './FocusHistoryModal';
+import FocusSettingsCard, { STORAGE_KEY_LAST_AMBIENT } from './FocusSettingsCard';
 
 // 时长与手势参数
 const DEFAULT_DURATION_MIN = 25;
@@ -82,16 +83,7 @@ const AMBIENT_OPTIONS = [
   { key: 'stream', icon: 'water-outline', label: 'pomodoro.ambient_stream' },
 ];
 
-// 首页待开始卡片按指定顺序展示的 7 个选项：无声、咖啡厅、雨声、海浪、森林、篝火、白噪音
-const IDLE_AMBIENT_OPTIONS = [
-  { key: 'none', icon: 'volume-mute-outline', label: 'pomodoro.ambient_none', defaultLabel: '无声' },
-  { key: 'cafe', icon: 'cafe-outline', label: 'pomodoro.ambient_cafe', defaultLabel: '咖啡厅' },
-  { key: 'rain', icon: 'rainy-outline', label: 'pomodoro.ambient_rain', defaultLabel: '雨声' },
-  { key: 'ocean', icon: 'water-outline', label: 'pomodoro.ambient_ocean', defaultLabel: '海浪' },
-  { key: 'forest', icon: 'leaf-outline', label: 'pomodoro.ambient_forest', defaultLabel: '森林' },
-  { key: 'fire', icon: 'bonfire-outline', label: 'pomodoro.ambient_fire', defaultLabel: '篝火' },
-  { key: 'whitenoise', icon: 'disc-outline', label: 'pomodoro.ambient_whitenoise', defaultLabel: '白噪音' },
-];
+
 
 const AMBIENT_SOUND_FILES = {
   rain: require('../../assets/sounds/rain.mp3'),
@@ -106,13 +98,7 @@ const AMBIENT_SOUND_FILES = {
 
 const STORAGE_KEY_ACTIVE = 'timeflow_active_focus';
 const STORAGE_KEY_LAST_CATEGORY = 'timeflow_last_focus_category';
-const STORAGE_KEY_LAST_AMBIENT = 'timeflow_last_focus_ambient';
 const STORAGE_KEY_SLID_ADJUST = 'timeflow_pomodoro_has_slid';
-
-// 背景声音横向吸附小卡片尺寸
-const IDLE_CARD_ITEM_WIDTH = 72;
-const IDLE_CARD_ITEM_GAP = 8;
-const IDLE_SNAP_STEP = IDLE_CARD_ITEM_WIDTH + IDLE_CARD_ITEM_GAP;
 
 const CATEGORY_DESC_KEYS = {
   work: 'pomodoro.helpWorkDesc',
@@ -264,19 +250,6 @@ export default function PomodoroTimer({
   const ambientScrollRef = useRef(null);
   const ambientChipLayoutsRef = useRef({});
   const ambientViewportWidthRef = useRef(0);
-
-  // 首页设置卡片中的备注输入框聚焦状态
-  const [isNoteFocused, setIsNoteFocused] = useState(false);
-
-  // 首页待开始卡片背景声音吸附选择器相关
-  const idleAmbientScrollRef = useRef(null);
-  const idleScrollX = useRef(new Animated.Value(0)).current;
-  const [idleContainerWidth, setIdleContainerWidth] = useState(0);
-  const lastHapticIndexRef = useRef(0);
-  const previewTimerRef = useRef(null);
-  const previewSoundRef = useRef(null);
-  const previewReqIdRef = useRef(0);
-  const isScrollingRef = useRef(false);
 
   const setPhaseAndRef = useCallback((next) => {
     phaseRef.current = next;
@@ -464,9 +437,8 @@ export default function PomodoroTimer({
 
     return () => {
       stopAmbientSound();
-      stopPreviewSound();
     };
-  }, [stopPreviewSound]);
+  }, []);
 
   // 恢复上次分类（首次默认「学习」）并在布局完成后滚动居中
   useEffect(() => {
@@ -493,27 +465,7 @@ export default function PomodoroTimer({
     }
   }, [category]);
 
-  // 恢复上次背景声音（记住上次选择，下次打开默认选中）并在布局完成后吸附居中
-  useEffect(() => {
-    (async () => {
-      try {
-        const lastAmbient = await AsyncStorage.getItem(STORAGE_KEY_LAST_AMBIENT);
-        if (lastAmbient && IDLE_AMBIENT_OPTIONS.some((a) => a.key === lastAmbient)) {
-          setAmbient(lastAmbient);
-          const targetIndex = IDLE_AMBIENT_OPTIONS.findIndex((a) => a.key === lastAmbient);
-          if (targetIndex >= 0) {
-            lastHapticIndexRef.current = targetIndex;
-            setTimeout(() => {
-              idleAmbientScrollRef.current?.scrollTo?.({
-                x: targetIndex * IDLE_SNAP_STEP,
-                animated: false,
-              });
-            }, 350);
-          }
-        }
-      } catch (e) {}
-    })();
-  }, []);
+
 
   // 恢复是否已滑动手势调节的持久化状态（调节过一次后永久隐藏）
   useEffect(() => {
@@ -877,103 +829,6 @@ export default function PomodoroTimer({
     }
   }, [ambient, playAmbientSound]);
 
-  // 停止并销毁试听音频
-  const stopPreviewSound = useCallback(async () => {
-    previewReqIdRef.current++;
-    if (previewTimerRef.current) {
-      clearTimeout(previewTimerRef.current);
-      previewTimerRef.current = null;
-    }
-    if (previewSoundRef.current) {
-      const cur = previewSoundRef.current;
-      previewSoundRef.current = null;
-      try {
-        await cur.stopAsync();
-        await cur.unloadAsync();
-      } catch (e) {}
-    }
-  }, []);
-
-  // 滑动停稳约 150ms 后自动试听该声音 2 秒，音量约 30%，带淡入淡出；若系统静音则静默处理
-  const triggerAmbientPreview = useCallback((key) => {
-    if (previewTimerRef.current) {
-      clearTimeout(previewTimerRef.current);
-      previewTimerRef.current = null;
-    }
-    stopPreviewSound();
-
-    if (key === 'none' || !AMBIENT_SOUND_FILES[key]) return;
-
-    const reqId = ++previewReqIdRef.current;
-    previewTimerRef.current = setTimeout(async () => {
-      try {
-        const { sound } = await Audio.Sound.createAsync(
-          AMBIENT_SOUND_FILES[key],
-          {
-            shouldPlay: true,
-            isLooping: false,
-            volume: 0, // 初始音量为 0，用于平滑淡入
-          }
-        );
-        if (reqId !== previewReqIdRef.current) {
-          await sound.stopAsync().catch(() => {});
-          await sound.unloadAsync().catch(() => {});
-          return;
-        }
-        previewSoundRef.current = sound;
-
-        // 淡入至 0.3 (步长 50ms，约 250ms 完成)
-        let currentVol = 0;
-        const targetVol = 0.3;
-        const fadeStep = 0.06;
-        const fadeInTimer = setInterval(async () => {
-          if (reqId !== previewReqIdRef.current || !previewSoundRef.current) {
-            clearInterval(fadeInTimer);
-            return;
-          }
-          currentVol = Math.min(targetVol, currentVol + fadeStep);
-          try {
-            await sound.setVolumeAsync(currentVol);
-          } catch (e) {}
-          if (currentVol >= targetVol) clearInterval(fadeInTimer);
-        }, 50);
-
-        // 持续播放至约 1.5 秒后开始淡出
-        setTimeout(async () => {
-          if (reqId !== previewReqIdRef.current || !previewSoundRef.current) return;
-          const fadeOutTimer = setInterval(async () => {
-            if (reqId !== previewReqIdRef.current || !previewSoundRef.current) {
-              clearInterval(fadeOutTimer);
-              return;
-            }
-            currentVol = Math.max(0, currentVol - fadeStep);
-            try {
-              await sound.setVolumeAsync(currentVol);
-            } catch (e) {}
-            if (currentVol <= 0) {
-              clearInterval(fadeOutTimer);
-              stopPreviewSound();
-            }
-          }, 50);
-        }, 1500);
-      } catch (err) {
-        // 静默捕获系统静音、音量为0或音频被占用等情况
-      }
-    }, 150);
-  }, [stopPreviewSound]);
-
-  // 待开始卡片中点击或吸附切换背景声音
-  const selectIdleAmbient = useCallback((key, index, animated = true) => {
-    setAmbient(key);
-    AsyncStorage.setItem(STORAGE_KEY_LAST_AMBIENT, key).catch(() => {});
-    hapticImpact(Haptics.ImpactFeedbackStyle.Light);
-    idleAmbientScrollRef.current?.scrollTo?.({
-      x: index * IDLE_SNAP_STEP,
-      animated,
-    });
-    triggerAmbientPreview(key);
-  }, [triggerAmbientPreview]);
-
   const showToast = useCallback((message) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ visible: true, message });
@@ -1005,12 +860,11 @@ export default function PomodoroTimer({
 
     await persistActiveSession();
     await scheduleNotification();
-    stopPreviewSound();
     setGoalName('');
     if (ambient !== 'none') {
       await playAmbientSound(ambient);
     }
-  }, [durationMin, goalName, t, onStartFocus, persistActiveSession, scheduleNotification, ambient, playAmbientSound, stopPreviewSound]);
+  }, [durationMin, goalName, t, onStartFocus, persistActiveSession, scheduleNotification, ambient, playAmbientSound]);
 
   const handleTimerDone = useCallback(async () => {
     if (phaseRef.current !== 'running') return;
@@ -1811,245 +1665,16 @@ export default function PomodoroTimer({
           </View>
 
           {/* 7. 设置卡片：第一行常驻备注输入框 + 第二行横向吸附背景声音选择器 */}
-          <View style={styles.focusSettingsCardWrap}>
-            <View
-              style={[
-                styles.focusSettingsCard,
-                {
-                  backgroundColor: isDark ? '#261F1A' : '#FFFFFF',
-                  borderColor: isDark ? '#3D332A' : '#EFE5D8',
-                },
-              ]}
-            >
-              {/* 第一行：备注输入框 */}
-              <View
-                style={[
-                  styles.noteInputRow,
-                  {
-                    backgroundColor: isDark ? '#1F1915' : '#FAF6F0',
-                    borderColor: isNoteFocused
-                      ? '#C63D31'
-                      : (isDark ? '#3D332A' : '#EADFD0'),
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="pencil-outline"
-                  size={15}
-                  color={isNoteFocused ? '#C63D31' : (isDark ? '#8C7D73' : '#6B5B4F')}
-                  style={{ marginRight: 6 }}
-                />
-                <TextInput
-                  style={[
-                    styles.noteInputField,
-                    { color: colors.ink },
-                  ]}
-                  value={goalName}
-                  onChangeText={setGoalName}
-                  placeholder={t('pomodoro.notePlaceholder', '具体做什么？（选填）')}
-                  placeholderTextColor={isDark ? '#7A6F66' : '#A6988D'}
-                  maxLength={30}
-                  onFocus={() => setIsNoteFocused(true)}
-                  onBlur={() => setIsNoteFocused(false)}
-                  returnKeyType="done"
-                  onSubmitEditing={() => Keyboard.dismiss()}
-                />
-                {goalName.length > 0 && (
-                  <TouchableOpacity
-                    onPress={() => setGoalName('')}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name="close-circle"
-                      size={17}
-                      color={isDark ? '#8C7D73' : '#A6988D'}
-                    />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* 第二行：背景声音横向吸附选择器 */}
-              <View
-                style={styles.ambientCarouselContainer}
-                onLayout={(e) => {
-                  setIdleContainerWidth(e.nativeEvent.layout.width);
-                }}
-                accessible={true}
-                accessibilityLabel={`背景声音，当前为${currentAmbientLabel}，可左右滑动调整`}
-                accessibilityRole="adjustable"
-              >
-                <Animated.ScrollView
-                  ref={idleAmbientScrollRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  decelerationRate="fast"
-                  snapToInterval={IDLE_SNAP_STEP}
-                  snapToAlignment="start"
-                  nestedScrollEnabled={true}
-                  contentContainerStyle={{
-                    paddingHorizontal: Math.max(0, (idleContainerWidth - IDLE_CARD_ITEM_WIDTH) / 2),
-                    alignItems: 'center',
-                  }}
-                  onScroll={Animated.event(
-                    [{ nativeEvent: { contentOffset: { x: idleScrollX } } }],
-                    {
-                      useNativeDriver: false,
-                      listener: (e) => {
-                        const offsetX = e.nativeEvent.contentOffset.x;
-                        const nearestIndex = Math.max(
-                          0,
-                          Math.min(
-                            IDLE_AMBIENT_OPTIONS.length - 1,
-                            Math.round(offsetX / IDLE_SNAP_STEP)
-                          )
-                        );
-                        if (nearestIndex !== lastHapticIndexRef.current) {
-                          lastHapticIndexRef.current = nearestIndex;
-                          hapticImpact(Haptics.ImpactFeedbackStyle.Light);
-                        }
-                      },
-                    }
-                  )}
-                  onScrollBeginDrag={() => {
-                    isScrollingRef.current = true;
-                    stopPreviewSound();
-                  }}
-                  onMomentumScrollEnd={(e) => {
-                    isScrollingRef.current = false;
-                    const offsetX = e.nativeEvent.contentOffset.x;
-                    const index = Math.max(
-                      0,
-                      Math.min(
-                        IDLE_AMBIENT_OPTIONS.length - 1,
-                        Math.round(offsetX / IDLE_SNAP_STEP)
-                      )
-                    );
-                    const targetItem = IDLE_AMBIENT_OPTIONS[index];
-                    if (targetItem) {
-                      setAmbient(targetItem.key);
-                      AsyncStorage.setItem(STORAGE_KEY_LAST_AMBIENT, targetItem.key).catch(() => {});
-                      triggerAmbientPreview(targetItem.key);
-                    }
-                  }}
-                  onScrollEndDrag={(e) => {
-                    const velocity = e.nativeEvent.velocity?.x || 0;
-                    if (Math.abs(velocity) < 0.1) {
-                      isScrollingRef.current = false;
-                      const offsetX = e.nativeEvent.contentOffset.x;
-                      const index = Math.max(
-                        0,
-                        Math.min(
-                          IDLE_AMBIENT_OPTIONS.length - 1,
-                          Math.round(offsetX / IDLE_SNAP_STEP)
-                        )
-                      );
-                      const targetItem = IDLE_AMBIENT_OPTIONS[index];
-                      if (targetItem) {
-                        setAmbient(targetItem.key);
-                        AsyncStorage.setItem(STORAGE_KEY_LAST_AMBIENT, targetItem.key).catch(() => {});
-                        triggerAmbientPreview(targetItem.key);
-                      }
-                    }
-                  }}
-                  scrollEventThrottle={16}
-                >
-                  {IDLE_AMBIENT_OPTIONS.map((item, idx) => {
-                    const isSelected = ambient === item.key;
-                    const itemCenterPos = idx * IDLE_SNAP_STEP;
-                    const scale = idleScrollX.interpolate({
-                      inputRange: [
-                        itemCenterPos - IDLE_SNAP_STEP,
-                        itemCenterPos,
-                        itemCenterPos + IDLE_SNAP_STEP,
-                      ],
-                      outputRange: [0.88, 1, 0.88],
-                      extrapolate: 'clamp',
-                    });
-                    const opacity = idleScrollX.interpolate({
-                      inputRange: [
-                        itemCenterPos - IDLE_SNAP_STEP,
-                        itemCenterPos,
-                        itemCenterPos + IDLE_SNAP_STEP,
-                      ],
-                      outputRange: [0.6, 1, 0.6],
-                      extrapolate: 'clamp',
-                    });
-
-                    return (
-                      <TouchableOpacity
-                        key={item.key}
-                        onPress={() => selectIdleAmbient(item.key, idx, true)}
-                        activeOpacity={0.8}
-                        style={{
-                          marginRight: idx === IDLE_AMBIENT_OPTIONS.length - 1 ? 0 : IDLE_CARD_ITEM_GAP,
-                        }}
-                      >
-                        <Animated.View
-                          style={[
-                            styles.ambientCardItem,
-                            {
-                              width: IDLE_CARD_ITEM_WIDTH,
-                              transform: [{ scale }],
-                              opacity,
-                              backgroundColor: isSelected
-                                ? '#C63D31'
-                                : (isDark ? '#1F1915' : '#FAF6F0'),
-                              borderColor: isSelected
-                                ? '#C63D31'
-                                : (isDark ? '#3D332A' : '#EADFD0'),
-                            },
-                          ]}
-                        >
-                          <Ionicons
-                            name={item.icon}
-                            size={16}
-                            color={isSelected ? '#FFFFFF' : (isDark ? '#8C7D73' : '#6B5B4F')}
-                          />
-                          <Text
-                            style={[
-                              styles.ambientCardText,
-                              {
-                                color: isSelected ? '#FFFFFF' : (isDark ? '#8C7D73' : '#6B5B4F'),
-                                fontWeight: isSelected ? '700' : '500',
-                              },
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {t(item.label, item.defaultLabel)}
-                          </Text>
-                        </Animated.View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </Animated.ScrollView>
-
-                {/* 左右两侧渐隐遮罩 */}
-                <View style={styles.carouselFadeLeft} pointerEvents="none">
-                  <Svg width={24} height={50}>
-                    <Defs>
-                      <LinearGradient id="fadeL" x1="0" y1="0" x2="1" y2="0">
-                        <Stop offset="0" stopColor={isDark ? '#261F1A' : '#FFFFFF'} stopOpacity="1" />
-                        <Stop offset="1" stopColor={isDark ? '#261F1A' : '#FFFFFF'} stopOpacity="0" />
-                      </LinearGradient>
-                    </Defs>
-                    <Rect width={24} height={50} fill="url(#fadeL)" />
-                  </Svg>
-                </View>
-                <View style={styles.carouselFadeRight} pointerEvents="none">
-                  <Svg width={24} height={50}>
-                    <Defs>
-                      <LinearGradient id="fadeR" x1="0" y1="0" x2="1" y2="0">
-                        <Stop offset="0" stopColor={isDark ? '#261F1A' : '#FFFFFF'} stopOpacity="0" />
-                        <Stop offset="1" stopColor={isDark ? '#261F1A' : '#FFFFFF'} stopOpacity="1" />
-                      </LinearGradient>
-                    </Defs>
-                    <Rect width={24} height={50} fill="url(#fadeR)" />
-                  </Svg>
-                </View>
-              </View>
-            </View>
-          </View>
+          <FocusSettingsCard
+            goalName={goalName}
+            onChangeGoalName={setGoalName}
+            ambient={ambient}
+            onSelectAmbient={setAmbient}
+            soundFiles={AMBIENT_SOUND_FILES}
+            isDark={isDark}
+            colors={colors}
+            t={t}
+          />
 
           {/* 8. 开始按钮（长按 1 秒开始，带进度填充反馈） */}
           <View style={styles.startBtnBottomWrap}>
