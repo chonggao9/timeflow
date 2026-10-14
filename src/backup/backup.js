@@ -1,371 +1,114 @@
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import { Platform } from 'react-native';
-import { getTrips, getRecords, getFocusSessions, importRecords, clearAll } from '../storage/store';
-import { encrypt, decrypt, parseHeader, BadPassphraseError } from './crypto';
-import {
-  collectPreferences,
-  buildPlaintext,
-  validatePlaintext,
-  restorePreferences,
-  computeContentHash,
-  extractCounts,
-  SCHEMA_RECORDS_V2,
-} from './schema';
-import LocalTarget, { LOCAL_BACKUP_DIR } from './targets/LocalTarget';
-import { createWebDavTarget } from './webdav';
-import { getBackupState, updateBackupState, getBackupPassphrase } from './state';
+// 备份主流程：收集 → 哈希比对（无变化跳过）→ 原子写 → 清理 → 更新状态。
+// 凭证（高德 Key、WebDAV 账号密码）永不入包：偏好仅收 PREF_KEYS 白名单。
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import { getTrips, getRecords, getFocusSessions } from '../storage/store';
+import { PREF_KEYS, buildPackage, makeBackupFilename, extractCounts } from './format';
+import { computeContentHash } from './hash';
+import { listVersions, writeBackupAtomic, removeBackup } from './files';
+import { planPrune } from './plan';
+import { getBackupState, updateBackupState } from './state';
 
-export { BadPassphraseError };
+let isRunning = false;
+export function isBackupRunning() { return isRunning; }
 
-/**
- * 格式化时间为 YYYYMMDD-HHmm
- */
-export function formatTimestampName(date = new Date()) {
-  const p = (n) => String(n).padStart(2, '0');
-  const y = date.getFullYear();
-  const m = p(date.getMonth() + 1);
-  const d = p(date.getDate());
-  const hh = p(date.getHours());
-  const mm = p(date.getMinutes());
-  return `${y}${m}${d}-${hh}${mm}`;
+async function collectPreferences() {
+  const prefs = {};
+  for (const key of PREF_KEYS) {
+    try { prefs[key] = await AsyncStorage.getItem(key); } catch (e) { prefs[key] = null; }
+  }
+  return prefs;
 }
 
-export function makeBackupFilename(isSnap = false, date = new Date()) {
-  const prefix = isSnap ? 'timeflow-snap' : 'timeflow';
-  return `${prefix}-${formatTimestampName(date)}.tfb`;
-}
-
-/**
- * 统一备份流水线（同时导出 executeBackupPipeline 与 performBackup）
- */
-export async function executeBackupPipeline({
-  passphrase,
-  isManual = false,
-  isAuto = false,
-  force = false,
-  forceBypassConfirm = false,
-} = {}) {
-  const auto = isAuto || !isManual;
-
-  // 1. 收集数据与偏好
-  const [trips, records, focusSessions] = await Promise.all([
-    getTrips(),
-    getRecords(),
-    getFocusSessions(),
+export async function collectData() {
+  const [trips, records, focusSessions, prefs] = await Promise.all([
+    getTrips(), getRecords(), getFocusSessions(), collectPreferences(),
   ]);
-  const prefs = await collectPreferences();
-  const counts = {
-    records: records.length,
-    focus: focusSessions.length,
-    trips: trips.length,
-  };
-
-  // 2. 计算内容哈希（防冗余）
-  const contentHash = computeContentHash({ trips, records, focusSessions, preferences: prefs });
-  const state = await getBackupState();
-
-  if (!force && state.lastHash && state.lastHash === contentHash) {
-    return {
-      success: true,
-      skipped: true,
-      skippedReason: 'content_hash_identical',
-      reason: 'SAME_HASH',
-      counts,
-    };
-  }
-
-  const localTarget = new LocalTarget();
-  const cloudTarget = await createWebDavTarget();
-
-  // 3. 防覆盖保护检查（仅针对自动备份且已配置云端，且未强制绕过）
-  if (auto && !forceBypassConfirm && cloudTarget) {
-    try {
-      const cloudList = await cloudTarget.list();
-      let remoteLatestRecords = 0;
-      for (const item of cloudList) {
-        if (!item.isLegacy) {
-          try {
-            const raw = await cloudTarget.get(item.name);
-            const header = parseHeader(raw);
-            if (header && header.counts?.records != null) {
-              remoteLatestRecords = header.counts.records;
-              break;
-            }
-          } catch (e) {}
-        }
-      }
-
-      // 判定规则：本机记录数 < 最新远端版本记录数 × 50% 且 远端 ≥ 10 条
-      if (remoteLatestRecords >= 10 && records.length < remoteLatestRecords * 0.5) {
-        await updateBackupState({
-          status: 'needConfirm',
-          needConfirmReason: {
-            local: records.length,
-            remote: remoteLatestRecords,
-          },
-        });
-        return {
-          success: false,
-          needConfirm: true,
-          skippedReason: 'needConfirm',
-          local: records.length,
-          remote: remoteLatestRecords,
-        };
-      }
-    } catch (e) {}
-  }
-
-  // 4. 打包为结构化 JSON 格式
-  const deviceName = Platform.OS === 'android' ? 'Android Device' : 'iOS Device';
-  const plaintext = buildPlaintext({ trips, records, focusSessions }, prefs);
-  const envelope = {
-    v: 1,
-    ...plaintext,
-    device: deviceName,
-    counts,
-    hash: contentHash,
-  };
-  const envelopeStr = JSON.stringify(envelope, null, 2);
-  const filename = makeBackupFilename(false);
-
-  // 5. 写入本地目标
-  await localTarget.put(filename, envelopeStr);
-  await localTarget.prune();
-
-  // 6. 写入 WebDAV 目标（若可用）
-  let cloudUploaded = false;
-  let cloudError = null;
-
-  if (cloudTarget) {
-    try {
-      await cloudTarget.put(filename, envelopeStr);
-      await cloudTarget.prune();
-      cloudUploaded = true;
-    } catch (err) {
-      cloudError = {
-        code: err.code || 'UNKNOWN',
-        at: Date.now(),
-        message: err.message || '上传云端失败',
-      };
-    }
-  }
-
-  // 7. 更新全局状态
-  await updateBackupState((s) => ({
-    ...s,
-    lastSuccessAt: Date.now(),
-    lastCounts: counts,
-    lastHash: contentHash,
-    status: cloudError ? 'failed' : 'ok',
-    cloud: {
-      enabled: !!cloudTarget,
-      lastError: cloudError,
-    },
-    local: {
-      enabled: true,
-    },
-  }));
-
-  return {
-    success: true,
-    filename,
-    uri: `${LOCAL_BACKUP_DIR}${filename}`,
-    counts,
-    cloudUploaded,
-    cloudError,
-  };
+  return { trips, records, focusSessions, prefs };
 }
 
-export const performBackup = executeBackupPipeline;
-
-/**
- * 创建本地“恢复前快照”（标记 snap，免密）
- */
-export async function createPreRestoreSnapshot() {
-  const [trips, records, focusSessions] = await Promise.all([
-    getTrips(),
-    getRecords(),
-    getFocusSessions(),
-  ]);
-  const prefs = await collectPreferences();
-  const counts = {
-    records: records.length,
-    focus: focusSessions.length,
-    trips: trips.length,
-  };
-  const hash = computeContentHash({ trips, records, focusSessions, preferences: prefs });
-
-  const plaintext = buildPlaintext({ trips, records, focusSessions }, prefs);
-  const envelope = {
-    v: 1,
-    ...plaintext,
-    device: '本机快照',
-    counts,
-    hash,
-  };
-
-  const localTarget = new LocalTarget();
-  const filename = makeBackupFilename(true);
-  await localTarget.put(filename, JSON.stringify(envelope, null, 2));
-  await localTarget.prune();
-  return filename;
-}
-
-/**
- * 从原始 JSON 字符串执行恢复（免密直接秒级恢复）
- * @param {string} raw - 备份包字符串
- * @param {'merge'|'overwrite'} mode - 恢复模式
- * @param {string} [passphrase] - 可选密码（仅在遇到历史加密备份时）
- */
-export async function restoreFromRaw(raw, mode = 'merge', passphrase = '') {
-  let envelope;
+export async function getDeviceName() {
   try {
-    envelope = JSON.parse(raw);
+    return Constants.deviceName || (Constants.platform?.android ? 'Android Device' : 'iOS Device');
   } catch (e) {
-    throw new BadPassphraseError('无效的备份文件');
+    return 'Android Device';
   }
+}
 
-  // 1. 如果包含 ciphertext 且是旧版加密包
-  let plaintext;
-  if (envelope.ciphertext) {
-    if (!passphrase) {
-      throw new BadPassphraseError('该备份文件来自历史加密版本，需要输入原密码解密');
+// 写失败错误分类：空间不足单独提示（诚实告知旧备份仍在），其余归 WRITE_FAIL。
+// 只匹配明确的「空间不足」措辞，避免 namespace 等含 space 的无关报错被误判为 NO_SPACE。
+function classifyWriteError(e) {
+  const msg = String((e && e.message) || e || '');
+  if (/no space|enospc|not enough space|out of space|storage quota|disk full/i.test(msg)) return 'NO_SPACE';
+  return 'WRITE_FAIL';
+}
+
+/**
+ * 执行一次备份。
+ * kind: 'auto' | 'manual' | 'safe'（safe = 危险操作前强制生成，永远写入）
+ * force: 跳过「内容无变化」判定（safe/重试场景）
+ * 返回：{ status:'done', name, counts } | { status:'skipped' } | { status:'error', code }
+ */
+export async function runBackup({ kind = 'manual', force = false } = {}) {
+  if (isRunning) return { status: 'busy' };
+  isRunning = true;
+  try {
+    const state = await getBackupState();
+    const data = await collectData();
+    const hash = computeContentHash(data);
+
+    // 数据没有变化：不生成新文件（failed 态下的「重试」与 safe 备份除外）
+    if (!force && kind !== 'safe' && hash === state.lastHash && !state.lastError) {
+      return { status: 'skipped' };
     }
-    plaintext = decrypt(passphrase, envelope);
-  } else {
-    // 免密新版本
-    plaintext = envelope;
-  }
 
-  if (!validatePlaintext(plaintext)) {
-    throw new BadPassphraseError('备份数据格式不符合规范');
-  }
+    const counts = extractCounts(data);
+    const device = await getDeviceName();
+    const now = new Date();
+    const pkg = buildPackage(data, data.prefs, { device, createdAt: now.toISOString() });
+    const name = makeBackupFilename(kind, now, counts.records);
 
-  // 2. 若是完全覆盖模式，先清空现有数据
-  if (mode === 'overwrite') {
-    await clearAll();
-  }
-
-  // 3. 导入数据
-  let result;
-  if (plaintext.schema === SCHEMA_RECORDS_V2) {
-    result = await importRecords(
-      plaintext.data || { trips: [], records: plaintext.data?.records || [], focusSessions: [] }
-    );
-  } else {
-    result = await importRecords(plaintext.records);
-  }
-
-  // 4. 恢复偏好
-  await restorePreferences(plaintext.preferences);
-
-  // 5. 更新状态
-  const counts = extractCounts(plaintext.data || plaintext);
-  await updateBackupState((s) => ({
-    ...s,
-    lastCounts: counts,
-  }));
-
-  return {
-    imported: result.imported,
-    skipped: result.skipped,
-    mode,
-    counts,
-  };
-}
-
-/**
- * 分享备份文件（调用系统分享）
- */
-export async function shareBackup(filename) {
-  if (!(await Sharing.isAvailableAsync())) return false;
-  const uri = `${LOCAL_BACKUP_DIR}${filename}`;
-  await Sharing.shareAsync(uri, {
-    mimeType: 'application/json',
-    dialogTitle: 'TimeFlow 备份导出',
-  });
-  return true;
-}
-
-/**
- * 列出所有历史版本（本地与云端合并去重，免密解析头部）
- */
-export async function listUnifiedVersions() {
-  const localTarget = new LocalTarget();
-  const cloudTarget = await createWebDavTarget();
-
-  const [localRows, cloudRows] = await Promise.all([
-    localTarget.list().catch(() => []),
-    cloudTarget ? cloudTarget.list().catch(() => []) : Promise.resolve([]),
-  ]);
-
-  const map = new Map();
-
-  // 处理本地项
-  for (const row of localRows) {
-    const raw = await localTarget.get(row.name).catch(() => null);
-    const header = raw ? parseHeader(raw) : null;
-    map.set(row.name, {
-      name: row.name,
-      modifiedAt: row.modifiedAt,
-      size: row.size,
-      isSnap: row.isSnap,
-      isLegacy: row.isLegacy,
-      device: header?.device || 'Android',
-      counts: header?.counts || { records: 0, focus: 0, trips: 0 },
-      createdAt: header?.createdAt || new Date(row.modifiedAt).toISOString(),
-      sources: ['local'],
-    });
-  }
-
-  // 合并云端项
-  for (const row of cloudRows) {
-    if (map.has(row.name)) {
-      const existing = map.get(row.name);
-      if (!existing.sources.includes('cloud')) {
-        existing.sources.push('cloud');
-      }
-    } else {
-      let header = null;
-      if (!row.isLegacy) {
-        try {
-          const raw = await cloudTarget.get(row.name);
-          header = parseHeader(raw);
-        } catch (e) {}
-      }
-      map.set(row.name, {
-        name: row.name,
-        modifiedAt: row.modifiedAt,
-        size: row.size,
-        isSnap: false,
-        isLegacy: row.isLegacy,
-        device: header?.device || (row.isLegacy ? 'Legacy Cloud' : 'Cloud Device'),
-        counts: header?.counts || (row.isLegacy ? null : { records: 0, focus: 0, trips: 0 }),
-        createdAt: header?.createdAt || new Date(row.modifiedAt).toISOString(),
-        sources: ['cloud'],
-      });
-    }
-  }
-
-  const result = Array.from(map.values());
-  result.sort((a, b) => b.modifiedAt - a.modifiedAt);
-  return result;
-}
-
-/**
- * 读取某个版本的原始密文字符串（优先本地，若无从云端拉取）
- */
-export async function getVersionRawContent(versionItem) {
-  const localTarget = new LocalTarget();
-  if (versionItem.sources.includes('local')) {
+    let written;
     try {
-      return await localTarget.get(versionItem.name);
-    } catch (e) {}
+      written = await writeBackupAtomic(name, JSON.stringify(pkg, null, 2));
+    } catch (e) {
+      const code = classifyWriteError(e);
+      await updateBackupState((s) => ({ ...s, lastError: { code, at: Date.now() } }));
+      return { status: 'error', code };
+    }
+
+    // 只有新备份写入并校验成功后，才执行清理
+    try {
+      const versions = await listVersions();
+      const { toDelete } = planPrune(versions);
+      for (const n of toDelete) await removeBackup(n);
+    } catch (e) { /* 清理失败不影响本次备份成功 */ }
+
+    await updateBackupState((s) => ({
+      ...s,
+      lastSuccessAt: Date.now(),
+      lastCounts: counts,
+      lastHash: hash,
+      lastError: null,
+      lastAutoAt: kind === 'auto' ? Date.now() : s.lastAutoAt,
+    }));
+
+    // 阶段 3 接入点：cloudEnabled 时上传 written.name 到 WebDAV（失败记 CLOUD_FAIL，不影响本机成功）
+
+    return { status: 'done', name: written.name, counts, size: written.size };
+  } catch (e) {
+    // 收集/写状态等意外错误：按 WRITE_FAIL 呈现，不抛出
+    try {
+      await updateBackupState((s) => ({ ...s, lastError: { code: 'WRITE_FAIL', at: Date.now() } }));
+    } catch (e2) {}
+    return { status: 'error', code: 'WRITE_FAIL' };
+  } finally {
+    isRunning = false;
   }
-  const cloudTarget = await createWebDavTarget();
-  if (cloudTarget && versionItem.sources.includes('cloud')) {
-    return await cloudTarget.get(versionItem.name);
-  }
-  throw new Error('无法读取该版本的备份文件');
+}
+
+// 供 UI 显示「我的数据」三格：实时条数
+export async function getCurrentCounts() {
+  const [records, focusSessions, trips] = await Promise.all([getRecords(), getFocusSessions(), getTrips()]);
+  return { records: records.length, focus: focusSessions.length, trips: trips.length };
 }

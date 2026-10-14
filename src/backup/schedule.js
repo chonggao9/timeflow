@@ -1,133 +1,66 @@
+// 自动备份调度：每天最多一次；App 回到前台或切后台时检查；数据有变化才备份。
+// 变化判定复用 runBackup 内部的内容哈希比对（无变化返回 skipped），
+// 调度层不再单独收集/哈希一遍，避免同一次检查做两遍全量扫描。
 import { AppState } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { performBackup } from './backup';
-import { getBackupState, getBackupPassphrase } from './state';
+import { runBackup } from './backup';
+import { getBackupState, updateBackupState } from './state';
 
-export const AUTO_KEY = 'timeflow_backup_auto';
-export const THROTTLE_MS = 30 * 60 * 1000; // 30 分钟最小间隔
-export const DEBOUNCE_MS = 60 * 1000;      // 60 秒数据变化防抖
+const DEBOUNCE_MS = 60 * 1000; // 数据变化后 60 秒防抖
 
-let isRunning = false;
 let debounceTimer = null;
-let hasPendingChange = false;
 let appStateSubscription = null;
+let checking = false;
 
-export async function setAutoBackup(enabled) {
-  await AsyncStorage.setItem(AUTO_KEY, enabled ? '1' : '0');
-}
-
-export async function isAutoBackupEnabled() {
-  try {
-    return (await AsyncStorage.getItem(AUTO_KEY)) === '1';
-  } catch (e) {
-    return false;
-  }
+function sameDay(a, b) {
+  if (!a || !b) return false;
+  const d1 = new Date(a);
+  const d2 = new Date(b);
+  return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
 }
 
 /**
- * 手动立即备份（忽略节流，force=true 时忽略哈希比对）
+ * 自动备份检查：总开关开 && 今天还没跑过 auto → 交给 runBackup（内部哈希比对，无变化即跳过）。
+ * 静默失败（只更新 backupState，由界面状态卡呈现，不弹窗）。
  */
-export async function backupNow({ force = false } = {}) {
-  if (isRunning) return { busy: true };
-  isRunning = true;
+export async function checkAutoBackup() {
+  if (checking) return false;
+  checking = true;
   try {
-    const res = await performBackup({ isAuto: false, force });
-    hasPendingChange = false;
-    return res;
-  } finally {
-    isRunning = false;
-  }
-}
+    const state = await getBackupState();
+    if (!state.autoEnabled) return false;
+    if (sameDay(state.lastAutoAt, Date.now())) return false;
 
-/**
- * 自动备份核心执行函数
- */
-async function runAutoBackupInternal() {
-  if (isRunning) return false;
-  const [autoEnabled, state] = await Promise.all([
-    isAutoBackupEnabled(),
-    getBackupState(),
-  ]);
-
-  if (!autoEnabled) return false;
-
-  // 节流检查：距上次备份是否已满 30 分钟
-  const lastAt = state.lastSuccessAt || 0;
-  if (Date.now() - lastAt < THROTTLE_MS) {
-    return false;
-  }
-
-  isRunning = true;
-  try {
-    const res = await performBackup({ isAuto: true, force: false });
-    hasPendingChange = false;
-    return !!res.success;
+    const res = await runBackup({ kind: 'auto' });
+    if (res.status === 'skipped') {
+      // 内容没变但已跨天：把 lastAutoAt 记为今天，避免当天反复全量收集
+      await updateBackupState((s) => ({ ...s, lastAutoAt: Date.now() }));
+      return false;
+    }
+    return res.status === 'done';
   } catch (e) {
     return false;
   } finally {
-    isRunning = false;
+    checking = false;
   }
 }
 
-/**
- * 数据变更触发入口（打卡、修改、删除后调用）：
- * 防抖 60 秒，并在满足 ≥ 30 分钟节流时触发
- */
+// 数据保存后调用（打卡/补记/专注）：防抖触发一次自动备份检查，不阻塞保存路径
 export function notifyDataChanged() {
-  hasPendingChange = true;
-  if (debounceTimer) {
-    clearTimeout(debounceTimer);
-  }
+  if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
-    runAutoBackupInternal().catch(() => {});
+    checkAutoBackup().catch(() => {});
   }, DEBOUNCE_MS);
 }
 
-/**
- * 兼容旧调用的 runBackupIfDue（App 启动时执行一次）
- */
-export async function runBackupIfDue({ force = false } = {}) {
-  const [autoEnabled, state] = await Promise.all([
-    isAutoBackupEnabled(),
-    getBackupState(),
-  ]);
-
-  if (!autoEnabled) return false;
-
-  const lastAt = state.lastSuccessAt || 0;
-  if (!force && Date.now() - lastAt < THROTTLE_MS) {
-    return false;
-  }
-
-  if (isRunning) return false;
-  isRunning = true;
-  try {
-    const res = await performBackup({ isAuto: true, force });
-    hasPendingChange = false;
-    return !!res.success;
-  } catch (e) {
-    return false;
-  } finally {
-    isRunning = false;
-  }
-}
-
-/**
- * 监听 App 切后台时自动补一次备份
- */
-export function initAppStateBackupListener() {
-  if (appStateSubscription) return;
-
-  appStateSubscription = AppState.addEventListener('change', (nextState) => {
-    if (nextState === 'background' || nextState === 'inactive') {
-      if (hasPendingChange) {
-        if (debounceTimer) {
-          clearTimeout(debounceTimer);
-          debounceTimer = null;
-        }
-        runBackupIfDue().catch(() => {});
+// App 启动时调用一次：注册前后台切换检查 + 立即检查一次
+export function initBackupSchedule() {
+  if (!appStateSubscription) {
+    appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active' || nextState === 'background' || nextState === 'inactive') {
+        checkAutoBackup().catch(() => {});
       }
-    }
-  });
+    });
+  }
+  checkAutoBackup().catch(() => {});
 }

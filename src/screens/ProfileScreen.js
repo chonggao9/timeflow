@@ -20,8 +20,6 @@ import { getAmapKey, setAmapKey, getAmapLocKeyRaw, setAmapLocKey } from '../conf
 import { checkForUpdate } from '../utils/updater';
 import { diagnoseLocation } from '../utils/location';
 import { refreshWidget } from '../utils/widgetRefresh';
-import { useBackupState } from '../backup/state';
-import BackupScreen from './BackupScreen';
 import { useI18n } from '../i18n/LanguageContext';
 import { radius } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
@@ -90,162 +88,6 @@ function Row({ icon, label, value, onPress, danger, iconColor, iconBg }) {
   );
 }
 
-// 现代五态 BackupStatusCard 组件
-function BackupStatusCard({ backupState, onPress, onActionPress }) {
-  const { colors } = useTheme();
-  const { t } = useI18n();
-
-  const st = backupState?.status || 'ok';
-
-  const formatRelTime = (timeMs) => {
-    if (!timeMs) return '从未';
-    const diff = Date.now() - timeMs;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return '刚刚';
-    if (mins < 60) return `${mins} 分钟前`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} 小时前`;
-    const days = Math.floor(hours / 24);
-    return `${days} 天前`;
-  };
-
-  const formatShortTime = (timeMs) => {
-    if (!timeMs) return '';
-    const d = new Date(timeMs);
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const h = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    return `${m}-${day} ${h}:${min}`;
-  };
-
-  let cfg = {
-    bg: '#E5F4EA',
-    border: 'rgba(37, 145, 95, 0.22)',
-    color: '#25915F',
-    icon: 'shield-checkmark',
-    title: t('backup.navTitle', '备份与恢复'),
-    sub: backupState?.lastSuccessAt
-      ? t('backup.lastBackupPrefix', {
-          time: formatRelTime(backupState?.lastSuccessAt),
-          n: (backupState?.lastCounts?.records || 0).toLocaleString(),
-        })
-      : '本地沙盒自动守护中',
-    btn: null,
-  };
-
-  if (st === 'stale') {
-    cfg = {
-      bg: '#FCF1D9',
-      border: 'rgba(169, 106, 11, 0.22)',
-      color: '#A96A0B',
-      icon: 'time-outline',
-      title: t('backup.statusStale', '已 3 天未备份'),
-      sub: backupState?.lastSuccessAt
-        ? `上次备份 ${formatShortTime(backupState.lastSuccessAt)}`
-        : '建议现在备份一次',
-      btn: t('backup.btnQuick', '立即备份'),
-    };
-  } else if (st === 'failed') {
-    cfg = {
-      bg: '#FDE7E4',
-      border: 'rgba(207, 59, 59, 0.22)',
-      color: '#CF3B3B',
-      icon: 'alert-circle',
-      title: t('backup.statusFailed', '云端备份失败'),
-      sub: t('backup.descFailed', '授权已过期，本地备份正常'),
-      btn: t('backup.btnFix', '去修复'),
-    };
-  } else if (st === 'needConfirm') {
-    cfg = {
-      bg: '#FCF1D9',
-      border: 'rgba(169, 106, 11, 0.22)',
-      color: '#A96A0B',
-      icon: 'pause-circle-outline',
-      title: t('backup.statusNeedConfirm', '自动备份已暂停'),
-      sub: '记录数明显减少',
-      btn: t('backup.btnOpen', '查看'),
-    };
-  }
-
-  return (
-    <TouchableOpacity
-      style={[
-        cardStyles.scard,
-        { backgroundColor: cfg.bg, borderColor: cfg.border },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={cardStyles.sic}>
-        <Ionicons name={cfg.icon} size={22} color={cfg.color} />
-      </View>
-      <View style={cardStyles.stx}>
-        <Text style={[cardStyles.stxTitle, { color: cfg.color }]}>{cfg.title}</Text>
-        <Text style={[cardStyles.stxSub, { color: colors.ink }]} numberOfLines={1}>
-          {cfg.sub}
-        </Text>
-      </View>
-      {cfg.btn ? (
-        <TouchableOpacity
-          style={[cardStyles.pill, { backgroundColor: cfg.color }]}
-          onPress={onActionPress || onPress}
-          activeOpacity={0.8}
-        >
-          <Text style={cardStyles.pillText}>{cfg.btn}</Text>
-        </TouchableOpacity>
-      ) : (
-        <Ionicons name="chevron-forward" size={18} color={colors.ink3} />
-      )}
-    </TouchableOpacity>
-  );
-}
-
-const cardStyles = StyleSheet.create({
-  scard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    marginBottom: 12,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  sic: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stx: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  stxTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  stxSub: {
-    fontSize: 12.5,
-    lineHeight: 16,
-  },
-  pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pillText: {
-    color: '#FFFFFF',
-    fontSize: 12.5,
-    fontWeight: '700',
-  },
-});
-
 const LANG_OPTIONS = [
   { key: 'system', labelKey: 'language.system' },
   { key: 'zh', labelKey: 'language.zh' },
@@ -263,10 +105,6 @@ export default function ProfileScreen() {
   const { t, lang, isSystem, setLang } = useI18n();
   const { colors, theme, isSystem: themeIsSystem, setTheme } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-
-  const backupState = useBackupState();
-  const [showBackupModal, setShowBackupModal] = useState(false);
-  const [backupInitialAction, setBackupInitialAction] = useState(null);
 
   const [nickname, setNickname] = useState('');
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -431,22 +269,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 2. 单张五态备份守护卡片（点击打开备份与恢复二级页） */}
-        <BackupStatusCard
-          backupState={backupState}
-          onPress={() => {
-            setBackupInitialAction(null);
-            setShowBackupModal(true);
-          }}
-          onActionPress={() => {
-            const st = backupState?.status;
-            const act = st === 'failed' ? 'cloud' : st === 'stale' ? 'backupNow' : null;
-            setBackupInitialAction(act);
-            setShowBackupModal(true);
-          }}
-        />
-
-        {/* 3. 分组一：通用 */}
+        {/* 2. 分组一：通用 */}
         <Text style={styles.sectionHeader}>{t('profile.sectionGeneral', '通用')}</Text>
         <View style={styles.card}>
           <Row
@@ -529,16 +352,6 @@ export default function ProfileScreen() {
 
         <Text style={styles.footer}>{t('profile.version', { v: version })}</Text>
       </ScrollView>
-
-      {/* 备份与恢复二级页 */}
-      <BackupScreen
-        visible={showBackupModal}
-        initialAction={backupInitialAction}
-        onBack={() => {
-          setShowBackupModal(false);
-          setBackupInitialAction(null);
-        }}
-      />
 
       {/* 隐私协议 */}
       <Modal

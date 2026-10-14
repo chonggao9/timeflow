@@ -1,18 +1,25 @@
+// backupState：唯一持久化状态对象 + useBackupState Hook + 界面四态推导。
+// 界面状态（ok/stale/empty/failed）由本对象派生，不落盘。
 import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
 
 export const STATE_STORAGE_KEY = 'timeflow_backup_state';
-export const PASS_KEY = 'timeflow_backup_passphrase';
-export const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+export const STALE_MS = 7 * 24 * 60 * 60 * 1000; // 超过 7 天未成功 → stale
 
-const DEFAULT_STATE = {
-  status: 'notConfigured',
-  lastSuccessAt: null,
-  lastCounts: null,
-  cloud: { enabled: false, lastError: null }, // lastError: { code: 'AUTH'|'NETWORK'|'QUOTA'|'UNKNOWN', at: number, message: string }
-  local: { enabled: true },
-  lastHash: null,
+// sv 为状态结构版本：旧版（口令/needConfirm 时代）无此字段或结构不符 → 直接重置
+const STATE_SV = 2;
+
+export const DEFAULT_STATE = {
+  sv: STATE_SV,
+  lastSuccessAt: null,       // 最近一次本机备份成功时间
+  lastCounts: null,          // { records, focus, trips }
+  lastError: null,           // null | { code: 'NO_SPACE'|'WRITE_FAIL'|'CLOUD_FAIL', at }
+  autoEnabled: true,         // 自动备份总开关，默认开
+  cloudEnabled: false,       // 云端副本，默认关
+  savedToFileAt: null,       // 最近一次「保存备份文件」成功时间
+  // 内部运行字段（非 UI 语义）：
+  lastHash: null,            // 上一份备份的内容哈希，用于跳过无变化备份
+  lastAutoAt: null,          // 最近一次 auto 备份成功日，用于「每天最多一次」
 };
 
 let cachedState = null;
@@ -24,114 +31,54 @@ function notifyListeners() {
   }
 }
 
-/**
- * 计算动态衍生状态（如 3 天未备份变为 stale，云端异常为 failed）
- */
-export function deriveStatus(rawState) {
-  if (rawState.status === 'needConfirm') {
-    return 'needConfirm';
-  }
-  if (rawState.cloud?.lastError) {
-    return 'failed';
-  }
-  if (!rawState.lastSuccessAt) {
-    return 'stale';
-  }
-  if (Date.now() - rawState.lastSuccessAt > THREE_DAYS_MS) {
-    return 'stale';
-  }
+// 界面状态推导：failed > empty > stale > ok
+export function deriveUiStatus(state) {
+  if (state?.lastError) return 'failed';
+  if (!state?.lastSuccessAt) return 'empty';
+  if (Date.now() - state.lastSuccessAt > STALE_MS) return 'stale';
   return 'ok';
 }
 
-/**
- * 读取完整的 backupState（含动态计算字段）
- */
-export async function getBackupState() {
-  if (cachedState) {
-    return {
-      ...cachedState,
-      status: deriveStatus(cachedState),
-    };
-  }
-
-  try {
-    const raw = await AsyncStorage.getItem(STATE_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : DEFAULT_STATE;
-    cachedState = {
-      ...DEFAULT_STATE,
-      ...parsed,
-      cloud: { ...DEFAULT_STATE.cloud, ...(parsed.cloud || {}) },
-      local: { ...DEFAULT_STATE.local, ...(parsed.local || {}) },
-    };
-    return {
-      ...cachedState,
-      status: deriveStatus(cachedState),
-    };
-  } catch (e) {
-    return { ...DEFAULT_STATE, status: 'ok' };
-  }
+function withDerived(raw) {
+  return { ...raw, uiStatus: deriveUiStatus(raw) };
 }
 
-/**
- * 更新并持久化 backupState
- */
+export async function getBackupState() {
+  if (cachedState) return withDerived(cachedState);
+  try {
+    const rawStr = await AsyncStorage.getItem(STATE_STORAGE_KEY);
+    const parsed = rawStr ? JSON.parse(rawStr) : null;
+    // 旧格式（无 sv 或 sv 不符）一律重置为默认：旧状态语义（needConfirm/cloud 嵌套）不再兼容
+    cachedState = parsed && parsed.sv === STATE_SV ? { ...DEFAULT_STATE, ...parsed } : { ...DEFAULT_STATE };
+  } catch (e) {
+    cachedState = { ...DEFAULT_STATE };
+  }
+  return withDerived(cachedState);
+}
+
 export async function updateBackupState(updater) {
   const current = await getBackupState();
-  const nextRaw = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
-
-  cachedState = {
-    ...nextRaw,
-    status: deriveStatus(nextRaw),
-  };
-
+  const next = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
+  // uiStatus 为派生展示字段，不属于持久化契约：落盘前剥离，避免陈旧值写入 AsyncStorage
+  const { uiStatus, ...persisted } = next;
+  cachedState = { ...DEFAULT_STATE, ...persisted, sv: STATE_SV };
   try {
     await AsyncStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(cachedState));
   } catch (e) {}
-
   notifyListeners();
-  return cachedState;
+  return withDerived(cachedState);
 }
 
-/**
- * 备份口令存取
- */
-export async function setBackupPassphrase(passphrase) {
-  if (passphrase) {
-    await SecureStore.setItemAsync(PASS_KEY, passphrase);
-  } else {
-    await SecureStore.deleteItemAsync(PASS_KEY);
-  }
-  await updateBackupState(s => ({ ...s }));
-}
-
-export async function getBackupPassphrase() {
-  try {
-    return await SecureStore.getItemAsync(PASS_KEY);
-  } catch (e) {
-    return null;
-  }
-}
-
-/**
- * 供组件使用的响应式 Hook
- */
+// 供组件使用的响应式 Hook
 export function useBackupState() {
-  const [state, setState] = useState(cachedState || DEFAULT_STATE);
+  const [state, setState] = useState(() => (cachedState ? withDerived(cachedState) : withDerived(DEFAULT_STATE)));
 
   useEffect(() => {
     let mounted = true;
-    getBackupState().then(s => {
-      if (mounted) setState(s);
-    });
-
-    const handler = (s) => {
-      if (mounted) setState(s);
-    };
+    getBackupState().then((s) => { if (mounted) setState(s); });
+    const handler = (s) => { if (mounted) setState(withDerived(s)); };
     listeners.add(handler);
-    return () => {
-      mounted = false;
-      listeners.delete(handler);
-    };
+    return () => { mounted = false; listeners.delete(handler); };
   }, []);
 
   return state;

@@ -16,7 +16,8 @@ import PrivacyAgreement from './src/screens/PrivacyAgreement';
 import { LanguageProvider, useI18n } from './src/i18n/LanguageContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { checkForUpdate } from './src/utils/updater';
-import { runBackupIfDue, initAppStateBackupListener } from './src/backup/schedule';
+import { initBackupSchedule } from './src/backup/schedule';
+import { runV2CleanupOnce } from './src/backup/cleanup';
 
 const Tab = createBottomTabNavigator();
 
@@ -239,8 +240,10 @@ function AppInner() {
       );
     });
 
-    initAppStateBackupListener();
-    runBackupIfDue().catch(() => {});
+    // 旧备份体系一次性清理（删旧备份目录与旧配置键，不动用户数据），完成后再启动新调度
+    runV2CleanupOnce()
+      .catch(() => {})
+      .then(() => { initBackupSchedule(); });
   }, [privacyAgreed, t]);
 
   const navTheme = React.useMemo(() => {

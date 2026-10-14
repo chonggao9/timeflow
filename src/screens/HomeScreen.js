@@ -48,7 +48,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import { getPositionFast, reverseGeocodeWithTimeout } from '../utils/location';
 import { refreshWidget } from '../utils/widgetRefresh';
-import { runBackupIfDue } from '../backup/schedule';
+import { notifyDataChanged } from '../backup/schedule';
 import Timeline from '../components/Timeline';
 import ModeIcon from '../components/ModeIcon';
 import PomodoroTimer from '../components/PomodoroTimer';
@@ -298,7 +298,7 @@ export default function HomeScreen() {
 
       await loadToday();
       refreshWidget();
-      runBackupIfDue().catch(() => {});
+      notifyDataChanged();
       setTimeout(() => setSuccess(false), isEndTrip ? 1500 : 1200);
 
       fillLocation(id);
@@ -510,7 +510,7 @@ export default function HomeScreen() {
       setBackfillVisible(false);
       await loadToday();
       refreshWidget();
-      runBackupIfDue().catch(() => {});
+      notifyDataChanged();
     } catch (e) {
       Alert.alert(t('home.failTitle'), t('home.failBody'));
     } finally {
@@ -558,7 +558,7 @@ export default function HomeScreen() {
       Vibration.vibrate(40);
       await loadToday();
       refreshWidget();
-      runBackupIfDue().catch(() => {});
+      notifyDataChanged();
     } catch (e) {
       Alert.alert(t('home.failTitle'), t('home.failBody'));
     }

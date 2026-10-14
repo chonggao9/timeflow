@@ -626,6 +626,48 @@ export async function clearAll() {
   await bumpRevision();
 }
 
+// 共享插入逻辑（须在事务内调用）：replaceAllData 与 importRecords 复用，
+// 列清单与 camel/snake 兜底只维护这一份，避免两处漂移导致恢复丢字段。
+async function insertPayloadRows(db, payload) {
+  const { trips = [], records = [], focusSessions = [] } = payload || {};
+  for (const trip of trips) {
+    await db.runAsync(
+      'INSERT OR IGNORE INTO trips (id, start_ts, end_ts, name, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      trip.id, trip.startTs || trip.start_ts || 0, trip.endTs || trip.end_ts || null, trip.name || null, trip.isActive ? 1 : 0, trip.createdAt || trip.created_at || Date.now()
+    );
+  }
+  for (const r of records) {
+    let tripId = r.tripId || r.trip_id;
+    if (!tripId) {
+      tripId = await findOrCreateTripForTimestamp(r.timestamp, db);
+    }
+    await db.runAsync(
+      'INSERT OR IGNORE INTO records (id, timestamp, location_name, lat, lng, mode, trip_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      r.id, r.timestamp, r.locationName ?? r.location_name ?? null, r.lat ?? null, r.lng ?? null, r.mode ?? 'walk', tripId
+    );
+  }
+  for (const f of focusSessions) {
+    await db.runAsync(
+      'INSERT OR IGNORE INTO focus_sessions (id, timestamp, goal_name, duration, category, note) VALUES (?, ?, ?, ?, ?, ?)',
+      f.id, f.timestamp, f.goalName ?? f.goal_name ?? f.locationName ?? null, f.duration ?? 0, f.category ?? null, f.note ?? null
+    );
+  }
+}
+
+// 原子替换全部业务数据（备份「回到这个时间点」恢复与撤销恢复用）：
+// 清空 + 插入在同一事务内完成，中途失败时当前数据保持原样。
+export async function replaceAllData(payload) {
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM records');
+    await db.runAsync('DELETE FROM focus_sessions');
+    await db.runAsync('DELETE FROM trips');
+    await insertPayloadRows(db, payload);
+  });
+  await AsyncStorage.removeItem(RECORDS_KEY);
+  await bumpRevision();
+}
+
 export async function importRecords(payload) {
   // 兼容 v1 数组
   if (Array.isArray(payload)) {
@@ -634,28 +676,7 @@ export async function importRecords(payload) {
   const { trips = [], records = [], focusSessions = [] } = payload || {};
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    for (const trip of trips) {
-      await db.runAsync(
-        'INSERT OR IGNORE INTO trips (id, start_ts, end_ts, name, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-        trip.id, trip.startTs || trip.start_ts || 0, trip.endTs || trip.end_ts || null, trip.name || null, trip.isActive ? 1 : 0, trip.createdAt || trip.created_at || Date.now()
-      );
-    }
-    for (const r of records) {
-      let tripId = r.tripId || r.trip_id;
-      if (!tripId) {
-        tripId = await findOrCreateTripForTimestamp(r.timestamp, db);
-      }
-      await db.runAsync(
-        'INSERT OR IGNORE INTO records (id, timestamp, location_name, lat, lng, mode, trip_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        r.id, r.timestamp, r.locationName ?? r.location_name ?? null, r.lat ?? null, r.lng ?? null, r.mode ?? 'walk', tripId
-      );
-    }
-    for (const f of focusSessions) {
-      await db.runAsync(
-        'INSERT OR IGNORE INTO focus_sessions (id, timestamp, goal_name, duration, category, note) VALUES (?, ?, ?, ?, ?, ?)',
-        f.id, f.timestamp, f.goalName ?? f.goal_name ?? f.locationName ?? null, f.duration ?? 0, f.category ?? null, f.note ?? null
-      );
-    }
+    await insertPayloadRows(db, payload);
   });
   await bumpRevision();
   const totalImported = (records?.length || 0) + (focusSessions?.length || 0) + (trips?.length || 0);
