@@ -1,0 +1,394 @@
+<title>TimeFlow 产品说明书</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700;900&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* 设计计划
+   Layout: 单栏文档流 + 顶部锚点目录，宽屏限宽 860px 居中
+   Color: 取自产品自身主题 —— 暖米白底 / 暖炭黑深色底 / 珊瑚橙强调色
+   Type: Noto Serif SC（标题，衬线，克制使用）+ Noto Sans SC（正文）*/
+:root {
+  --bg: #FBF5EF;
+  --surface: #FFFDF9;
+  --fg: #2A211B;
+  --muted: #8A7A6D;
+  --accent: #FF6B6B;
+  --accent-deep: #D94848;
+  --accent-soft: #FFE9E4;
+  --line: #EBDFD0;
+  --chip-bg: #F4EAE0;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1B1511;
+    --surface: #241D17;
+    --fg: #F2E9DF;
+    --muted: #A3917F;
+    --accent: #FF8585;
+    --accent-deep: #FF9E9E;
+    --accent-soft: #3A2521;
+    --line: #3A2E24;
+    --chip-bg: #2E251D;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1B1511;
+  --surface: #241D17;
+  --fg: #F2E9DF;
+  --muted: #A3917F;
+  --accent: #FF8585;
+  --accent-deep: #FF9E9E;
+  --accent-soft: #3A2521;
+  --line: #3A2E24;
+  --chip-bg: #2E251D;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  line-height: 1.75;
+  padding-inline: 20px;
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 860px; margin: 0 auto; }
+h1, h2, h3 { font-family: "Noto Serif SC", serif; text-wrap: balance; }
+
+/* 头部 */
+.masthead { text-align: center; margin-bottom: 36px; }
+.logo-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 72px; height: 72px; border-radius: 20px;
+  background: var(--accent); color: #fff; font-size: 34px;
+  margin-bottom: 14px;
+}
+h1.title { font-weight: 900; font-size: clamp(1.9rem, 5vw, 2.5rem); margin: 0; letter-spacing: .02em; }
+.subtitle { color: var(--muted); margin: 8px 0 14px; font-size: .98rem; }
+.meta-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.chip {
+  display: inline-block; padding: 3px 12px; border-radius: 999px;
+  background: var(--chip-bg); color: var(--muted);
+  font-size: .8rem; font-weight: 500;
+}
+.chip.hot { background: var(--accent-soft); color: var(--accent-deep); }
+
+/* 目录 */
+.toc {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px; margin-bottom: 44px;
+}
+.toc a {
+  display: block; padding: 9px 14px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--line);
+  color: var(--fg); text-decoration: none; font-size: .88rem; font-weight: 500;
+}
+.toc a:hover { border-color: var(--accent); color: var(--accent-deep); }
+.toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 章节 */
+section { margin-bottom: 48px; scroll-margin-top: 24px; }
+.eyebrow {
+  text-transform: uppercase; letter-spacing: .14em;
+  color: var(--accent-deep); font-size: .74rem; font-weight: 700; margin-bottom: 4px;
+}
+h2 { font-size: 1.45rem; font-weight: 700; margin: 0 0 14px; }
+h3 { font-size: 1.05rem; font-weight: 700; margin: 22px 0 8px; }
+p { margin: 8px 0; }
+.lead { color: var(--muted); font-size: .95rem; }
+
+/* 卡片与列表 */
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 14px; padding: 18px 20px; margin: 12px 0;
+}
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+.card h3 { margin-top: 0; }
+ul.tight { margin: 6px 0; padding-left: 1.3em; }
+ul.tight li { margin: 4px 0; min-width: 0; }
+.tagrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.tag {
+  padding: 4px 12px; border-radius: 999px; background: var(--chip-bg);
+  font-size: .84rem; font-weight: 500;
+}
+
+/* 表格 */
+.tablewrap { overflow-x: auto; margin: 12px 0; }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: .82rem; white-space: nowrap; }
+td { min-width: 0; }
+td.num { font-variant-numeric: tabular-nums; }
+
+/* 步骤 */
+.steps { counter-reset: step; display: grid; gap: 10px; margin: 12px 0; }
+.step {
+  counter-increment: step; display: flex; gap: 12px; align-items: baseline;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 12px; padding: 12px 16px;
+}
+.step::before {
+  content: counter(step, decimal-leading-zero);
+  font-family: "Noto Serif SC", serif; font-weight: 700;
+  color: var(--accent); font-size: 1.05rem; flex: none;
+}
+
+.note {
+  border-left: 3px solid var(--accent); background: var(--accent-soft);
+  border-radius: 0 10px 10px 0; padding: 10px 16px; margin: 14px 0;
+  font-size: .9rem;
+}
+footer { text-align: center; color: var(--muted); font-size: .82rem; margin-top: 56px; }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="logo-mark" aria-hidden="true">⏱</div>
+  <h1 class="title">TimeFlow · 时光流</h1>
+  <p class="subtitle">出行打卡 × 番茄专注的双模时间管理应用 —— 产品说明书</p>
+  <div class="meta-chips">
+    <span class="chip hot">v1.2.6</span>
+    <span class="chip">Android（已适配 Android 16）</span>
+    <span class="chip">本地离线优先</span>
+    <span class="chip">中文 / English</span>
+    <span class="chip">浅色 / 深色主题</span>
+  </div>
+</header>
+
+<nav class="toc" aria-label="目录">
+  <a href="#overview">产品概述</a>
+  <a href="#start">快速上手</a>
+  <a href="#checkin">出行打卡</a>
+  <a href="#pomodoro">番茄专注</a>
+  <a href="#ambient">环境音</a>
+  <a href="#insights">统计洞察</a>
+  <a href="#extras">小票与小组件</a>
+  <a href="#backup">备份与恢复</a>
+  <a href="#settings">设置一览</a>
+  <a href="#privacy">隐私与权限</a>
+  <a href="#changelog">版本演进</a>
+  <a href="#specs">技术规格</a>
+</nav>
+
+<section id="overview">
+  <p class="eyebrow">Overview</p>
+  <h2>产品概述</h2>
+  <p>TimeFlow 把两种截然不同的时间场景收进同一个应用：<strong>出门在外</strong>时用它记录行程轨迹，<strong>坐在桌前</strong>时用它进行番茄专注。首页一键切换双模式，行程与专注数据完全隔离、互不干扰，模式选择自动记忆。</p>
+  <div class="grid2">
+    <div class="card">
+      <h3>🧭 出行打卡</h3>
+      <p class="lead">轻按打卡、长按结程，自动串联成行程；积累数据后生成路线耗时洞察。</p>
+    </div>
+    <div class="card">
+      <h3>🍅 番茄专注</h3>
+      <p class="lead">手势调时的全屏番茄钟，6 大分类 + 任务备注 + 8 款环境音。</p>
+    </div>
+    <div class="card">
+      <h3>🔒 隐私优先</h3>
+      <p class="lead">无账号、无服务器，数据全部存在本地 SQLite；云同步仅走用户自备的 WebDAV。</p>
+    </div>
+    <div class="card">
+      <h3>☁️ 加密备份</h3>
+      <p class="lead">免密加密备份文件（.tfb），支持合并 / 覆盖双模式恢复与快照回退。</p>
+    </div>
+  </div>
+</section>
+<section id="start">
+  <p class="eyebrow">Getting Started</p>
+  <h2>快速上手</h2>
+  <div class="steps">
+    <div class="step"><span><strong>首次启动</strong>：阅读并同意隐私协议（不同意将退出应用），按引导授予定位权限，设置昵称（默认「时空旅行者」）。</span></div>
+    <div class="step"><span><strong>出门打卡</strong>：首页处于「行程轨迹」模式时，轻按中央大按钮即可打卡，坐标与地名在后台自动补齐。</span></div>
+    <div class="step"><span><strong>到达结程</strong>：在目的地长按大按钮（650ms 环形充能至满），本次行程自动结束并串联成完整轨迹。</span></div>
+    <div class="step"><span><strong>室内专注</strong>：切换到「室内专注」模式，圆环上滑动选择时长，选好分类后开始一段番茄钟。</span></div>
+    <div class="step"><span><strong>回顾洞察</strong>：数据积累几天后，到「洞察」页查看路线通常耗时、耗时波动与专注分布。</span></div>
+  </div>
+  <p class="lead">底部三个 Tab 为纯图标：打卡（首页）、洞察（统计）、我的（设置）。</p>
+</section>
+
+<section id="checkin">
+  <p class="eyebrow">Check-in &amp; Trips</p>
+  <h2>出行打卡</h2>
+  <h3>打卡与结程</h3>
+  <ul class="tight">
+    <li><strong>轻按打卡</strong>：秒级响应、先落库后补全 —— 时间戳立即记录，坐标与地名由后台异步补齐（高德定位 SDK 与系统定位并行竞速，谁先返回用谁）。</li>
+    <li><strong>长按结程</strong>：长按 650ms，环形充能动画 + 触感反馈，防止口袋误触。</li>
+    <li><strong>自动断程兜底</strong>：超过 90 分钟无打卡，当前行程自动结束，避免行程无限延长。</li>
+  </ul>
+  <h3>出行方式</h3>
+  <p>打卡时通过胶囊栏选择本次移动的出行方式，共 9 种：</p>
+  <div class="tagrow">
+    <span class="tag">🚶 步行</span><span class="tag">🚴 骑行</span><span class="tag">🚗 自驾</span>
+    <span class="tag">🚕 打车</span><span class="tag">🚇 地铁</span><span class="tag">🚌 公交</span>
+    <span class="tag">🚄 高铁</span><span class="tag">✈️ 飞机</span><span class="tag">⛴ 轮渡</span>
+  </div>
+  <h3>补记与纠正</h3>
+  <ul class="tight">
+    <li><strong>补记面板</strong>：忘记打卡？可补记并设置时间偏移，内置常用地点快捷 Chip。</li>
+    <li><strong>时间轴就地编辑</strong>：今日时间轴上可直接给打卡点改名、纠正出行方式、删除误打卡。</li>
+    <li><strong>轨迹地图</strong>：单次行程的打卡点连线轨迹，支持离线 SVG 拓扑图与 Google Maps 瓦片双模式。</li>
+  </ul>
+  <div class="note">地名反查依赖高德 Web 服务 Key，可在「我的 → 位置服务」自行配置；未配置时自动回退系统定位，打卡功能不受影响。</div>
+</section>
+
+<section id="pomodoro">
+  <p class="eyebrow">Focus Timer</p>
+  <h2>番茄专注</h2>
+  <h3>计时与操作</h3>
+  <ul class="tight">
+    <li><strong>手势调时</strong>：在圆环转盘上上下滑动无级调节；预设档位 15 / 25 / 45 / 60 分钟，自定义范围 5–120 分钟。</li>
+    <li><strong>沉浸 Flow 模式</strong>：计时中隐藏底部导航、防误触，全屏只剩圆环与番茄状态。</li>
+    <li><strong>过程控制</strong>：支持暂停 / 继续；放弃需双重确认，防手滑。</li>
+    <li><strong>完成提醒</strong>：番茄成熟时发本地通知「收获一颗番茄」；保存后可一键进入 5 分钟休息倒计时。</li>
+    <li><strong>趣味状态文案</strong>：番茄随进度从「青涩 → 转红 → 快熟 → 可收获」变化。</li>
+  </ul>
+  <h3>专注分类与备注</h3>
+  <p>每段专注可归入 6 大分类（各有专属颜色），并可填写任务备注（选填）：</p>
+  <div class="tagrow">
+    <span class="tag">💼 工作</span><span class="tag">📚 学习</span><span class="tag">🎨 创作</span>
+    <span class="tag">🧘 身心</span><span class="tag">🧹 生活</span><span class="tag">💡 规划复盘</span>
+  </div>
+  <p class="lead">历史专注可在专注记录弹窗中回溯，支持补充分类与备注。</p>
+</section>
+
+<section id="ambient">
+  <p class="eyebrow">Ambient Sound</p>
+  <h2>环境音（白噪音）</h2>
+  <p>专注过程中可在设置卡的横滑条上切换环境音，无缝循环播放。内置 8 款 + 无声：</p>
+  <div class="tagrow">
+    <span class="tag">🌧 雨声</span><span class="tag">🌲 森林</span><span class="tag">🌊 海浪</span>
+    <span class="tag">🔥 篝火</span><span class="tag">☕ 咖啡厅</span><span class="tag">🚆 火车</span>
+    <span class="tag">💧 溪流</span><span class="tag">📻 白噪音</span><span class="tag">🔇 无声</span>
+  </div>
+</section>
+
+<section id="insights">
+  <p class="eyebrow">Insights</p>
+  <h2>统计洞察</h2>
+  <p>「洞察」页分为行程轨迹与室内专注两大统计域，时间范围可选近 7 天 / 近 30 天。</p>
+  <h3>路线洞察（自动识别）</h3>
+  <ul class="tight">
+    <li>系统按地点名与坐标自动聚类，识别你反复走的路线，无需手动命名。</li>
+    <li>每条路线给出：<strong>通常耗时（中位数）</strong>、最快 / 最慢记录、P25–P75 波动区间、样本数。</li>
+    <li>采用 IQR 方法剔除离群值，避免一次极端堵车带偏「通常耗时」。</li>
+    <li>附带通常出发时段分布、耗时分布直方图、近 8 周趋势。</li>
+  </ul>
+  <h3>A→B 耗时查询</h3>
+  <p>任选起点与终点，查询两地之间的历史耗时（含中途分段），回答「从家到公司通常要多久」。</p>
+  <h3>行程详情与出行总览</h3>
+  <ul class="tight">
+    <li>行程详情：路线拓扑简图、站点时间轴、同路线历史耗时对比（直接给出「快 / 慢 X 分钟」结论）；未命名地点有补齐 Banner 引导。</li>
+    <li>出行总览：打卡总数、常去地点数、已发现路线数。</li>
+  </ul>
+  <h3>专注统计</h3>
+  <p>专注次数、总时长、最长一次专注、分类分布条，支持回溯编辑。</p>
+</section>
+
+<section id="extras">
+  <p class="eyebrow">Extras</p>
+  <h2>行程小票与桌面小组件</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>🎫 行程小票长图</h3>
+      <p class="lead">结程后生成一张仿票据样式的行程长图（Trip Receipt），汇总站点、耗时与出行方式，可保存到相册或直接分享。</p>
+    </div>
+    <div class="card">
+      <h3>📱 桌面小组件（Android Widget）</h3>
+      <p class="lead">不打开应用即可一键打卡；小组件同步显示今日状态、打卡次数与最新地点。</p>
+    </div>
+  </div>
+  <p class="lead">另支持应用内检查更新（基于 GitHub Releases），发现新版本时提示下载 APK。</p>
+</section>
+<section id="backup">
+  <p class="eyebrow">Backup &amp; Restore</p>
+  <h2>备份与恢复</h2>
+  <p>从「我的 → 数据管理」进入备份页。备份文件为加密的 <code>.tfb</code> 格式，<strong>免密备份</strong>（v1.2.4 起无需记忆口令；旧版口令加密的备份仍可输入密码兼容恢复）。</p>
+  <h3>WebDAV 云同步（可选）</h3>
+  <ul class="tight">
+    <li>支持坚果云、Nextcloud 等任意 WebDAV 服务：填地址 + 用户名 + 应用专用密码，保存即自动测试连接。</li>
+    <li>自动备份：数据变化后 60 秒防抖触发，最小间隔 30 分钟；应用切后台时补一次；打卡 / 启动时静默同步。</li>
+    <li>历史版本轮转：云端保留 7 份、本地保留 5 份。</li>
+    <li>防覆盖熔断：检测到远端数据条数明显减少时，自动暂停自动备份，防止坏数据覆盖好数据。</li>
+  </ul>
+  <h3>导出与恢复</h3>
+  <ul class="tight">
+    <li>立即备份、导出备份文件、分享 / 另存；也可导出可读格式（CSV / JSON）。</li>
+    <li>恢复支持两种模式：<strong>合并补入</strong>（推荐，只补缺失记录）与<strong>完全覆盖</strong>；恢复前显示条数对照预览。</li>
+    <li>每次恢复前自动生成「恢复前快照」，不满意可一键回退。</li>
+  </ul>
+  <div class="note">清空所有记录属于危险操作：需手动输入「清空」二字确认，且清空前会自动保存一份本地快照。</div>
+</section>
+
+<section id="settings">
+  <p class="eyebrow">Settings</p>
+  <h2>设置一览</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>分组</th><th>设置项</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>个人信息</td><td>昵称</td><td>默认「时空旅行者」，显示在首页与统计页</td></tr>
+        <tr><td>通用</td><td>语言</td><td>跟随系统 / 中文 / English</td></tr>
+        <tr><td>通用</td><td>主题</td><td>跟随系统 / 浅色 / 深色</td></tr>
+        <tr><td>位置服务</td><td>高德地图 Web Key</td><td>用于打卡点地名反查</td></tr>
+        <tr><td>位置服务</td><td>高德定位 Key</td><td>可覆盖内置默认 Key，或禁用后回退系统定位</td></tr>
+        <tr><td>位置服务</td><td>定位排查工具</td><td>内置位置调试面板，诊断定位问题</td></tr>
+        <tr><td>数据管理</td><td>备份 / 恢复 / 导出</td><td>见「备份与恢复」章节</td></tr>
+        <tr><td>数据管理</td><td>清空所有记录</td><td>危险操作，需输入「清空」确认</td></tr>
+        <tr><td>关于</td><td>隐私协议 / 检查更新 / 联系我们</td><td>并展示版本号与连续记录天数</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="privacy">
+  <p class="eyebrow">Privacy</p>
+  <h2>隐私与权限</h2>
+  <ul class="tight">
+    <li><strong>纯本地存储</strong>：所有数据保存在设备本地 SQLite 沙盒（WAL 模式），无中心化服务器、无账号体系，可完全离线使用。</li>
+    <li><strong>云同步可选且自主</strong>：仅当用户自行配置 WebDAV 时数据才离开设备，备份文件加密上传（AES-256-CBC + HMAC-SHA256 完整性校验）。</li>
+    <li><strong>权限最小化</strong>：定位权限仅在打卡时读取经纬度；相册写入权限仅用于保存行程小票长图；构建时主动移除多余媒体权限。</li>
+    <li><strong>隐私政策</strong>：中英双语完整政策（最小必要原则、第三方 SDK 披露、存储加密、数据删除机制、未成年人保护等 9 章）；首次启动强制阅读同意，不同意则退出应用。</li>
+  </ul>
+</section>
+
+<section id="changelog">
+  <p class="eyebrow">Changelog</p>
+  <h2>版本演进</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>版本</th><th>主要变化</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1.2.6（当前）</td><td>番茄钟设置卡封装重构；专注中环境音改为横滑条；任务备注输入整合；流体布局智能居中</td></tr>
+        <tr><td class="num">1.2.5</td><td>收获页底部留白修复；系统地理编码解析增强（8 秒超时 + 细粒度诊断）</td></tr>
+        <tr><td class="num">1.2.4</td><td>免密备份系统（.tfb 格式、快照回退、合并 / 覆盖双恢复）；原生行程详情页（路线简图 + 同路线对比）；未命名地点补齐 Banner；洞察页搜索与出行方式筛选；双模式首页重构；底部导航纯图标化</td></tr>
+        <tr><td class="num">更早</td><td>备份三阶段流水线（轮转 / 防覆盖熔断）→ 洞察页路线分析 → 桌面 Widget 打卡 → 番茄钟与白噪音</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="specs">
+  <p class="eyebrow">Specs</p>
+  <h2>技术规格</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>项目</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td>产品名称</td><td>TimeFlow（时光流）</td></tr>
+        <tr><td>当前版本</td><td class="num">1.2.6（Android versionCode 28）</td></tr>
+        <tr><td>包名</td><td><code>com.chonggao.timeflow</code></td></tr>
+        <tr><td>平台支持</td><td>Android 完整支持（已适配 Android 16 / API 36）；iOS 配置预留但暂不支持</td></tr>
+        <tr><td>技术栈</td><td>Expo SDK 53 · React Native 0.79.6 · React 19 · expo-sqlite · FlashList</td></tr>
+        <tr><td>本地存储</td><td>SQLite（WAL），4 张表：行程 trips / 打卡点 records / 专注 focus_sessions / 同步元数据 sync_meta</td></tr>
+        <tr><td>界面方向</td><td>竖屏</td></tr>
+        <tr><td>主题色</td><td>珊瑚橙 <code>#FF6B6B</code> · 浅色底 <code>#FBF5EF</code> · 深色底 <code>#1B1511</code></td></tr>
+        <tr><td>多语言</td><td>中文 / English 全量对称（约 650 词条），支持跟随系统</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <p>TimeFlow 时光流 · 产品说明书 · 基于 v1.2.6 整理</p>
+</footer>
+</div>

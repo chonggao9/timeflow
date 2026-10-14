@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TimeFlow 数据与备份 · 简化版设计稿</title>
+<style>
+:root{
+  --bg:#faf5ee;--card:#fff;--ink:#2a2420;--sub:#6f645c;--line:#efe7de;--pri:#f4605a;
+  --ok:#25915f;--okbg:#e5f4ea;--warn:#a96a0b;--warnbg:#fcf1d9;--err:#cf3b3b;--errbg:#fde7e4;--idle:#6f645c;--idlebg:#eee9e3;
+  --ico:#9a6b4b;--icobg:#f6ece2;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:#e9e2d9;font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--ink)}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+input{font:inherit;color:inherit}
+.stage{display:flex;gap:28px;justify-content:center;align-items:flex-start;padding:24px 16px;min-height:100vh}
+.phone{position:relative;width:390px;height:min(820px,calc(100vh - 48px));min-height:640px;background:var(--bg);border-radius:38px;box-shadow:0 0 0 10px #1f1b18,0 24px 60px rgba(0,0,0,.35);overflow:hidden;display:flex;flex-direction:column;flex:none}
+.sb{height:30px;display:flex;justify-content:space-between;align-items:center;padding:0 22px;font-size:12px;font-weight:600;flex:none}
+#screen{flex:1;overflow-y:auto;padding:4px 16px 28px;scrollbar-width:none}
+#screen::-webkit-scrollbar{display:none}
+h1{font-size:26px;margin:8px 0 2px}
+.subt{font-size:13px;color:var(--sub);margin-bottom:14px}
+.card{background:var(--card);border-radius:20px;box-shadow:0 2px 12px rgba(90,60,30,.07);overflow:hidden}
+.sec{font-size:13px;font-weight:600;color:var(--sub);margin:20px 4px 8px;display:flex;justify-content:space-between;align-items:baseline}
+.sec small{font-weight:400;font-size:12px}
+.ok{--c:var(--ok);--cb:var(--okbg)}.warn{--c:var(--warn);--cb:var(--warnbg)}.err{--c:var(--err);--cb:var(--errbg)}.idle{--c:var(--idle);--cb:var(--idlebg)}
+.user{display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:12px}
+.av{width:46px;height:46px;border-radius:50%;background:var(--pri);display:grid;place-items:center;color:#fff}
+.user b{font-size:16px}.badge{display:inline-block;font-size:11px;color:var(--pri);background:#fde8e6;border-radius:10px;padding:2px 8px;margin-top:3px}
+.user .ed{margin-left:auto;font-size:12px;color:var(--sub);background:var(--icobg);border-radius:12px;padding:5px 10px}
+.scard{display:flex;align-items:center;gap:12px;padding:14px;margin-bottom:6px;border-radius:20px;background:var(--cb);border:1px solid color-mix(in srgb,var(--c) 22%,transparent);cursor:pointer}
+.sic{width:42px;height:42px;border-radius:14px;background:#fff;color:var(--c);display:grid;place-items:center;flex:none}
+.stx{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.stx b{font-size:15px;color:var(--c)}.stx span{font-size:13px;color:var(--ink)}
+.pill{background:var(--c);color:#fff;font-size:12.5px;padding:7px 12px;border-radius:14px;flex:none}
+.scard>svg{color:var(--sub);flex:none}
+.row{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line);cursor:pointer;color:var(--ink)}
+.row:last-child{border-bottom:0}
+.row:active{background:#faf6f1}
+.row>svg:last-child{color:#a79b92;flex:none}
+.ico{width:34px;height:34px;border-radius:11px;background:var(--icobg);color:var(--ico);display:grid;place-items:center;flex:none}
+.lbl{flex:1;font-size:15px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.lbl small{font-size:12px;color:var(--sub)}
+.lbl b{font-weight:600}
+.rt{font-size:13px;color:var(--sub)}
+.row.danger .ico{background:var(--errbg);color:var(--err)}.row.danger .lbl{color:var(--err)}
+.tags{display:flex;gap:4px;flex:none}
+.tag{font-size:11px;padding:2px 7px;border-radius:8px;background:var(--icobg);color:var(--ico);white-space:nowrap}
+.tag.k-auto{background:#e8f0fd;color:#3b69c9}.tag.k-safe{background:var(--warnbg);color:var(--warn)}.tag.star{background:var(--okbg);color:var(--ok)}
+#tabbar{display:flex;height:62px;background:#fff;border-top:1px solid var(--line);flex:none}
+#tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#8d827a}
+#tabbar button.on{color:var(--pri);font-weight:600}
+.nav{display:flex;align-items:center;gap:6px;margin:2px 0 10px}
+.nav button{width:34px;height:34px;border-radius:50%;display:grid;place-items:center}
+.nav b{font-size:17px}
+.hero{background:var(--card);border-radius:22px;padding:16px;box-shadow:0 2px 12px rgba(90,60,30,.07)}
+.hh{display:flex;gap:12px;align-items:center}
+.hh .sic{background:var(--cb)}
+.hh b{font-size:17px;color:var(--c);display:block}.hh span{font-size:13px;color:var(--sub)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.chip{font-size:12px;padding:4px 9px;border-radius:10px;background:var(--idlebg);color:var(--idle)}
+.chip.ok{background:var(--okbg);color:var(--ok)}
+.btn{width:100%;padding:13px;border-radius:15px;font-weight:600;font-size:15px;background:var(--icobg);color:var(--ico)}
+.btn.primary{background:var(--pri);color:#fff}
+.btn.red{background:var(--err);color:#fff}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--sub);font-weight:500}
+.btn.ghost.dng{color:var(--err)}
+.btns{display:flex;gap:8px}.btns .btn{flex:1}
+.stack{display:flex;flex-direction:column;gap:8px}
+.banner{border-radius:14px;padding:11px 12px;font-size:13px;line-height:1.55;margin-bottom:12px;background:var(--cb);color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 25%,transparent)}
+.banner b{color:var(--c)}
+.banner .btns{margin-top:10px}.banner .btn{padding:9px;font-size:13.5px}
+.prog{height:46px;border-radius:15px;background:var(--icobg);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--ico);font-weight:600}
+.prog i{position:absolute;left:0;top:0;bottom:0;width:30%;background:rgba(244,96,90,.18);animation:slide 1.1s ease-in-out infinite}
+@keyframes slide{0%{left:-30%}100%{left:100%}}
+.empty{padding:26px 16px;text-align:center;font-size:13px;color:var(--sub);line-height:1.6}
+.sw{width:44px;height:26px;border-radius:13px;background:#d9d1c9;position:relative;flex:none;transition:.2s}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.sw.on{background:var(--ok)}.sw.on::after{left:21px}
+.note{font-size:12px;color:var(--sub);margin:8px 6px 0;line-height:1.6}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{background:var(--card);border-radius:16px;padding:12px 8px;text-align:center;box-shadow:0 2px 12px rgba(90,60,30,.07)}
+.tile b{display:block;font-size:20px}.tile span{font-size:12px;color:var(--sub)}
+.f{display:block;margin:0 0 12px}.f span{display:block;font-size:12.5px;color:var(--sub);margin-bottom:5px}
+.f input{width:100%;padding:12px 13px;border:1px solid #e3d9ce;border-radius:13px;background:#fff;font-size:15px;outline:none}
+.f input:focus{border-color:var(--pri)}
+.res{font-size:13px;margin:-2px 0 12px;display:flex;gap:6px;align-items:center}
+#sheet{position:absolute;inset:0;background:rgba(30,20,10,.42);display:none;align-items:flex-end;z-index:20}
+#sheet.on{display:flex}
+#sheet.center{align-items:center;justify-content:center;padding:24px}
+.sh{width:100%;background:#fff;border-radius:26px 26px 0 0;padding:18px 18px 22px;animation:up .22s ease-out;max-height:92%;overflow-y:auto}
+#sheet.center .sh{border-radius:22px;animation:none}
+@keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.sh h3{margin:2px 0 4px;font-size:18px}.sh p{margin:0 0 12px;font-size:13px;color:var(--sub);line-height:1.55}
+.vsum{background:var(--bg);border-radius:14px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center}
+.vsum div b{display:block;font-size:17px}.vsum div span{font-size:11.5px;color:var(--sub)}
+.opt{display:flex;gap:11px;padding:13px;border:1.5px solid #e8dfd5;border-radius:16px;margin-bottom:10px;cursor:pointer}
+.opt.sel{border-color:var(--pri);background:#fff8f6}
+.rd{width:20px;height:20px;border-radius:50%;border:2px solid #cfc3b8;flex:none;margin-top:1px;display:grid;place-items:center}
+.opt.sel .rd{border-color:var(--pri)}.opt.sel .rd::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--pri)}
+.opt b{font-size:15px;display:block;margin-bottom:2px}.opt small{font-size:12.5px;color:var(--sub);line-height:1.5;display:block}
+.opt .g{color:var(--ok);font-weight:600}.opt .w{color:var(--warn);font-weight:600}
+.safe{display:flex;gap:8px;background:var(--okbg);color:#1f6f4a;border-radius:13px;padding:10px 12px;font-size:12.5px;line-height:1.5;margin-bottom:14px}
+.safe svg{flex:none;margin-top:1px}
+.ok-big{text-align:center;padding:10px 0 6px}.ok-big .sic{margin:0 auto 10px;width:56px;height:56px;border-radius:50%;background:var(--okbg);color:var(--ok)}
+.spin{width:30px;height:30px;border:3px solid #eee;border-top-color:var(--pri);border-radius:50%;animation:rot .8s linear infinite;margin:14px auto}
+@keyframes rot{to{transform:rotate(360deg)}}
+.err-t{color:var(--err);font-size:12.5px;margin:0 0 10px;display:flex;gap:6px;align-items:center}
+.file{display:flex;gap:11px;align-items:center;background:var(--bg);border-radius:14px;padding:12px;margin-bottom:12px}
+.file b{font-size:13.5px;display:block;word-break:break-all}.file small{font-size:12px;color:var(--sub)}
+.dest{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+.dest:last-of-type{border-bottom:0}
+.dest .ico{width:38px;height:38px}
+#toast{position:absolute;left:50%;bottom:80px;transform:translateX(-50%) translateY(20px);background:rgba(40,32,28,.92);color:#fff;font-size:13px;padding:10px 16px;border-radius:14px;opacity:0;transition:.25s;pointer-events:none;z-index:40;max-width:86%;text-align:center}
+#toast.on{opacity:1;transform:translateX(-50%)}
+.panel{width:330px;background:#fff;border-radius:22px;padding:20px;box-shadow:0 4px 24px rgba(0,0,0,.08);position:sticky;top:24px;flex:none}
+.panel h2{font-size:17px;margin:0 0 4px}.panel p{font-size:12.5px;color:var(--sub);margin:0 0 14px;line-height:1.55}
+.panel h4{font-size:12.5px;color:var(--sub);margin:16px 0 8px;font-weight:600}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{font-size:12.5px;padding:7px 11px;border-radius:12px;background:#f3ede6;color:var(--ink)}
+.seg button.on{background:var(--pri);color:#fff}
+.panel ul{margin:0;padding-left:18px;font-size:12.5px;line-height:1.75;color:#4a4039}
+@media(max-width:900px){.stage{flex-direction:column;align-items:center}.panel{width:min(390px,100%);position:static}.phone{width:min(390px,100%)}}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="phone">
+    <div class="sb"><span>10:15</span><span>▾ ▮ 88%</span></div>
+    <div id="screen"></div>
+    <div id="tabbar">
+      <button data-act="tab">__I_clock__<span>打卡</span></button>
+      <button data-act="tab">__I_chart__<span>统计</span></button>
+      <button class="on" data-act="tab">__I_user__<span>我的</span></button>
+    </div>
+    <div id="sheet"></div>
+    <div id="toast"></div>
+  </div>
+
+  <aside class="panel">
+    <h2>数据与备份 · 简化版</h2>
+    <p>无密码、无加密设置。在左侧手机里直接点；右侧可切换状态、模拟数据变化。</p>
+    <h4>备份状态</h4>
+    <div class="seg" id="stseg"></div>
+    <h4>模拟</h4>
+    <div class="seg" id="simseg"></div>
+    <h4>跳转页面</h4>
+    <div class="seg" id="goseg"></div>
+    <h4>设计要点</h4>
+    <ul>
+      <li>没有密码：备份就是一个可读的 .json 文件，凭证（高德 Key、云端密码）不写入</li>
+      <li>一页管完：数据概览 → 一键备份 → 备份记录 → 保存与导入</li>
+      <li>恢复两步：选方式 → 完成，并且<b>可撤销</b>（恢复前自动备份）</li>
+      <li>自动备份最多留 7 份，永远保留「记录最多」的一份</li>
+      <li>只在本机时，主动提示「换手机前先保存到文件」</li>
+      <li>内容没变化时不生成新备份（点「模拟：新增打卡」再备份对比）</li>
+    </ul>
+  </aside>
+</div>
+
+<script>
+const P={
+ chevR:'<path d="M9 18l6-6-6-6"/>',chevL:'<path d="M15 18l-6-6 6-6"/>',check:'<path d="M20 6L9 17l-5-5"/>',
+ shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+ shieldOk:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>',
+ cloud:'<path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>',
+ clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+ chart:'<path d="M18 20V10M12 20V4M6 20v-6"/>',
+ user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+ alert:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
+ download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+ upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+ trash:'<path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+ globe:'<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/>',
+ drop:'<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>',
+ target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+ zap:'<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
+ refresh:'<path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+ file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/>',
+ undo:'<path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>',
+ table:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>',
+ msg:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+ folder:'<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>'
+};
+const I=(n,s=20)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]}</svg>`;
+document.querySelectorAll('#tabbar button').forEach(b=>{b.innerHTML=b.innerHTML.replace(/__I_(\w+)__/,(_,n)=>I(n,22))});
+const $=s=>document.querySelector(s);
+const fmt=n=>n.toLocaleString();
+
+const STATUS=[['ok','正常'],['stale','久未备份'],['empty','还没备份'],['failed','备份失败']];
+const KIND={auto:'自动',manual:'手动',safe:'恢复前'};
+
+function initVersions(st){
+ if(st==='empty')return [];
+ const ts=st==='stale'?['10-06 21:10','10-05 18:00','10-03 21:30','10-01 18:02','09-28 18:01']:['今天 18:05','昨天 18:02','10-12 21:30','10-11 18:00','10-09 18:01'];
+ const kinds=['auto','auto','manual','auto','safe'],ns=[1248,1231,1220,1198,1150];
+ return ts.map((t,i)=>({id:i+1,t,kind:kinds[i],n:ns[i],f:36-i,tr:210-i*4,sz:(2.4-i*.1).toFixed(1)}));
+}
+const S={view:'profile',status:'ok',auto:true,cloudOn:false,offDevice:false,backing:false,
+ cur:{n:1248,f:36,tr:210},versions:initVersions('ok'),sheet:null,nextId:100,cloud:{tested:false,testing:false}};
+
+const starId=()=>{let b=null;S.versions.forEach(v=>{if(!b||v.n>b.n)b=v});return b?b.id:null};
+function prune(){
+ const star=starId();
+ const autos=()=>S.versions.filter(v=>v.kind==='auto'&&v.id!==star);
+ const total=()=>S.versions.filter(v=>v.kind==='auto').length;
+ while(total()>7&&autos().length){const old=autos()[autos().length-1];S.versions=S.versions.filter(v=>v.id!==old.id)}
+}
+function addVersion(kind,t='刚刚'){
+ S.versions.unshift({id:S.nextId++,t,kind,n:S.cur.n,f:S.cur.f,tr:S.cur.tr,sz:'2.4'});
+ prune();
+}
+function setStatus(st){S.status=st;S.versions=initVersions(st);S.cur={n:1248,f:36,tr:210};S.backing=false;S.sheet=null;render()}
+function go(v){
+ if(v==='cloud')S.cloud={tested:false,testing:false};
+ S.view=v;S.sheet=null;$('#screen').scrollTop=0;render();
+}
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2600)}
+
+const row=(ic,l,r='',a='soon',cls='')=>`<div class="row ${cls}" data-act="${a}"><span class="ico">${I(ic,18)}</span><span class="lbl">${l}</span><span class="rt">${r}</span>${I('chevR',16)}</div>`;
+
+/* ---- status copy ---- */
+function last(){return S.versions[0]}
+function statusInfo(){
+ const v=last(),st=S.status;
+ if(st==='stale')return{cls:'warn',ic:'clock',t:'已 8 天没有备份',l:`上次备份 ${v.t} · ${fmt(v.n)} 条打卡`,pill:['立即备份','quick']};
+ if(st==='empty')return{cls:'idle',ic:'shield',t:'还没有备份',l:'点一下，给你的数据加一份保险',pill:['创建备份','quick']};
+ if(st==='failed')return{cls:'err',ic:'alert',t:'上次备份没成功',l:'手机存储空间不足，之前的备份都还在',pill:['重试','quick']};
+ return{cls:'ok',ic:'shieldOk',t:'数据已备份',l:`上次备份 ${v.t} · ${fmt(v.n)} 条打卡`,pill:null};
+}
+
+/* ---- 我的 ---- */
+function profile(){
+ const m=statusInfo();
+ return `<h1>我的</h1><div class="subt">个人信息与偏好</div>
+ <div class="card user"><div class="av">${I('user',24)}</div><div><b>时空旅行者</b><br><span class="badge">已连续记录 4 天</span></div><button class="ed" data-act="soon">编辑</button></div>
+ <div class="scard ${m.cls}" data-act="openData"><div class="sic">${I(m.ic,22)}</div>
+  <div class="stx"><b>${S.status==='ok'?'数据与备份':m.t}</b><span>${S.status==='ok'?m.l:m.l}</span></div>
+  ${m.pill?`<button class="pill" data-act="${m.pill[1]}">${m.pill[0]}</button>`:I('chevR',18)}</div>
+ <div class="sec">通用</div>
+ <div class="card">${row('globe','语言','中文')}${row('drop','主题','浅色')}</div>
+ <div class="sec">打卡</div>
+ <div class="card">${row('zap','一键打卡 + 今日状态')}${row('target','位置调试')}</div>
+ <div class="sec">关于</div>
+ <div class="card">${row('refresh','检查更新','v1.2.4')}${row('shield','隐私协议')}</div>`;
+}
+
+/* ---- 数据与备份 ---- */
+function data(){
+ const m=statusInfo(),st=S.status,star=starId();
+ const chips=[
+  st==='empty'?['','本机 暂无备份']:['ok','本机 已备份'],
+  S.cloudOn?['ok','云端副本 已同步']:['','云端副本 未开启'],
+  S.offDevice?['ok','已保存到文件']:null
+ ].filter(Boolean).map(c=>`<span class="chip ${c[0]}">${c[1]}</span>`).join('');
+ let banner='';
+ if(st==='failed')banner=`<div class="banner err"><b>存储空间不足</b><br>手机只剩约 38 MB，写不下新的备份。可以删掉不需要的旧备份，或把备份文件保存到别处。<div class="btns"><button class="btn" data-act="saveFile">保存到文件</button></div></div>`;
+ else if(st==='stale')banner=`<div class="banner warn"><b>建议现在备份一次</b><br>备份只需要几秒钟，换手机或误删后能找回数据。</div>`;
+ else if(st==='ok'&&!S.cloudOn&&!S.offDevice)banner=`<div class="banner warn"><b>备份目前只在这台手机上</b><br>手机丢失或卸载应用时，备份也会一起消失。建议保存一份到文件，或开启云端副本。<div class="btns"><button class="btn primary" data-act="saveFile">保存到文件</button></div></div>`;
+ let btn;
+ if(S.backing)btn=`<div class="prog"><i></i><span style="position:relative">正在备份…</span></div>`;
+ else btn=`<button class="btn primary" data-act="backupNow">${st==='empty'?'创建第一份备份':st==='failed'?'重试备份':'立即备份'}</button>`;
+ const total=S.versions.reduce((a,v)=>a+parseFloat(v.sz),0).toFixed(1);
+ const list=S.versions.length?S.versions.map(v=>{
+   const tags=`<span class="tag k-${v.kind}">${KIND[v.kind]}</span>${v.id===star?'<span class="tag star">最完整</span>':''}`;
+   return `<div class="row" data-act="ver" data-id="${v.id}"><span class="ico">${I(v.kind==='safe'?'undo':'file',18)}</span><span class="lbl"><b>${v.t}</b><small>${fmt(v.n)} 条打卡 · ${v.sz} MB</small></span><span class="tags">${tags}</span>${I('chevR',16)}</div>`}).join('')
+   :`<div class="empty">还没有备份记录<br>每次备份都会出现在这里，随时可以恢复</div>`;
+ return `<div class="nav"><button data-act="back">${I('chevL',22)}</button><b>数据与备份</b></div>
+ <div class="hero ${m.cls}"><div class="hh"><div class="sic">${I(m.ic,22)}</div><div><b>${m.t}</b><span>${m.l}</span></div></div>
+  <div class="chips">${chips}</div>${banner}${btn}</div>
+ <div class="sec">我的数据</div>
+ <div class="tiles"><div class="tile"><b>${fmt(S.cur.n)}</b><span>打卡</span></div><div class="tile"><b>${S.cur.f}</b><span>专注</span></div><div class="tile"><b>${S.cur.tr}</b><span>行程</span></div></div>
+ <div class="sec">备份记录 <small>自动备份保留最近 7 份</small></div>
+ <div class="card">${list}</div>
+ ${S.versions.length?`<div class="note">共 ${S.versions.length} 份，占用约 ${total} MB。手动备份和「恢复前」备份不会被自动清理；自动清理时会一直保留记录最多的那一份。</div>`:''}
+ <div class="sec">保存与导入</div>
+ <div class="card">
+  ${row('upload','保存备份文件','分享 / 存到网盘','saveFile')}
+  ${row('download','从文件导入备份','','importFile')}
+  ${row('table','导出为表格','CSV','export')}
+ </div>
+ <div class="sec">设置</div>
+ <div class="card">
+  <div class="row" data-act="toggleAuto"><span class="ico">${I('refresh',18)}</span><span class="lbl">自动备份<small>每天一次，数据有变化时才备份</small></span><span class="sw ${S.auto?'on':''}"></span></div>
+  ${row('cloud','云端副本（可选）',S.cloudOn?'已开启':'未开启','openCloud')}
+ </div>
+ <div class="sec">危险操作</div>
+ <div class="card"><div class="row danger" data-act="danger"><span class="ico">${I('trash',18)}</span><span class="lbl">清空所有打卡记录<small style="color:var(--sub)">清空前会自动备份，可随时找回</small></span>${I('chevR',16)}</div></div>`;
+}
+
+/* ---- 云端 ---- */
+function cloud(){
+ const c=S.cloud;
+ return `<div class="nav"><button data-act="back">${I('chevL',22)}</button><b>云端副本</b></div>
+ <div class="subt">每次备份后，把最新的备份文件同步到你自己的 WebDAV 空间（坚果云、Nextcloud 等），换手机时可以从这里找回。</div>
+ <label class="f"><span>服务器地址</span><input value="https://dav.jianguoyun.com/dav/"></label>
+ <label class="f"><span>账号</span><input value="name@example.com"></label>
+ <label class="f"><span>应用密码</span><input type="password" value="abcdefgh1234"></label>
+ ${c.testing?'<div class="res">测试中…</div>':c.tested?`<div class="res" style="color:var(--ok)">${I('check',16)} 连接成功，可以写入</div>`:''}
+ <div class="btns"><button class="btn" data-act="testConn">测试连接</button><button class="btn primary" data-act="saveCloud" ${c.tested?'':'disabled'}>${S.cloudOn?'保存':'开启'}</button></div>
+ ${S.cloudOn?`<button class="btn ghost dng" style="margin-top:10px" data-act="cloudOff">关闭云端副本</button>`:''}
+ <div class="note">云端保留最近 3 份。备份文件是可直接阅读的 JSON，请使用只有你自己能访问的空间。应用密码只保存在手机的安全存储里，不会写入备份。</div>`;
+}
+
+/* ---- 弹层 ---- */
+const vsum=(n,f,tr)=>`<div class="vsum"><div><b>${fmt(n)}</b><span>打卡</span></div><div><b>${f}</b><span>专注</span></div><div><b>${tr}</b><span>行程</span></div></div>`;
+function sheetHTML(){
+ const s=S.sheet;
+ if(s.type==='danger')return `<div class="sh"><h3>清空所有打卡记录？</h3><p>本机的 ${fmt(S.cur.n)} 条打卡、专注和行程会被清空。</p>
+  <div class="safe">${I('shieldOk',16)}<span>清空前会先自动备份一份，之后可在「备份记录」里找回。</span></div>
+  <label class="f"><span>请输入「清空」以确认</span><input id="dg" value="${s.txt||''}" placeholder="清空" autocomplete="off"></label>
+  <div class="btns"><button class="btn" data-act="closeSheet">取消</button><button class="btn red" id="dgBtn" data-act="doDanger" ${s.txt==='清空'?'':'disabled'}>清空</button></div></div>`;
+ if(s.type==='ver'){const v=s.v;
+  return `<div class="sh"><h3>${v.t} 的备份</h3><p>${KIND[v.kind]}备份 · ${v.sz} MB${v.id===starId()?' · 记录最多的一份':''}</p>${vsum(v.n,v.f,v.tr)}
+  <div class="stack"><button class="btn primary" data-act="restoreVer">恢复到这个版本</button>
+  <button class="btn" data-act="saveFile">保存这份到文件</button>
+  <button class="btn ghost dng" data-act="${s.del?'delDo':'delAsk'}">${s.del?'再点一次，确认删除':'删除这份备份'}</button></div></div>`;}
+ if(s.type==='save')return `<div class="sh"><h3>保存备份文件</h3><div class="file"><span class="ico">${I('file',18)}</span><div><b>timeflow-20261014-1015.json</b><small>${fmt(S.cur.n)} 条打卡 · 2.4 MB</small></div></div>
+  <div class="dest" data-act="savedTo" data-t="发送到微信"><span class="ico">${I('msg',18)}</span><span class="lbl">发送给微信 / QQ</span>${I('chevR',16)}</div>
+  <div class="dest" data-act="savedTo" data-t="已保存到手机文件"><span class="ico">${I('folder',18)}</span><span class="lbl">保存到手机文件</span>${I('chevR',16)}</div>
+  <div class="dest" data-act="savedTo" data-t="已上传到网盘"><span class="ico">${I('cloud',18)}</span><span class="lbl">上传到网盘</span>${I('chevR',16)}</div>
+  <div class="note" style="margin-top:12px">文件里是你的打卡数据，没有加密，请存放在只有自己能访问的地方。</div></div>`;
+ if(s.type==='import'){
+  if(!s.file)return `<div class="sh"><h3>从文件导入备份</h3><p>选择之前保存的 TimeFlow 备份文件（.json）。适合换新手机，或从别人那里拿到的备份。</p>
+   ${s.bad?`<div class="err-t">${I('alert',16)}这不是 TimeFlow 备份文件，请重新选择</div>`:''}
+   <div class="stack"><button class="btn primary" data-act="pickFile">选择文件…</button><button class="btn ghost" data-act="pickBad">演示：选一个无效文件</button><button class="btn ghost" data-act="closeSheet">取消</button></div></div>`;
+  return `<div class="sh"><h3>找到备份文件</h3><div class="file"><span class="ico">${I('file',18)}</span><div><b>timeflow-20261012-1815.json</b><small>创建于 10-12 18:15 · 来自 Pixel 7</small></div></div>${vsum(1198,33,199)}
+   <div class="btns"><button class="btn" data-act="closeSheet">取消</button><button class="btn primary" data-act="importNext">继续</button></div></div>`;}
+ if(s.type==='restore'){
+  const src=s.src,del=Math.max(0,S.cur.n-src.n),add=src.extra;
+  if(s.step===1)return `<div class="sh"><h3>恢复数据</h3><p>${src.label}</p>${vsum(src.n,src.f,src.tr)}
+   <div class="opt ${s.mode==='replace'?'sel':''}" data-act="mode" data-m="replace"><span class="rd"></span><div><b>回到这个时间点（推荐）</b><small>以这份备份为准。${del?`现在多出的 <span class="w">${del}</span> 条记录会被替换。`:'当前数据会被这份备份替换。'}</small></div></div>
+   <div class="opt ${s.mode==='merge'?'sel':''}" data-act="mode" data-m="merge"><span class="rd"></span><div><b>只补回缺少的记录</b><small>保留现在的数据，${add?`补回 <span class="g">${add}</span> 条缺少的记录`:'没有需要补回的记录'}。可能会补回你之后删掉的记录。</small></div></div>
+   <div class="safe">${I('shieldOk',16)}<span>恢复前会自动备份当前数据，恢复后可以一键撤销。</span></div>
+   <div class="btns"><button class="btn" data-act="closeSheet">取消</button><button class="btn primary" data-act="doRestore">恢复</button></div></div>`;
+  if(s.step===2)return `<div class="sh"><div class="spin"></div><h3 style="text-align:center">正在恢复…</h3><p style="text-align:center">请不要关闭应用</p></div>`;
+  return `<div class="sh"><div class="ok-big"><div class="sic">${I('check',28)}</div><h3>恢复完成</h3><p>现在共有 ${fmt(S.cur.n)} 条打卡。恢复前的数据已备份，不满意可以撤销。</p></div>
+   <div class="btns"><button class="btn" data-act="undo">撤销恢复</button><button class="btn primary" data-act="closeSheet">完成</button></div></div>`;}
+}
+
+/* ---- render ---- */
+function render(){
+ const sc=$('#screen').scrollTop;
+ $('#screen').innerHTML={profile,data,cloud}[S.view]();
+ $('#screen').scrollTop=sc;
+ $('#tabbar').style.display=S.view==='profile'?'flex':'none';
+ const sh=$('#sheet');sh.className=S.sheet?('on'+(S.sheet.type==='danger'?' center':'')):'';
+ sh.innerHTML=S.sheet?sheetHTML():'';
+ $('#stseg').innerHTML=STATUS.map(([k,n])=>`<button class="${S.status===k?'on':''}" data-st="${k}">${n}</button>`).join('');
+ $('#simseg').innerHTML=`<button data-sim="data">新增 3 条打卡</button><button data-sim="auto">触发一次自动备份</button><button data-sim="cloud">${S.cloudOn?'关闭':'开启'}云端副本</button>`;
+ const GO=[['profile','我的'],['data','数据与备份'],['cloud','云端副本'],['ver','备份详情'],['restore','恢复'],['import','导入文件'],['danger','清空确认']];
+ $('#goseg').innerHTML=GO.map(([k,n])=>`<button data-go="${k}">${n}</button>`).join('');
+}
+
+function runBackup(){
+ if(S.backing)return;
+ S.backing=true;render();
+ setTimeout(()=>{
+  S.backing=false;
+  const v=last(),changed=!v||v.n!==S.cur.n;
+  if(!changed&&S.status!=='failed'){render();toast('数据没有变化，已是最新');return}
+  addVersion('manual');S.status='ok';render();
+  toast('备份完成'+(S.cloudOn?'，已同步云端':''));
+ },1100);
+}
+function openRestoreFrom(src){S.sheet={type:'restore',step:1,mode:'replace',src}; render();}
+function act(a,el){
+ switch(a){
+  case 'soon':toast('演示：该项不在本次改版范围');break;
+  case 'tab':toast('演示：切换到其他 Tab');break;
+  case 'openData':go('data');break;
+  case 'quick':go('data');setTimeout(runBackup,350);break;
+  case 'back':go(S.view==='cloud'?'data':'profile');break;
+  case 'backupNow':runBackup();break;
+  case 'toggleAuto':S.auto=!S.auto;render();toast(S.auto?'已开启自动备份':'已关闭自动备份');break;
+  case 'openCloud':go('cloud');break;
+  case 'testConn':S.cloud.testing=true;render();setTimeout(()=>{S.cloud.testing=false;S.cloud.tested=true;render()},900);break;
+  case 'saveCloud':S.cloudOn=true;S.view='data';render();toast('云端副本已开启，之后每次备份都会同步');break;
+  case 'cloudOff':S.cloudOn=false;S.view='data';render();toast('已关闭云端副本');break;
+  case 'saveFile':S.sheet={type:'save'};render();break;
+  case 'savedTo':S.offDevice=true;S.sheet=null;render();toast(el.dataset.t+' · 记得放在安全的地方');break;
+  case 'export':toast('演示：将导出 CSV 表格，可用 Excel 打开');break;
+  case 'ver':{const v=S.versions.find(x=>x.id==el.dataset.id);S.sheet={type:'ver',v};render();break;}
+  case 'delAsk':S.sheet.del=true;render();break;
+  case 'delDo':{const id=S.sheet.v.id;S.versions=S.versions.filter(v=>v.id!==id);S.sheet=null;render();toast('已删除这份备份');break;}
+  case 'restoreVer':{const v=S.sheet.v,i=S.versions.indexOf(v);
+   openRestoreFrom({label:`${v.t} 的备份`,n:v.n,f:v.f,tr:v.tr,extra:i===0?0:2+i});break;}
+  case 'importFile':S.sheet={type:'import'};render();break;
+  case 'pickFile':S.sheet.file=true;S.sheet.bad=false;render();break;
+  case 'pickBad':S.sheet.bad=true;render();break;
+  case 'importNext':openRestoreFrom({label:'timeflow-20261012-1815.json（来自 Pixel 7）',n:1198,f:33,tr:199,extra:5});break;
+  case 'mode':S.sheet.mode=el.dataset.m;render();break;
+  case 'closeSheet':S.sheet=null;render();break;
+  case 'doRestore':{
+   S.sheet.step=2;render();
+   setTimeout(()=>{
+    const s=S.sheet;if(!s)return;
+    addVersion('safe');
+    s.prev={...S.cur};
+    const n=s.mode==='replace'?s.src.n:S.cur.n+s.src.extra;
+    S.cur={n,f:s.src.f,tr:s.src.tr};
+    s.step=3;if(S.status==='empty')S.status='ok';render();
+   },1300);break;}
+  case 'undo':{const s=S.sheet;S.cur=s.prev;const k=S.versions.findIndex(v=>v.kind==='safe'&&v.t==='刚刚');if(k>=0)S.versions.splice(k,1);S.sheet=null;render();toast('已撤销，回到恢复前的状态');break;}
+  case 'danger':S.sheet={type:'danger',txt:''};render();break;
+  case 'doDanger':addVersion('safe');S.cur={n:0,f:0,tr:0};S.sheet=null;render();toast('已清空 · 恢复前的备份在「备份记录」里');break;
+ }
+}
+document.addEventListener('click',e=>{
+ const st=e.target.closest('[data-st]');if(st){setStatus(st.dataset.st);return}
+ const sm=e.target.closest('[data-sim]');
+ if(sm){const k=sm.dataset.sim;
+  if(k==='data'){S.cur.n+=3;S.cur.f+=0;render();toast('已新增 3 条打卡（当前 '+fmt(S.cur.n)+'）')}
+  if(k==='auto'){const v=last();if(v&&v.n===S.cur.n){toast('数据没有变化，自动备份已跳过')}else{addVersion('auto');if(S.status!=='failed')S.status='ok';render();toast('自动备份完成')}}
+  if(k==='cloud'){S.cloudOn=!S.cloudOn;render()}
+  return}
+ const g=e.target.closest('[data-go]');
+ if(g){const k=g.dataset.go;
+  if(k==='ver'){S.view='data';if(!S.versions.length)setStatus('ok');S.view='data';S.sheet={type:'ver',v:S.versions[0]};render()}
+  else if(k==='restore'){S.view='data';if(!S.versions.length)setStatus('ok');S.view='data';const v=S.versions[1]||S.versions[0];openRestoreFrom({label:`${v.t} 的备份`,n:v.n,f:v.f,tr:v.tr,extra:3})}
+  else if(k==='import'){S.view='data';render();act('importFile')}
+  else if(k==='danger'){S.view='data';render();act('danger')}
+  else go(k);
+  return}
+ const el=e.target.closest('[data-act]');if(el)act(el.dataset.act,el);
+});
+document.addEventListener('input',e=>{
+ if(e.target.id==='dg'){S.sheet.txt=e.target.value;$('#dgBtn').disabled=e.target.value!=='清空'}
+});
+render();
+</script>
+</body>
+</html>
