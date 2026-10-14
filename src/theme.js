@@ -17,6 +17,19 @@ export const lightColors = {
   danger: '#E08A7A',
   chip: '#FAF6F1',          // 控件填充（出行方式/结束行程/输入框）
   scrim: 'rgba(43,35,30,0.35)', // 模态遮罩
+  // 备份 V2 语义色（浅色取设计稿值）
+  ok: '#25915F',            // 正常/成功
+  okBg: '#E5F4EA',
+  warn: '#A96A0B',          // 提醒/陈旧
+  warnBg: '#FCF1D9',
+  err: '#CF3B3B',           // 失败/危险
+  errBg: '#FDE7E4',
+  idle: '#6F645C',          // 未开启/中性
+  idleBg: '#EEE9E3',
+  ico: '#9A6B4B',           // 暖棕图标
+  icoBg: '#F6ECE2',         // 图标底
+  info: '#3B6DB5',          // 信息蓝（「自动」标签）
+  infoBg: '#E7EFFB',
 };
 
 export const darkColors = {
@@ -36,6 +49,19 @@ export const darkColors = {
   danger: '#F08A7A',
   chip: '#2B241D',          // 控件填充
   scrim: 'rgba(10,6,4,0.55)', // 模态遮罩
+  // 备份 V2 语义色（深色按暖炭黑体系推导）
+  ok: '#5CC08F',
+  okBg: '#1E3227',
+  warn: '#E0A94E',
+  warnBg: '#33291A',
+  err: '#F27D72',
+  errBg: '#3A2320',
+  idle: '#8F8276',
+  idleBg: '#2B241D',
+  ico: '#D3A87E',
+  icoBg: '#312821',
+  info: '#7FA8DC',
+  infoBg: '#22303F',
 };
 
 export const radius = {

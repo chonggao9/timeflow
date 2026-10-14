@@ -52,6 +52,8 @@ export async function restoreFromPackage(pkg, mode = 'replace') {
   // 1. 恢复前自动备份当前数据（safe 不参与自动清理）
   const safe = await runBackup({ kind: 'safe', force: true });
   if (safe.status !== 'done') {
+    // BUSY = 有其他备份正在进行（如实区分，不当作「备份失败」）
+    if (safe.status === 'busy') return { ok: false, code: 'BUSY' };
     return { ok: false, code: safe.status === 'error' ? safe.code : 'SAFE_FAIL' };
   }
 

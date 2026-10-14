@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords, clearAll, getRecordsFingerprint, updateFocusSession, getFocusSessions, updateRecord } from '../storage/store';
+import { runBackup } from '../backup/backup';
 import { computePathStats, formatDuration, formatTime, isPlaceholderName, placeKey } from '../utils/stats';
 import { getPlaceOptions, queryJourney, buildDurationHistogram, computeWeekTravelStats, findLatestTripForRoute, groupTrips, groupTripsByDate } from '../utils/analytics';
 import { radius, shadow } from '../theme';
@@ -227,7 +228,18 @@ export default function InsightsScreen() {
       {
         text: t('common.delete'), style: 'destructive',
         onPress: async () => {
-          await clearAll();
+          // 与「数据与备份」页同一承诺：清空前自动生成 safe 备份，可在「备份记录」找回
+          const safe = await runBackup({ kind: 'safe', force: true });
+          if (safe.status !== 'done') {
+            Alert.alert(t('common.tip'), t('clear.failSafe'));
+            return;
+          }
+          try {
+            await clearAll();
+          } catch (e) {
+            Alert.alert(t('common.tip'), t('restore.failRestore'));
+            return;
+          }
           lastFingerprintRef.current = null;
           setRecords([]);
           setFocusSessions([]);

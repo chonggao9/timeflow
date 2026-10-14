@@ -24,6 +24,8 @@ import { useI18n } from '../i18n/LanguageContext';
 import { radius } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import PrivacyAgreement from './PrivacyAgreement';
+import BackupStatusCard from '../components/backup/BackupStatusCard';
+import DataBackupScreen from './DataBackupScreen';
 
 // 计算连续打卡天数
 function calculateStreakDays(records) {
@@ -129,6 +131,9 @@ export default function ProfileScreen() {
   const [showEditNickname, setShowEditNickname] = useState(false);
   const [nicknameDraft, setNicknameDraft] = useState('');
 
+  const [showDataBackup, setShowDataBackup] = useState(false);
+  const [backupInitialAction, setBackupInitialAction] = useState(null);
+
   const loadProfile = useCallback(async () => {
     const [p, recs] = await Promise.all([getProfile(), getRecords()]);
     setNickname(p?.nickname || '');
@@ -197,6 +202,22 @@ export default function ProfileScreen() {
       setLocKeyState('set');
       setShowLocKey(false);
     }
+  };
+
+  // 高德 Key 入口（已移入「位置调试」弹层：Key 只服务定位场景）
+  const openAmapKey = async () => {
+    const k = await getAmapKey();
+    setAmapKeyDraft(k || '');
+    setAmapKeyInvalid(false);
+    setShowLocationDebug(false);
+    setShowAmapKey(true);
+  };
+  const openLocKey = async () => {
+    const raw = await getAmapLocKeyRaw();
+    setLocKeyDraft(raw && raw !== '' ? raw : '');
+    setLocKeyInvalid(false);
+    setShowLocationDebug(false);
+    setShowLocKey(true);
   };
 
   // 定位自检排查
@@ -269,7 +290,13 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 2. 分组一：通用 */}
+        {/* 2. 备份状态卡：整卡进「数据与备份」；pill = 进页并立即备份 */}
+        <BackupStatusCard
+          onPress={() => { setBackupInitialAction(null); setShowDataBackup(true); }}
+          onQuick={() => { setBackupInitialAction('quick'); setShowDataBackup(true); }}
+        />
+
+        {/* 3. 分组一：通用 */}
         <Text style={styles.sectionHeader}>{t('profile.sectionGeneral', '通用')}</Text>
         <View style={styles.card}>
           <Row
@@ -301,36 +328,6 @@ export default function ProfileScreen() {
             icon="locate-outline"
             label={t('profile.locationDebug')}
             onPress={() => setShowLocationDebug(true)}
-          />
-          <View style={styles.divider} />
-          <Row
-            icon="map-outline"
-            label={t('profile.amapKey')}
-            value={amapKeySet ? t('profile.amapKeySet') : t('profile.amapKeyEmpty')}
-            onPress={async () => {
-              const k = await getAmapKey();
-              setAmapKeyDraft(k || '');
-              setAmapKeyInvalid(false);
-              setShowAmapKey(true);
-            }}
-          />
-          <View style={styles.divider} />
-          <Row
-            icon="navigate-circle-outline"
-            label={t('profile.amapLocKey')}
-            value={
-              locKeyState === 'default'
-                ? t('profile.amapLocKeyDefault')
-                : locKeyState === 'disabled'
-                ? t('profile.amapLocKeyDisabled')
-                : t('profile.amapKeySet')
-            }
-            onPress={async () => {
-              const raw = await getAmapLocKeyRaw();
-              setLocKeyDraft(raw && raw !== '' ? raw : '');
-              setLocKeyInvalid(false);
-              setShowLocKey(true);
-            }}
           />
         </View>
 
@@ -562,6 +559,26 @@ export default function ProfileScreen() {
             <Text style={styles.dialogSub}>
               检测当前设备的系统定位服务、运行时权限、高德定位 SDK 及逆地理编码状态。
             </Text>
+            <TouchableOpacity style={styles.keyRow} onPress={openAmapKey} activeOpacity={0.6}>
+              <Ionicons name="map-outline" size={16} color={colors.ico} />
+              <Text style={styles.keyRowLabel}>{t('profile.amapKey')}</Text>
+              <Text style={styles.keyRowValue}>
+                {amapKeySet ? t('profile.amapKeySet') : t('profile.amapKeyEmpty')}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.ink3} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.keyRow} onPress={openLocKey} activeOpacity={0.6}>
+              <Ionicons name="navigate-circle-outline" size={16} color={colors.ico} />
+              <Text style={styles.keyRowLabel}>{t('profile.amapLocKey')}</Text>
+              <Text style={styles.keyRowValue}>
+                {locKeyState === 'default'
+                  ? t('profile.amapLocKeyDefault')
+                  : locKeyState === 'disabled'
+                  ? t('profile.amapLocKeyDisabled')
+                  : t('profile.amapKeySet')}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.ink3} />
+            </TouchableOpacity>
             <View style={styles.dialogRow}>
               <TouchableOpacity
                 style={[styles.dialogBtn, styles.dialogCancel]}
@@ -582,6 +599,17 @@ export default function ProfileScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* 数据与备份（全屏 Modal，沿用项目挂载惯例） */}
+      <DataBackupScreen
+        visible={showDataBackup}
+        initialAction={backupInitialAction}
+        onClose={() => {
+          setShowDataBackup(false);
+          // 恢复/清空/撤销后连续天数可能已变化：返回时重新加载
+          loadProfile();
+        }}
+      />
     </View>
   );
 }
@@ -684,6 +712,13 @@ const makeStyles = (colors) => StyleSheet.create({
   dialog: { width: '100%', backgroundColor: colors.surface, borderRadius: 20, padding: 18 },
   dialogTitle: { fontSize: 17, fontWeight: '700', color: colors.ink, textAlign: 'center', marginBottom: 8 },
   dialogSub: { fontSize: 12.5, color: colors.ink3, marginTop: 2, marginBottom: 8, lineHeight: 18 },
+  keyRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 9,
+    backgroundColor: colors.chip, borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 11, marginTop: 8,
+  },
+  keyRowLabel: { flex: 1, fontSize: 13.5, fontWeight: '600', color: colors.ink },
+  keyRowValue: { fontSize: 12, color: colors.ink3, fontWeight: '500' },
   input: {
     marginTop: 8,
     borderWidth: 1,

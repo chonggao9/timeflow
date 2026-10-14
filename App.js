@@ -29,14 +29,15 @@ function TabNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
         tabBarActiveTintColor: colors.primaryStrong,
         tabBarInactiveTintColor: colors.ink2,
+        tabBarLabelStyle: { fontSize: 10.5, fontWeight: '600', marginTop: -3 },
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.line,
           borderTopWidth: 1,
-          height: 52 + insets.bottom,
+          height: 58 + insets.bottom,
           paddingTop: 0,
           paddingBottom: insets.bottom,
           elevation: 4,
@@ -57,6 +58,7 @@ function TabNavigator() {
         name="Home"
         component={HomeScreen}
         options={{
+          tabBarLabel: t('tab.checkin'),
           tabBarAccessibilityLabel: t('tab.checkin'),
           tabBarIcon: ({ focused }) => (
             <Ionicons name={focused ? 'time' : 'time-outline'} size={25} color={focused ? colors.primaryStrong : colors.ink2} />
@@ -67,6 +69,7 @@ function TabNavigator() {
         name="Insights"
         component={InsightsScreen}
         options={{
+          tabBarLabel: t('tab.insights'),
           tabBarAccessibilityLabel: t('tab.insights'),
           tabBarIcon: ({ focused }) => (
             <Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={25} color={focused ? colors.primaryStrong : colors.ink2} />
@@ -77,6 +80,7 @@ function TabNavigator() {
         name="Profile"
         component={ProfileScreen}
         options={{
+          tabBarLabel: t('tab.profile'),
           tabBarAccessibilityLabel: t('tab.profile'),
           tabBarIcon: ({ focused }) => (
             <Ionicons name={focused ? 'person' : 'person-outline'} size={25} color={focused ? colors.primaryStrong : colors.ink2} />
@@ -109,11 +113,11 @@ function PrivacyModal({ visible, onAgree }) {
               ? '欢迎使用 TimeFlow（时光流）！在您使用前，请充分阅读并理解相关条款：\n\n' +
                 '1. 个人数据最小化：仅在您主动点击打卡时，读取当前经纬度与时间，所有记录默认仅存储于手机本地沙盒，无中心化服务器。\n' +
                 '2. 第三方 SDK：为了获取精确坐标，应用集成了高德开放平台定位 SDK，将在打卡时采集必要的位置与设备参数。\n' +
-                '3. 自主备份：若配置 WebDAV，数据将以强加密形式传输至您自有的云端。'
-              : 'Welcome to TimeFlow! Please read and understand our terms before using:\n\n' +
+                '3. 自主备份：备份文件是明文 JSON，只保存在本机；若开启云端副本，将传输至您自有的 WebDAV 空间，请使用只有您自己能访问的账号。'
+              : 'Welcome to TimeFlow! Please read and understand our terms before use:\n\n' +
                 '1. Data Minimization: Coordinates and time are read ONLY when you explicitly check in. Data stays on your local device.\n' +
                 '2. Third-Party SDK: Integrated with Amap Location SDK to provide accurate location during check-in.\n' +
-                '3. Data Ownership: If WebDAV is enabled, backups are strongly encrypted and stored on your own cloud.'}
+                '3. Self-hosted Backup: Backup files are plain JSON stored on this device. If cloud copy is enabled, they are uploaded to your own WebDAV space — please use an account only you can access.'}
           </Text>
 
           <TouchableOpacity
