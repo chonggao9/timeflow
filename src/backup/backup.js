@@ -8,6 +8,7 @@ import { computeContentHash } from './hash';
 import { listVersions, writeBackupAtomic, removeBackup } from './files';
 import { planPrune } from './plan';
 import { getBackupState, updateBackupState } from './state';
+import { uploadBackup } from './cloud';
 
 let isRunning = false;
 export function isBackupRunning() { return isRunning; }
@@ -93,9 +94,23 @@ export async function runBackup({ kind = 'manual', force = false } = {}) {
       lastAutoAt: kind === 'auto' ? Date.now() : s.lastAutoAt,
     }));
 
-    // 阶段 3 接入点：cloudEnabled 时上传 written.name 到 WebDAV（失败记 CLOUD_FAIL，不影响本机成功）
+    // 云端副本：开启时上传；失败记独立的 lastCloudError（不进 lastError，
+    // 本机备份仍是成功——四态推导与「无变化跳过」判定都不受云端故障影响）
+    let cloud = 'off';
+    if (state.cloudEnabled) {
+      try {
+        await uploadBackup(written.name);
+        cloud = 'ok';
+        await updateBackupState((s) => ({ ...s, lastCloudError: null }));
+      } catch (e) {
+        cloud = 'fail';
+        try {
+          await updateBackupState((s) => ({ ...s, lastCloudError: { code: (e && e.code) || 'CLOUD_FAIL', at: Date.now() } }));
+        } catch (e2) {}
+      }
+    }
 
-    return { status: 'done', name: written.name, counts, size: written.size };
+    return { status: 'done', name: written.name, counts, size: written.size, cloud };
   } catch (e) {
     // 收集/写状态等意外错误：按 WRITE_FAIL 呈现，不抛出
     try {

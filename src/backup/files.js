@@ -65,7 +65,7 @@ export async function readPackage(name) {
   }
 }
 
-// 读取任意 uri 的文件并校验（供「从文件导入」使用，阶段 3 接线）
+// 读取任意 uri 的文件并校验（供「从文件导入」使用）
 export async function readPackageFromUri(uri) {
   try {
     const raw = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.UTF8 });
@@ -76,22 +76,15 @@ export async function readPackageFromUri(uri) {
   }
 }
 
+// 写临时导出文件（CSV 等）到 cacheDirectory，返回 uri 供分享；失败抛出
+export async function writeCacheFile(name, content) {
+  const uri = `${FileSystem.cacheDirectory}${name}`;
+  await FileSystem.writeAsStringAsync(uri, content, { encoding: FileSystem.EncodingType.UTF8 });
+  return uri;
+}
+
 export async function removeBackup(name) {
   try {
     await FileSystem.deleteAsync(BACKUP_DIR + name, { idempotent: true });
   } catch (e) { /* 已不存在视为成功 */ }
-}
-
-// 把任意 uri 的文件复制进备份目录（导入时留存），返回新文件名；失败返回 null
-export async function adoptFile(uri, name) {
-  try {
-    await ensureBackupDir();
-    const dest = BACKUP_DIR + name;
-    const existing = await FileSystem.getInfoAsync(dest);
-    if (existing.exists) await FileSystem.deleteAsync(dest, { idempotent: true });
-    await FileSystem.copyAsync({ from: uri, to: dest });
-    return name;
-  } catch (e) {
-    return null;
-  }
 }

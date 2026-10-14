@@ -8,6 +8,8 @@
  * 4. 内容哈希（无变化跳过备份的判定依据）
  * 5. 保留策略（auto 上限 7、star 永不清理、manual/safe 豁免、合计超限提示）
  * 6. 恢复预览（replace 被替换条数 / merge 补回条数与 id 去重）
+ * 7. 云端轮转（保留最近 3 份，从最旧删起）
+ * 8. CSV 导出（三段结构、字段转义、中英表头）
  */
 
 const assert = require('assert');
@@ -23,7 +25,9 @@ const {
 
 const { computeContentHash } = require('../src/backup/hash');
 
-const { planPrune, planRestore, MAX_AUTO, MAX_MANUAL_SAFE } = require('../src/backup/plan');
+const { planPrune, planRestore, planCloudPrune, MAX_AUTO, MAX_MANUAL_SAFE, MAX_CLOUD } = require('../src/backup/plan');
+
+const { buildCsv, csvEscape } = require('../src/backup/csv');
 
 function test(name, fn) {
   try {
@@ -224,6 +228,66 @@ test('planRestore：replace 被替换条数 / merge 补回条数与 id 正确', 
   // merge 语义 = INSERT OR IGNORE by id：id 重合部分不会重复（由数据库主键保证，这里验证计数不重复统计）
   const dup = planRestore(['a', 'a'], ['a']);
   assert.strictEqual(dup.mergeAdded, 0);
+});
+
+// 7. 云端轮转（只保留最近 3 份当前格式文件）
+test('planCloudPrune：超过 3 份从最旧删起；不足不删；空/null 安全', () => {
+  assert.strictEqual(MAX_CLOUD, 3);
+  const entries = [
+    { name: 'c3', at: 3 }, { name: 'c1', at: 1 }, { name: 'c5', at: 5 }, { name: 'c2', at: 2 }, { name: 'c4', at: 4 },
+  ];
+  assert.deepStrictEqual(planCloudPrune(entries), ['c1', 'c2']); // 乱序输入也按 at 排序
+  assert.deepStrictEqual(planCloudPrune(entries.slice(0, 3)), []);
+  assert.deepStrictEqual(planCloudPrune([]), []);
+  assert.deepStrictEqual(planCloudPrune(null), []);
+  assert.deepStrictEqual(planCloudPrune([{ at: 9 }, null]), []); // 无名条目忽略
+});
+
+// 8. CSV 导出（真 CSV：三段结构 + Excel 兼容转义）
+test('csvEscape：逗号/引号/换行加引号包裹，内嵌引号翻倍', () => {
+  assert.strictEqual(csvEscape('plain'), 'plain');
+  assert.strictEqual(csvEscape('a,b'), '"a,b"');
+  assert.strictEqual(csvEscape('say "hi"'), '"say ""hi"""');
+  assert.strictEqual(csvEscape('line1\nline2'), '"line1\nline2"');
+  assert.strictEqual(csvEscape(null), '');
+  assert.strictEqual(csvEscape(0), '0');
+});
+
+test('csvEscape：公式注入防护（= + - @ 开头的文本加前导单引号；数值不受影响）', () => {
+  // 注入 + 内嵌引号：加单引号后仍按标准 CSV 包裹并翻倍引号
+  assert.strictEqual(csvEscape('=HYPERLINK("http://evil")'), '"\'=HYPERLINK(""http://evil"")"');
+  assert.strictEqual(csvEscape('+1234'), "'+1234");
+  assert.strictEqual(csvEscape('@SUM(A1)'), "'@SUM(A1)");
+  assert.strictEqual(csvEscape('-cmd'), "'-cmd");
+  // 数值型负数（经纬度）原样输出，不加引号
+  assert.strictEqual(csvEscape(-121.4), '-121.4');
+  assert.strictEqual(csvEscape(31.2), '31.2');
+  // 注入 + 逗号：既加单引号又整体包裹
+  assert.strictEqual(csvEscape('=1,2'), '"\'=1,2"');
+});
+
+test('buildCsv：三段结构、中英表头、行数与转义正确、CRLF 行分隔', () => {
+  const tricky = JSON.parse(JSON.stringify(sampleData));
+  tricky.records[0].locationName = '星巴克, "国贸" 店';
+  const zh = buildCsv(tricky, { lang: 'zh', now: new Date(2026, 9, 14, 10, 15) });
+  assert.ok(zh.includes('【打卡】') && zh.includes('【专注】') && zh.includes('【行程】'));
+  assert.ok(zh.includes('"星巴克, ""国贸"" 店"'), '含逗号/引号的地名必须正确转义');
+  assert.ok(zh.includes('生成时间,2026-10-14 10:15:00'));
+  assert.ok(!zh.includes('\n') || zh.split('\n').every((l) => l.endsWith('\r') || l === ''), 'LF 必须都属于 CRLF 或引号内字段');
+  // 数据行核对：三段各含对应记录
+  const zhLines = zh.split('\r\n');
+  assert.ok(zhLines.some((l) => l.startsWith('r1,') && l.includes('walk')));
+  assert.ok(zhLines.some((l) => l.startsWith('f1,') && l.includes('编码')));
+  assert.ok(zhLines.some((l) => l.startsWith('t1,') && l.includes('家 → 公司')));
+
+  const en = buildCsv(sampleData, { lang: 'en', now: new Date(2026, 9, 14, 10, 15) });
+  assert.ok(en.includes('[Check-ins]') && en.includes('[Focus sessions]') && en.includes('[Trips]'));
+  assert.ok(en.includes('ID,Time,Location,Latitude,Longitude,Mode,Trip ID'));
+  assert.ok(!en.includes('【'));
+
+  // 空库/坏输入不崩溃：仍产出完整表头
+  const emptyCsv = buildCsv(null, { lang: 'zh' });
+  assert.ok(emptyCsv.includes('【打卡】') && emptyCsv.includes('【行程】'));
 });
 
 console.log('\n🎉 备份 V2 全部核心单元测试通过！\n');

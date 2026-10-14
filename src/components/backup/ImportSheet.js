@@ -1,5 +1,5 @@
 // 导入文件弹层（2 步）：未选文件 → 说明 + 选择文件；已选中 → 文件卡 + 三格摘要 + 继续。
-// 选文件动作由父级实现（阶段 3 接 expo-document-picker）；picked = { pkg, name, size } | null。
+// 选文件动作由父级实现（expo-document-picker）；picked = { pkg, name, size } | null。
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';

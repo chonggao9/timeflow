@@ -13,7 +13,8 @@ export const DEFAULT_STATE = {
   sv: STATE_SV,
   lastSuccessAt: null,       // 最近一次本机备份成功时间
   lastCounts: null,          // { records, focus, trips }
-  lastError: null,           // null | { code: 'NO_SPACE'|'WRITE_FAIL'|'CLOUD_FAIL', at }
+  lastError: null,           // null | { code: 'NO_SPACE'|'WRITE_FAIL', at }（仅本机备份失败）
+  lastCloudError: null,      // null | { code, at }（云端上传失败；本机备份仍是成功，不进四态推导）
   autoEnabled: true,         // 自动备份总开关，默认开
   cloudEnabled: false,       // 云端副本，默认关
   savedToFileAt: null,       // 最近一次「保存备份文件」成功时间

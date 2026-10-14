@@ -74,9 +74,7 @@ export function statusInfo(state, t, lang) {
   }
   if (ui === 'failed') {
     const code = state?.lastError?.code;
-    const sub = code === 'NO_SPACE' ? t('dataBackup.errNoSpace')
-      : code === 'CLOUD_FAIL' ? t('dataBackup.errCloudFail')
-      : t('dataBackup.errWriteFail');
+    const sub = code === 'NO_SPACE' ? t('dataBackup.errNoSpace') : t('dataBackup.errWriteFail');
     return { tone, icon, title: t('dataBackup.statusFailedTitle'), sub, action: 'retry' };
   }
   return {

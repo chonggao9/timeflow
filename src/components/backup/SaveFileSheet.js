@@ -1,5 +1,5 @@
 // 保存备份文件弹层：文件卡 + 三个去向行（微信/QQ、手机文件、网盘）。
-// 去向点击回调由父级实现（阶段 2 占位提示，阶段 3 接 expo-sharing）。
+// 去向点击回调由父级实现（expo-sharing 系统分享面板）。
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';

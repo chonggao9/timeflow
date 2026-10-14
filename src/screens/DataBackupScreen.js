@@ -7,13 +7,17 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 import { useI18n } from '../i18n/LanguageContext';
 import { useTheme } from '../theme/ThemeContext';
 import { radius, shadow } from '../theme';
-import { listVersions } from '../backup/files';
+import { BACKUP_DIR, listVersions, readPackageFromUri, writeCacheFile } from '../backup/files';
+import { formatStamp } from '../backup/format';
 import { planPrune } from '../backup/plan';
-import { runBackup, getCurrentCounts } from '../backup/backup';
-import { useBackupState, updateBackupState, getBackupState } from '../backup/state';
+import { runBackup, getCurrentCounts, collectData } from '../backup/backup';
+import { buildCsv } from '../backup/csv';
+import { useBackupState, updateBackupState } from '../backup/state';
 import { clearAll } from '../storage/store';
 import HeroCard from '../components/backup/HeroCard';
 import VersionList from '../components/backup/VersionList';
@@ -42,6 +46,8 @@ export default function DataBackupScreen({ visible, initialAction, onClose }) {
   const [saveVer, setSaveVer] = useState(null);
   const [showImport, setShowImport] = useState(false);
   const [importPicked, setImportPicked] = useState(null);
+  const [importInvalid, setImportInvalid] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [showClear, setShowClear] = useState(false);
   const [clearBusy, setClearBusy] = useState(false);
   const [showCloud, setShowCloud] = useState(false);
@@ -84,8 +90,9 @@ export default function DataBackupScreen({ visible, initialAction, onClose }) {
     setRunning(false);
     await refresh();
     if (res.status === 'done') {
-      const s = await getBackupState();
-      show(s.cloudEnabled ? t('dataBackup.toastDoneCloud') : t('dataBackup.toastDone'));
+      // 本机备份成功是事实；云端失败如实提示（横幅/状态卡也会显示 CLOUD_FAIL）
+      if (res.cloud === 'fail') show(t('dataBackup.errCloudFail'));
+      else show(res.cloud === 'ok' ? t('dataBackup.toastDoneCloud') : t('dataBackup.toastDone'));
     } else if (res.status === 'skipped') {
       show(t('dataBackup.toastSame'));
     } else if (res.status === 'busy') {
@@ -126,12 +133,62 @@ export default function DataBackupScreen({ visible, initialAction, onClose }) {
     show(val ? t('dataBackup.toastAutoOn') : t('dataBackup.toastAutoOff'));
   };
 
-  // 阶段 3 占位提示：先收起弹层再弹 toast，避免 toast 被嵌套 Modal 挡住
-  const comingSoon = () => {
+  // 保存备份文件：三个去向都走系统分享面板（微信/QQ、文件、网盘由用户在面板里选）；
+  // 先收起弹层再动作，避免 toast 被嵌套 Modal 挡住。完成后记 savedToFileAt（chips/横幅联动）。
+  const handleSaveDest = async (dest, version) => {
     setSaveVer(null);
-    setShowImport(false);
-    setDetailVer(null);
-    show(t('dataBackup.toastComingSoon'));
+    try {
+      await Sharing.shareAsync(BACKUP_DIR + version.name, {
+        mimeType: 'application/json',
+        dialogTitle: t('save.title'),
+      });
+      await updateBackupState((s) => ({ ...s, savedToFileAt: Date.now() }));
+      show(t('save.toast', { dest: t(dest.labelKey) }));
+    } catch (e) {
+      show(t('dataBackup.shareFail'));
+    }
+  };
+
+  // 从文件导入：选 .json → 校验（无效文件行内红字提示，可重选）
+  const handlePickFile = async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        // 各文件管理器对 .json 的 MIME 上报不一致（常见 octet-stream），
+        // 故不收紧过滤，由 validatePackage 严格把关
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+      const asset = res?.assets?.[0];
+      if (!asset) return; // 用户取消
+      const pkg = await readPackageFromUri(asset.uri);
+      if (!pkg) {
+        setImportPicked(null);
+        setImportInvalid(true);
+        return;
+      }
+      setImportPicked({ pkg, name: asset.name || 'backup.json', size: asset.size || 0 });
+      setImportInvalid(false);
+    } catch (e) {
+      setImportPicked(null);
+      setImportInvalid(true);
+    }
+  };
+
+  // 导出为表格（真 CSV，UTF-8 BOM 保证 Excel 中文不乱码；文件名与备份共用时间戳口径）
+  const handleExportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const data = await collectData();
+      const now = new Date();
+      const csv = buildCsv(data, { lang, now });
+      const uri = await writeCacheFile(`timeflow-export-${formatStamp(now)}.csv`, `﻿${csv}`);
+      await Sharing.shareAsync(uri, { mimeType: 'text/csv', dialogTitle: t('dataBackup.exportCsv') });
+    } catch (e) {
+      show(t('dataBackup.exportFail'));
+    } finally {
+      setExporting(false);
+    }
   };
 
   // 横幅（互斥：failed > stale > ok-仅本机）
@@ -144,9 +201,7 @@ export default function DataBackupScreen({ visible, initialAction, onClose }) {
       tone: 'err',
       // 标题按错误类型区分：空间不足才说「存储空间不足」，其余用通用失败标题
       title: noSpace ? t('dataBackup.bannerFailedTitle') : t('dataBackup.statusFailedTitle'),
-      body: noSpace ? t('dataBackup.bannerFailedBody')
-        : state.lastError?.code === 'CLOUD_FAIL' ? t('dataBackup.errCloudFail')
-        : t('dataBackup.errWriteFail'),
+      body: noSpace ? t('dataBackup.bannerFailedBody') : t('dataBackup.errWriteFail'),
       action: versions.length ? { label: t('dataBackup.btnSaveFile'), fn: () => setSaveVer(versions[0]) } : null,
     };
   } else if (ui === 'stale') {
@@ -188,11 +243,15 @@ export default function DataBackupScreen({ visible, initialAction, onClose }) {
               tone={versions.length ? 'ok' : 'idle'}
               icon={versions.length ? 'checkmark-circle' : 'remove-circle'}
             />
-            <Chip
-              label={state.cloudEnabled ? t('dataBackup.chipCloudOk') : t('dataBackup.chipCloudOff')}
-              tone={state.cloudEnabled ? 'ok' : 'idle'}
-              icon={state.cloudEnabled ? 'cloud-done' : 'cloud-outline'}
-            />
+            {state.cloudEnabled ? (
+              state.lastCloudError ? (
+                <Chip label={t('dataBackup.chipCloudFail')} tone="warn" icon="cloud-offline" />
+              ) : (
+                <Chip label={t('dataBackup.chipCloudOk')} tone="ok" icon="cloud-done" />
+              )
+            ) : (
+              <Chip label={t('dataBackup.chipCloudOff')} tone="idle" icon="cloud-outline" />
+            )}
             {!!state.savedToFileAt && (
               <Chip label={t('dataBackup.chipSaved')} tone="ok" icon="folder-open" />
             )}
@@ -273,14 +332,14 @@ export default function DataBackupScreen({ visible, initialAction, onClose }) {
             <GroupRow
               icon="download-outline"
               label={t('dataBackup.importFile')}
-              onPress={() => { setImportPicked(null); setShowImport(true); }}
+              onPress={() => { setImportPicked(null); setImportInvalid(false); setShowImport(true); }}
               last={false}
             />
             <GroupRow
               icon="grid-outline"
               label={t('dataBackup.exportCsv')}
-              note={t('dataBackup.exportCsvNote')}
-              onPress={comingSoon}
+              note={exporting ? t('dataBackup.exporting') : t('dataBackup.exportCsvNote')}
+              onPress={handleExportCsv}
               last
             />
           </View>
@@ -348,14 +407,14 @@ export default function DataBackupScreen({ visible, initialAction, onClose }) {
           visible={!!saveVer}
           version={saveVer}
           onClose={() => setSaveVer(null)}
-          onPickDest={comingSoon}
+          onPickDest={handleSaveDest}
         />
         <ImportSheet
           visible={showImport}
           picked={importPicked}
-          invalid={false}
+          invalid={importInvalid}
           onClose={() => setShowImport(false)}
-          onPickFile={comingSoon}
+          onPickFile={handlePickFile}
           onProceed={(picked) => { setShowImport(false); setRestoreSrc({ pkg: picked.pkg, fromFile: true }); }}
         />
         <ClearConfirmModal
@@ -365,7 +424,15 @@ export default function DataBackupScreen({ visible, initialAction, onClose }) {
           onClose={() => setShowClear(false)}
           onConfirm={handleClearConfirm}
         />
-        <CloudCopyScreen visible={showCloud} onClose={() => setShowCloud(false)} onChanged={() => refresh().catch(() => {})} />
+        <CloudCopyScreen
+          visible={showCloud}
+          onClose={() => setShowCloud(false)}
+          onChanged={(ev) => {
+            refresh().catch(() => {});
+            if (ev === 'enabled') show(t('cloud.toastOn'));
+            else if (ev === 'disabled') show(t('cloud.toastOff'));
+          }}
+        />
         {toastNode}
       </View>
     </Modal>

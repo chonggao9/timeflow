@@ -46,6 +46,21 @@ export function planPrune(versions) {
   };
 }
 
+export const MAX_CLOUD = 3; // 云端保留最近份数
+
+/**
+ * 云端轮转决策：entries 为远端 timeflow/ 下「符合当前命名规范」的文件
+ * [{ name, at }]（调用方须先用 parseBackupFilename 过滤——旧版
+ * timeflow-backup-latest.json 等 legacy 文件天然不在列表中：不读取、不删除）。
+ * 超出 MAX_CLOUD 时从最旧的开始删。返回 [name]。
+ */
+export function planCloudPrune(entries) {
+  const list = (entries || []).filter((e) => e && e.name).sort((a, b) => a.at - b.at); // 旧 → 新
+  const overflow = list.length - MAX_CLOUD;
+  if (overflow <= 0) return [];
+  return list.slice(0, overflow).map((e) => e.name);
+}
+
 /**
  * 恢复预览：给定当前库与备份包各自的 id 集合，算出两种方式的条数。
  * - replaceOverwritten：「回到这个时间点」会被替换掉的现有记录数（当前有而备份没有）

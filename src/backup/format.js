@@ -22,11 +22,15 @@ export const PREF_KEYS = [
 
 const pad = (n) => String(n).padStart(2, '0');
 
+// 本地时间戳 YYYYMMDD-HHmm（备份文件名与 CSV 导出名共用，保证口径一致）
+export function formatStamp(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
 // 由 Date 生成本地时间文件名，如 timeflow-20261014-1015-auto-1248.json
 export function makeBackupFilename(kind, date, recordCount) {
-  const d = date instanceof Date ? date : new Date(date);
-  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
-  return `timeflow-${stamp}-${kind}-${Math.max(0, recordCount | 0)}.json`;
+  return `timeflow-${formatStamp(date)}-${kind}-${Math.max(0, recordCount | 0)}.json`;
 }
 
 const NAME_RE = /^timeflow-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})-(auto|manual|safe)-(\d+)\.json$/;
