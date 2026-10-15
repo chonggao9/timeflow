@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TimeFlow 桌面小组件 · UI 参考稿</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Outfit:wght@500;600;700&display=swap">
+<style>
+:root{
+  --cream:#FFFDFA; --ink:#2A211B; --sub:#6B5B50; --sub2:#7A6A5E;
+  --track:#F3E6DA; --chip:#F6EEE6; --bg:#E9DFD2;
+  --shadow:0 12px 28px rgba(95,62,32,.13),0 2px 4px rgba(95,62,32,.06);
+  --dshadow:0 12px 28px rgba(40,22,10,.35),0 2px 4px rgba(40,22,10,.2),inset 0 0 0 1px rgba(255,255,255,.06);
+  --g:#2DB37C; --gbtn:#17805A; --gsoft:#DCF3E8; --gdk:#4FD6A0;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans SC',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;border:0;padding:0;cursor:pointer;transition:transform .12s ease}
+button:active{transform:scale(.95)}
+.page{max-width:900px;margin:0 auto;padding:40px 20px 80px}
+h1{font-size:22px;margin:0 0 4px}
+.lead{margin:0 0 32px;color:var(--sub);font-size:14px}
+h2{font-size:16px;margin:40px 0 18px;display:flex;align-items:center;gap:10px}
+h2:before{content:"";width:10px;height:10px;border-radius:50%;background:var(--dot,#EE5A4F)}
+.grid{display:flex;flex-wrap:wrap;gap:26px 44px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:26px;width:358px}
+.row{display:flex;gap:18px}
+.item{display:flex;flex-direction:column;gap:10px}
+.lab{font-size:12px;font-weight:500;color:var(--sub)}
+
+.card{border-radius:28px;background:var(--cream);box-shadow:var(--shadow);position:relative}
+.dark{background:#241D19;color:#FBEFE4;box-shadow:var(--dshadow)}
+.w42{width:358px;height:168px}.w41{width:358px;height:80px}.w22{width:170px;height:168px}
+.num{font-family:'Outfit',sans-serif;font-variant-numeric:tabular-nums;font-weight:600;line-height:1}
+.svg{display:inline-flex}
+.svg svg{display:block}
+
+/* ---------- Pomodoro ---------- */
+.pomo{--ac:#EE5A4F;--btn:#D63B32;--tx:#C23128;--soft:#FDE6E1;--dk:#FF7A6E;--glow:rgba(214,59,50,.32)}
+.pomo .ringbox{position:relative;flex:none}
+.pomo .ring{display:block;transform:rotate(-90deg)}
+.pomo .trk{fill:none;stroke:var(--track);stroke-width:9}
+.pomo .fg{fill:none;stroke:var(--ac);stroke-width:9;stroke-linecap:round;stroke-dasharray:276.46;transition:stroke-dashoffset .9s linear,stroke .3s}
+.pomo .ringc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.pomo .mlabel{font-size:12px;font-weight:700;color:var(--tx)}
+.pomo .p42{display:flex;align-items:center;gap:16px;padding:18px}
+.pomo .rc{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.chips{display:flex;gap:6px}
+.chip{flex:1;height:32px;border-radius:16px;background:var(--chip);color:var(--sub);font-size:12px;font-weight:700}
+.chip.on[data-m=focus]{background:#FDE6E1;color:#C23128;box-shadow:inset 0 0 0 1.5px #EE5A4F}
+.chip.on[data-m=short]{background:#DCF3E8;color:#17805A;box-shadow:inset 0 0 0 1.5px #2DB37C}
+.chip.on[data-m=long]{background:#FBEACB;color:#8F5608;box-shadow:inset 0 0 0 1.5px #F0A030}
+.ttl{font-size:15px;font-weight:700;line-height:20px}
+.subrow{display:flex;align-items:center;gap:4px;font-size:12px;line-height:16px;color:var(--sub)}
+.dots{display:flex;gap:4px}
+.dot{width:7px;height:7px;border-radius:50%;background:#EBDCCD;display:block}
+.dot.done{background:#EE5A4F}.dot.cur{background:rgba(238,90,79,.35)}
+.dark .dot{background:#3A302A}.dark .dot.done{background:#FF7A6E}.dark .dot.cur{background:rgba(255,122,110,.45)}
+.ctrl{display:flex;align-items:center;gap:8px}
+.play{height:44px;padding:0 18px 0 14px;border-radius:22px;background:var(--btn);color:#fff;display:flex;align-items:center;gap:6px;font-size:14px;font-weight:700;box-shadow:0 6px 14px var(--glow)}
+.rst{width:44px;height:44px;border-radius:50%;background:var(--chip);color:var(--sub);display:flex;align-items:center;justify-content:center}
+.ic-pause{display:none}.running .ic-pause{display:inline-flex}.running .ic-play{display:none}
+.pomo .s41{display:flex;align-items:center;gap:16px;padding:0 16px 0 20px}
+.pomo .s41 .tb{width:78px;flex:none;display:flex;flex-direction:column;gap:3px}
+.pomo .s41 .tb .l{font-size:12px;font-weight:700;color:var(--tx)}
+.pomo .dark .tb .l{color:var(--dk)}
+.bar{flex:1;height:8px;border-radius:4px;background:var(--track);overflow:hidden}
+.bar i{display:block;height:8px;border-radius:4px;background:var(--ac);transition:width .9s linear,background .3s}
+.dark .bar{background:#3A302A}.dark .bar i{background:var(--dk)}
+.rbtn{width:48px;height:48px;border-radius:50%;background:var(--btn);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px var(--glow);flex:none}
+.dark .rbtn{background:var(--dk);color:#241D19;box-shadow:none}
+.cardbtn{display:flex;flex-direction:column;align-items:center;justify-content:space-between;color:var(--ink);width:170px;height:168px}
+.st{padding:4px 12px;border-radius:12px;background:var(--soft);color:var(--tx);font-size:12px;font-weight:700}
+.tomato{position:relative;width:88px;height:84px}
+.tomato .body{position:absolute;top:6px;left:0;width:88px;height:78px;overflow:hidden;border-radius:50% 50% 46% 46%/56% 56% 44% 44%;background:var(--soft);transition:background .3s}
+.tomato .fill{position:absolute;left:0;bottom:0;width:88px;background:linear-gradient(180deg,var(--ac),var(--btn));transition:height .9s linear}
+.tomato .gloss{position:absolute;top:12px;left:14px;width:16px;height:9px;border-radius:50%;background:rgba(255,255,255,.55);transform:rotate(-28deg)}
+.tomato .leaf{position:absolute;top:-1px;left:29px}
+.tomato .badge{position:absolute;top:28px;left:29px;width:30px;height:30px;border-radius:50%;background:rgba(255,253,250,.92);color:var(--btn);display:flex;align-items:center;justify-content:center}
+.running .tomato .badge{display:none}
+.statcard{padding:16px 16px 14px 18px;display:flex;flex-direction:column;justify-content:space-between}
+.bars{display:flex;align-items:flex-end;gap:5px}
+.bars .b{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bars .b i{display:block;width:100%;border-radius:4px;background:#EBD9C9;transition:height .4s ease}
+.bars .b.t i{background:#EE5A4F}
+.bars .b span{font-size:11px;line-height:12px;font-weight:500;color:var(--sub)}
+.bars .b.t span{font-weight:700;color:#C23128}
+
+/* ---------- Trip ---------- */
+.cta-wrap{position:relative;width:84px;height:84px}
+.pulse,.pulse2{position:absolute;inset:0;border-radius:50%;background:var(--g);animation:tfp 2s ease-out infinite}
+.pulse2{animation-delay:1s}
+@keyframes tfp{0%{transform:scale(1);opacity:.42}100%{transform:scale(1.6);opacity:0}}
+.alldone .pulse,.alldone .pulse2{display:none}
+.cta{position:relative;width:84px;height:84px;border-radius:50%;background:linear-gradient(160deg,#2DB37C,#17805A);color:#fff;box-shadow:0 8px 18px rgba(23,128,90,.34);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:15px;font-weight:700;line-height:1}
+.ic-ck{display:none}.alldone .ic-ck{display:inline-flex}.alldone .ic-pin{display:none}
+.t42{display:flex;gap:14px;padding:16px}
+.t42 .lc{width:104px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:space-between}
+.t42 .lc .cap{text-align:center;width:104px}
+.t42 .lc .cap b{display:block;font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t42 .lc .cap span{font-size:11px;line-height:14px;color:var(--sub)}
+.t42 .rc{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.hd{display:flex;align-items:baseline;justify-content:space-between}
+.hd b{font-size:14px;line-height:20px}.hd span{font-size:12px;color:var(--sub)}
+.tl{position:relative;height:104px}
+.tl .ln{position:absolute;left:8px;top:13px;width:2px;height:78px;border-radius:1px;background:#EBDCCD}
+.tl .lf{position:absolute;left:8px;top:13px;width:2px;border-radius:1px;background:var(--g);transition:height .5s ease}
+.srow{position:relative;height:26px;display:flex;align-items:center;gap:10px}
+.sdot{width:18px;height:18px;flex:none;border-radius:50%;background:var(--cream);border:2px solid #D8C9BB;color:#fff;display:flex;align-items:center;justify-content:center}
+.srow.done .sdot{background:var(--g);border-color:var(--g)}
+.srow.cur .sdot{border-color:var(--g)}
+.srow.cur .sdot:after{content:"";width:6px;height:6px;border-radius:50%;background:var(--g)}
+.srow .nm{flex:1;min-width:0;font-size:13px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500;color:var(--sub2)}
+.srow.done .nm{color:var(--sub)}.srow.cur .nm{color:var(--ink);font-weight:700}
+.srow .tm{font-family:'Outfit',sans-serif;font-variant-numeric:tabular-nums;font-size:12px;font-weight:500;color:var(--sub2)}
+.srow.done .tm,.srow.cur .tm{color:var(--gbtn);font-weight:700}
+.nx{display:flex;align-items:center;gap:12px;padding:0 16px 0 18px}
+.nx .ico{width:44px;height:44px;flex:none;border-radius:50%;background:var(--gsoft);color:var(--gbtn);display:flex;align-items:center;justify-content:center}
+.nx .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.nx .tx b{font-size:15px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nx .tx span{font-size:12px;line-height:16px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nx .go{height:44px;min-width:70px;padding:0 18px;border-radius:22px;background:var(--gbtn);color:#fff;font-size:14px;font-weight:700;box-shadow:0 6px 14px rgba(23,128,90,.3)}
+.wk{display:flex;align-items:center;gap:14px;padding:0 18px}
+.wk .sl{width:70px;flex:none}
+.wk .sl .n{display:flex;align-items:baseline;gap:3px}
+.wk .sl small{display:block;font-size:12px;line-height:16px;color:#D9C9BA;margin-top:3px}
+.wk .days{flex:1;display:flex;justify-content:space-between}
+.wd{display:flex;flex-direction:column;align-items:center;gap:4px}
+.wd i{width:26px;height:26px;border-radius:50%;border:2px solid #3A302A;color:#1B1512;display:flex;align-items:center;justify-content:center}
+.wd.on i{background:var(--gdk);border-color:var(--gdk)}
+.wd.today i{border-color:var(--gdk)}
+.wd span{font-size:11px;line-height:12px;font-weight:500;color:#D9C9BA}
+.wd.today span{font-weight:700;color:var(--gdk)}
+.ctab{padding:16px 8px 14px}
+.map{width:154px;height:108px;border-radius:21px;background:#E6F2EA;position:relative;overflow:hidden}
+.map svg{position:absolute;inset:0}
+.seg{position:absolute;height:0;border-top:3px dashed #9DBBA6;transform-origin:0 50%;transition:border-color .4s}
+.seg.done{border-top-style:solid;border-top-color:var(--g)}
+.pin{position:absolute;width:22px;height:22px}
+.pin i{position:relative;display:flex;width:22px;height:22px;border-radius:50%;background:var(--cream);border:3px solid #CBBFB3;color:#fff;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(60,40,20,.2)}
+.pin.done i{background:var(--g);border-color:var(--cream)}
+.pin.cur i{border-color:var(--g)}
+.pin .pulse{display:block}
+.mapft{display:flex;align-items:center;justify-content:space-between;padding:0 8px 4px 10px}
+.mapft b{font-size:13px}.mapft span{font-size:11px;color:var(--sub)}
+.radar{position:relative;width:112px;height:112px}
+.radar .rg{position:absolute;border-radius:50%;border:1.5px solid #EBDCCD}
+.radar .fence{position:absolute;top:38px;left:38px;width:36px;height:36px;border-radius:50%;border:2px solid #CBBFB3;transition:background .4s,border-color .4s}
+.radar.in .fence{background:rgba(45,179,124,.22);border-color:var(--g)}
+.radar .sw{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,rgba(45,179,124,0) 0deg,rgba(45,179,124,0) 270deg,rgba(45,179,124,.3) 360deg);animation:sw 3.6s linear infinite}
+@keyframes sw{to{transform:rotate(360deg)}}
+.radar .me{position:absolute;top:51px;left:51px;width:10px;height:10px;border-radius:50%;background:var(--ink);border:2px solid var(--cream)}
+.radar .tg{position:absolute;width:12px;height:12px;border-radius:50%;background:#EE5A4F;border:2px solid var(--cream);box-shadow:0 1px 4px rgba(60,40,20,.3);transition:left .5s ease,top .5s ease,background .3s}
+.radar.in .tg{background:var(--g)}
+.rfoot{width:142px;display:flex;align-items:center;justify-content:space-between}
+.rchip{padding:3px 10px;border-radius:11px;font-size:12px;font-weight:700;background:var(--chip);color:var(--sub)}
+.radar-wrap.in .rchip{background:var(--gsoft);color:var(--gbtn)}
+.heat{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.heat i{height:14px;border-radius:4px;background:#3A302A;display:block}
+.heat i.l1{background:#1F7A57}.heat i.l2{background:var(--gdk)}
+.heat i.today{box-shadow:0 0 0 1.5px #FBEFE4}
+.modebar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 6px}
+.modebar span{font-size:13px;color:var(--sub);margin-right:4px}
+.modebar button{padding:8px 14px;border-radius:18px;background:#F4EBE1;font-size:13px;font-weight:500;color:var(--sub);min-height:40px}
+.modebar button.on{background:var(--ink);color:#FBEFE4}
+.hint{margin:0 0 18px;font-size:12px;line-height:19px;color:var(--sub);max-width:760px}
+.num small{font-size:.5em;font-weight:500;margin-left:2px}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>TimeFlow 桌面小组件 · UI 参考稿</h1>
+<p class="lead">两套组件：番茄专注、行程打卡。下方所有组件都可点击交互；尺寸为手机桌面 1 格 ≈ 88×84 dp 的比例（4×2 = 358×168，2×2 = 170×168，4×1 = 358×80）。</p>
+
+<!-- ============ 番茄专注 ============ -->
+<h2 style="--dot:#EE5A4F">番茄专注</h2>
+<div class="modebar" id="timeMode"><span>倒计时显示</span><button class="on" data-tm="min">分钟级 · 桌面组件实际落地</button><button data-tm="sec">秒级 · 仅 App 内可实现</button></div>
+<p class="hint">Android 桌面组件不适合每秒刷新（耗电，系统也会限制）。落地版运行中显示"剩余几分钟 + 几点结束"，每整分钟更新一次；圆环、进度条、番茄也跟着每分钟动一格。</p>
+<div class="grid pomo" id="pomo">
+<div class="col">
+  <div class="item"><div class="lab">4×2 · 完整版</div>
+    <div class="card w42 p42">
+      <div class="ringbox"><svg class="ring" width="120" height="120" viewBox="0 0 100 100"><circle class="trk" cx="50" cy="50" r="44"></circle><circle class="fg" data-ring cx="50" cy="50" r="44"></circle></svg>
+        <div class="ringc"><div class="num" style="font-size:29px" data-time></div><div class="mlabel" data-label></div></div></div>
+      <div class="rc">
+        <div class="chips"><button class="chip" data-m="focus" data-act="mode">专注</button><button class="chip" data-m="short" data-act="mode">短休</button><button class="chip" data-m="long" data-act="mode">长休</button></div>
+        <div><div class="ttl" data-title></div><div class="subrow"><span class="dots" data-dots></span><span data-sub style="margin-left:3px"></span></div></div>
+        <div class="ctrl"><button class="play" data-act="toggle" aria-label="开始或暂停"><span class="pi" data-s="18"></span><span data-playlabel></span></button><button class="rst" data-act="reset" aria-label="重置"><span class="svg" data-svg="reset" data-s="20"></span></button></div>
+      </div>
+    </div>
+  </div>
+  <div class="item"><div class="lab">4×1 · 迷你条</div>
+    <div class="card w41 s41">
+      <div class="tb"><div class="num" style="font-size:28px" data-time></div><div class="l"><span data-label></span> · <span data-status></span></div></div>
+      <div class="bar"><i data-bar></i></div>
+      <button class="rbtn" data-act="toggle" aria-label="开始或暂停"><span class="pi" data-s="20"></span></button>
+    </div>
+  </div>
+  <div class="item"><div class="lab">4×1 · 深色迷你条</div>
+    <div class="card dark w41 s41">
+      <div class="tb"><div class="num" style="font-size:28px" data-time></div><div class="l"><span data-label></span> · <span data-status></span></div></div>
+      <div class="bar"><i data-bar></i></div>
+      <button class="rbtn" data-act="toggle" aria-label="开始或暂停"><span class="pi" data-s="20"></span></button>
+    </div>
+  </div>
+</div>
+<div class="col">
+  <div class="row">
+    <div class="item"><div class="lab">2×2 · 圆环</div>
+      <button class="card cardbtn" data-act="toggle" aria-label="点击开始或暂停" style="padding:14px 0">
+        <div class="ringbox"><svg class="ring" width="112" height="112" viewBox="0 0 100 100"><circle class="trk" cx="50" cy="50" r="44"></circle><circle class="fg" data-ring cx="50" cy="50" r="44"></circle></svg>
+          <div class="ringc" style="gap:4px"><div class="num" style="font-size:26px" data-time></div><div style="color:var(--btn);display:flex"><span class="pi" data-s="16"></span></div></div></div>
+        <div class="st"><span data-label></span> · <span data-status></span></div>
+      </button></div>
+    <div class="item"><div class="lab">2×2 · 番茄</div>
+      <button class="card cardbtn" data-act="toggle" aria-label="点击开始或暂停" style="padding:16px 0 14px">
+        <div style="font-size:12px;font-weight:700;color:var(--sub)" data-tomato></div>
+        <div class="tomato"><div class="body"><div class="fill" data-fill></div><div class="gloss"></div></div>
+          <svg class="leaf" width="30" height="15" viewBox="0 0 40 20"><path d="M20 18C12 18 6 12 4 4c8 0 14 4 16 8 2-4 8-8 16-8-2 8-8 14-16 14z" fill="#3E9B5F"/></svg>
+          <div class="badge"><span class="svg" data-svg="play" data-s="14"></span></div></div>
+        <div class="num" style="font-size:26px" data-time></div>
+      </button></div>
+  </div>
+  <div class="row">
+    <div class="item"><div class="lab">2×2 · 深色</div>
+      <div class="card dark w22" style="padding:16px 14px 14px 18px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#D9C9BA"><i style="width:8px;height:8px;border-radius:50%;background:var(--dk);display:block"></i><span><span data-label></span> · <span data-status></span></span></div>
+        <div class="num" style="font-size:46px;letter-spacing:-.01em" data-time></div>
+        <div style="display:flex;align-items:center;justify-content:space-between"><span class="dots" data-dots></span>
+          <button class="rbtn" style="width:44px;height:44px" data-act="toggle" aria-label="开始或暂停"><span class="pi" data-s="18"></span></button></div>
+      </div></div>
+    <div class="item"><div class="lab">2×2 · 今日统计</div>
+      <div class="card w22 statcard">
+        <div><div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:4px">今日专注</div>
+          <div style="display:flex;align-items:baseline;gap:4px"><span class="num" style="font-size:38px" data-today></span><span style="font-size:12px;font-weight:500;color:var(--sub)">分钟</span></div></div>
+        <div class="bars" data-bars></div>
+      </div></div>
+  </div>
+</div>
+</div>
+
+<!-- ============ 行程打卡 ============ -->
+<h2 style="--dot:#2DB37C">行程打卡</h2>
+<div class="grid" id="trip">
+<div class="col">
+  <div class="item"><div class="lab">4×2 · 今日行程</div>
+    <div class="card w42 t42">
+      <div class="lc">
+        <div class="cta-wrap" style="margin-top:4px"><div class="pulse"></div><div class="pulse2"></div>
+          <button class="cta" data-act="checkin" data-aria aria-label="打卡"><span class="svg ic-pin" data-svg="pin" data-s="24"></span><span class="svg ic-ck" data-svg="check" data-s="24" data-w="3"></span><span data-ctaword></span></button></div>
+        <div class="cap"><b data-next></b><span data-ctasub></span></div>
+      </div>
+      <div class="rc">
+        <div class="hd"><b>今日行程</b><span><span data-count></span>/4 · 周三</span></div>
+        <div class="tl"><div class="ln"></div><div class="lf" data-line></div><div data-rows></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="item"><div class="lab">4×1 · 下一站</div>
+    <div class="card w41 nx">
+      <div class="ico"><span class="svg" data-svg="pin" data-s="22"></span></div>
+      <div class="tx"><b data-slimtitle></b><span data-slimsub></span></div>
+      <button class="go" data-act="checkin" data-slimbtn></button>
+    </div>
+  </div>
+  <div class="item"><div class="lab">4×1 · 深色 · 本周连续</div>
+    <div class="card dark w41 wk">
+      <div class="sl"><div class="n"><span class="num" style="font-size:32px" data-streak></span><span style="font-size:12px;font-weight:500">天</span></div><small>连续打卡</small></div>
+      <div class="days" data-week></div>
+    </div>
+  </div>
+</div>
+<div class="col">
+  <div class="row">
+    <div class="item"><div class="lab">2×2 · 一键打卡</div>
+      <button class="card cardbtn ctab" data-act="checkin" aria-label="打卡">
+        <div class="cta-wrap"><div class="pulse"></div><div class="pulse2"></div>
+          <div class="cta"><span class="svg ic-pin" data-svg="pin" data-s="24"></span><span class="svg ic-ck" data-svg="check" data-s="24" data-w="3"></span><span data-ctaword></span></div></div>
+        <div style="text-align:center"><div style="font-size:13px;font-weight:700;line-height:18px" data-next></div><div style="font-size:11px;line-height:14px;color:var(--sub)" data-ctasub></div></div>
+      </button></div>
+    <div class="item"><div class="lab">2×2 · 足迹地图</div>
+      <div class="card w22" style="padding:8px;display:flex;flex-direction:column;justify-content:space-between">
+        <div class="map">
+          <svg width="154" height="108" viewBox="0 0 154 108"><rect x="98" y="8" width="44" height="26" rx="10" fill="#D3E9D8"/><path d="M-4 92L52 72L98 100L160 80" fill="none" stroke="#FFFDFA" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M44 -4L58 44L36 112" fill="none" stroke="#FFFDFA" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M-4 30L70 20L160 52" fill="none" stroke="#FFFDFA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div data-map></div>
+        </div>
+        <div class="mapft"><b>已打卡 <span data-count></span>/4</b><span>今日足迹</span></div>
+      </div></div>
+  </div>
+  <div class="row">
+    <div class="item radar-wrap" id="radarWrap"><div class="lab">2×2 · 定位雷达（点击模拟靠近）</div>
+      <button class="card cardbtn" data-act="nearer" aria-label="模拟靠近目的地" style="padding:14px 0">
+        <div class="radar" id="radar">
+          <div class="rg" style="inset:0"></div><div class="rg" style="inset:19px"></div><div class="fence"></div><div class="sw"></div><div class="me"></div><div class="tg" id="tg"></div>
+        </div>
+        <div class="rfoot"><span class="num" style="font-size:16px" id="dist"></span><span class="rchip" id="rchip"></span></div>
+      </button></div>
+    <div class="item"><div class="lab">2×2 · 深色 · 打卡热力</div>
+      <div class="card dark w22" style="padding:16px 18px 14px;display:flex;flex-direction:column;justify-content:space-between">
+        <div><div style="font-size:12px;font-weight:700;color:#D9C9BA;margin-bottom:2px">连续打卡</div>
+          <div style="display:flex;align-items:baseline;gap:4px"><span class="num" style="font-size:52px" data-streak></span><span style="font-size:14px;font-weight:500">天</span></div></div>
+        <div class="heat" data-heat></div>
+      </div></div>
+  </div>
+</div>
+</div>
+</div>
+
+<script>
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const SV = {
+  play: '<svg viewBox="0 0 24 24" width="S" height="S"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="S" height="S"><rect x="6" y="5" width="4.5" height="14" rx="1.5" fill="currentColor"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.5" fill="currentColor"/></svg>',
+  reset: '<svg viewBox="0 0 24 24" width="S" height="S" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>',
+  check: '<svg viewBox="0 0 24 24" width="S" height="S" fill="none" stroke="currentColor" stroke-width="W" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" width="S" height="S" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>'
+};
+const svg = (k, s, w = 2) => SV[k].replace(/S"/g, s + '"').replace('W"', w + '"');
+$$('[data-svg]').forEach(el => { el.innerHTML = svg(el.dataset.svg, el.dataset.s, el.dataset.w || 2); });
+$$('.pi').forEach(el => { el.style.display = 'inline-flex'; el.innerHTML = '<span class="svg ic-play">' + svg('play', el.dataset.s) + '</span><span class="svg ic-pause">' + svg('pause', el.dataset.s) + '</span>'; });
+const setAll = (root, sel, txt) => $$(sel, root).forEach(e => { e.textContent = txt; });
+
+/* ================= 番茄专注 ================= */
+(function () {
+  const root = document.getElementById('pomo');
+  const DUR = { focus: 1500, short: 300, long: 900 };
+  const TH = {
+    focus: { ac: '#EE5A4F', btn: '#D63B32', tx: '#C23128', soft: '#FDE6E1', dk: '#FF7A6E', glow: 'rgba(214,59,50,.32)', label: '专注' },
+    short: { ac: '#2DB37C', btn: '#17805A', tx: '#17805A', soft: '#DCF3E8', dk: '#4FD6A0', glow: 'rgba(23,128,90,.30)', label: '短休' },
+    long: { ac: '#F0A030', btn: '#B06A0C', tx: '#8F5608', soft: '#FBEACB', dk: '#F5B85A', glow: 'rgba(176,106,12,.30)', label: '长休' }
+  };
+  const S = { mode: 'focus', rem: 1122, running: false, done: 2 };
+  let minuteMode = true;
+  $$('[data-dots]', root).forEach(e => { e.innerHTML = '<i class="dot"></i>'.repeat(4); });
+  const past = [90, 50, 120, 70, 100, 130], lab = ['四', '五', '六', '日', '一', '二', '今'];
+  $$('[data-bars]', root).forEach(e => {
+    e.innerHTML = lab.map((l, i) => '<div class="b' + (i === 6 ? ' t' : '') + '"><i style="height:' + (i < 6 ? Math.round(past[i] / 150 * 34) : 4) + 'px"></i><span>' + l + '</span></div>').join('');
+  });
+
+  function render() {
+    const T = TH[S.mode], total = DUR[S.mode], remShown = minuteMode ? Math.ceil(S.rem / 60) * 60 : S.rem, frac = remShown / total, fresh = S.rem === total;
+    Object.entries({ ac: T.ac, btn: T.btn, tx: T.tx, soft: T.soft, dk: T.dk, glow: T.glow }).forEach(([k, v]) => root.style.setProperty('--' + k, v));
+    root.classList.toggle('running', S.running);
+    const t = String(Math.floor(S.rem / 60)).padStart(2, '0') + ':' + String(S.rem % 60).padStart(2, '0');
+    const todayMin = S.done * 25 + (S.mode === 'focus' ? Math.floor((total - S.rem) / 60) : 0);
+    const mins = Math.ceil(S.rem / 60);
+    $$('[data-time]', root).forEach(e => { e.innerHTML = minuteMode ? mins + '<small>分</small>' : t; });
+    setAll(root, '[data-label]', T.label);
+    setAll(root, '[data-status]', S.running ? (S.mode === 'focus' ? '专注中' : '休息中') : fresh ? '待开始' : '已暂停');
+    setAll(root, '[data-playlabel]', S.running ? '暂停' : fresh ? '开始' : '继续');
+    setAll(root, '[data-title]', S.mode === 'focus' ? '深度工作' : S.mode === 'short' ? '小憩一下' : '好好休息');
+    const endAt = new Date(Date.now() + S.rem * 1000);
+    const endTxt = String(endAt.getHours()).padStart(2, '0') + ':' + String(endAt.getMinutes()).padStart(2, '0');
+    setAll(root, '[data-sub]', S.mode === 'focus' ? (S.running && minuteMode ? '第 ' + (S.done + 1) + ' 个 · ' + endTxt + ' 结束' : '第 ' + (S.done + 1) + ' 个番茄') : '已完成 ' + S.done + ' 个');
+    setAll(root, '[data-tomato]', S.mode === 'focus' ? '第 ' + (S.done + 1) + ' 个番茄' : '休息时间');
+    setAll(root, '[data-today]', todayMin);
+    $$('[data-ring]', root).forEach(e => { e.style.strokeDashoffset = (276.46 * (1 - frac)).toFixed(2); });
+    $$('[data-bar]', root).forEach(e => { e.style.width = ((1 - frac) * 100).toFixed(1) + '%'; });
+    $$('[data-fill]', root).forEach(e => { e.style.height = ((1 - frac) * 100).toFixed(1) + '%'; });
+    $$('.chip', root).forEach(e => e.classList.toggle('on', e.dataset.m === S.mode));
+    const base = S.done % 4;
+    $$('[data-dots]', root).forEach(g => $$('.dot', g).forEach((d, i) => {
+      d.classList.toggle('done', i < base);
+      d.classList.toggle('cur', i === base && S.mode === 'focus');
+    }));
+    $$('.bars .b.t i', root).forEach(e => { e.style.height = Math.max(4, Math.min(34, Math.round(todayMin / 150 * 34))) + 'px'; });
+  }
+  function tick() {
+    if (!S.running) return;
+    if (S.rem > 1) S.rem--;
+    else if (S.mode === 'focus') {
+      S.done++; S.mode = S.done % 4 === 0 ? 'long' : 'short'; S.rem = DUR[S.mode]; S.running = false;
+    } else { S.mode = 'focus'; S.rem = DUR.focus; S.running = false; }
+    render();
+  }
+  root.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const a = b.dataset.act;
+    if (a === 'toggle') S.running = !S.running;
+    if (a === 'reset') { S.rem = DUR[S.mode]; S.running = false; }
+    if (a === 'mode') { S.mode = b.dataset.m; S.rem = DUR[S.mode]; S.running = false; }
+    render();
+  });
+  document.getElementById('timeMode').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    minuteMode = b.dataset.tm === 'min';
+    $$('#timeMode button').forEach(x => x.classList.toggle('on', x === b));
+    render();
+  });
+  setInterval(tick, 1000);
+  render();
+})();
+
+/* ================= 行程打卡 ================= */
+(function () {
+  const root = document.getElementById('trip');
+  const PLAN = [{ n: '到达公司', p: '09:00' }, { n: '老街面馆午餐', p: '12:30' }, { n: '健身房', p: '18:30' }, { n: '回家', p: '21:00' }];
+  const S = { done: 1, times: ['09:02', null, null, null], just: null, dist: 270 };
+  const XY = [{ x: 26, y: 78 }, { x: 62, y: 36 }, { x: 104, y: 66 }, { x: 130, y: 26 }];
+  let jt;
+  const now = () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+
+  function render() {
+    const can = S.done < 4, next = PLAN[Math.min(S.done, 3)];
+    root.classList.toggle('alldone', !can);
+    setAll(root, '[data-ctaword]', can ? '打卡' : '完成');
+    setAll(root, '[data-next]', can ? next.n : '行程完成');
+    setAll(root, '[data-ctasub]', S.just ? '已打卡 ' + S.just : can ? '计划 ' + next.p : '轻触重来');
+    setAll(root, '[data-count]', S.done);
+    setAll(root, '[data-slimtitle]', can ? '下一站 · ' + next.n : '今日行程已完成');
+    setAll(root, '[data-slimsub]', S.just ? '已打卡 ' + S.just : can ? '距离 ' + S.dist + ' m · 计划 ' + next.p : '共打卡 4 次，真棒');
+    setAll(root, '[data-slimbtn]', can ? '打卡' : '重来');
+    setAll(root, '[data-streak]', 11 + (S.done > 0 ? 1 : 0));
+    $$('[data-aria]', root).forEach(e => e.setAttribute('aria-label', can ? '打卡：' + next.n : '行程已完成，点击重来'));
+    $$('[data-line]', root).forEach(e => { e.style.height = Math.min(S.done, 3) * 26 + 'px'; });
+
+    $$('[data-rows]', root).forEach(el => {
+      el.innerHTML = PLAN.map((p, i) => {
+        const st = i < S.done ? 'done' : i === S.done ? 'cur' : '';
+        const tm = i < S.done ? S.times[i] : i === S.done ? '待打卡' : p.p;
+        return '<div class="srow ' + st + '"><div class="sdot">' + (st === 'done' ? svg('check', 10, 4) : '') + '</div><div class="nm">' + p.n + '</div><div class="tm">' + tm + '</div></div>';
+      }).join('');
+    });
+
+    const lab = ['一', '二', '三', '四', '五', '六', '日'];
+    $$('[data-week]', root).forEach(el => {
+      el.innerHTML = lab.map((l, i) => {
+        const on = i < 2 || (i === 2 && S.done > 0);
+        return '<div class="wd' + (on ? ' on' : '') + (i === 2 ? ' today' : '') + '"><i>' + (on ? svg('check', 12, 4) : '') + '</i><span>' + (i === 2 ? '今' : l) + '</span></div>';
+      }).join('');
+    });
+
+    const base = [1, 0, 2, 2, 1, 0, 2, 2, 1, 2, 2, 1, 2, 2, 2, 1, 2, 2, 1, 2];
+    $$('[data-heat]', root).forEach(el => {
+      el.innerHTML = base.map(v => '<i class="l' + v + '"></i>').join('') + '<i class="today' + (S.done > 0 ? ' l2' : '') + '"></i>';
+    });
+
+    $$('[data-map]', root).forEach(el => {
+      let h = '';
+      for (let i = 0; i < 3; i++) {
+        const a = XY[i], b = XY[i + 1], dx = b.x - a.x, dy = b.y - a.y;
+        h += '<div class="seg' + (S.done > i + 1 ? ' done' : '') + '" style="left:' + a.x + 'px;top:' + (a.y - 1.5) + 'px;width:' + Math.round(Math.hypot(dx, dy)) + 'px;transform:rotate(' + (Math.atan2(dy, dx) * 180 / Math.PI).toFixed(1) + 'deg)"></div>';
+      }
+      XY.forEach((q, i) => {
+        const st = i < S.done ? 'done' : i === S.done ? 'cur' : '';
+        h += '<div class="pin ' + st + '" style="left:' + (q.x - 11) + 'px;top:' + (q.y - 11) + 'px">' + (st === 'cur' ? '<div class="pulse"></div>' : '') + '<i>' + (st === 'done' ? svg('check', 10, 4) : '') + '</i></div>';
+      });
+      el.innerHTML = h;
+    });
+
+    const r = Math.min(52, S.dist / 400 * 52), inr = S.dist <= 140;
+    document.getElementById('radarWrap').classList.toggle('in', inr);
+    document.getElementById('radar').classList.toggle('in', inr);
+    document.getElementById('dist').textContent = S.dist + ' m';
+    document.getElementById('rchip').textContent = inr ? '可打卡' : '靠近中';
+    const tg = document.getElementById('tg');
+    tg.style.left = (56 + r * 0.77 - 6).toFixed(1) + 'px';
+    tg.style.top = (56 - r * 0.64 - 6).toFixed(1) + 'px';
+  }
+  root.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    if (b.dataset.act === 'nearer') S.dist = S.dist <= 90 ? 360 : S.dist - 90;
+    if (b.dataset.act === 'checkin') {
+      if (S.done >= 4) { S.done = 1; S.times = ['09:02', null, null, null]; S.just = null; }
+      else {
+        const t = now(); S.times[S.done] = t; S.done++; S.just = t;
+        clearTimeout(jt); jt = setTimeout(() => { S.just = null; render(); }, 1800);
+      }
+    }
+    render();
+  });
+  render();
+})();
+</script>
+</body>
+</html>

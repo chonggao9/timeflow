@@ -5,8 +5,10 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "audit": "node scripts/audit_code.js && node scripts/check_i18n.js && node scripts/test_backup.js",
+    "audit": "node scripts/audit_code.js && node scripts/check_i18n.js && node scripts/test_backup.js && node scripts/test_pomodoro.js && node scripts/test_widget_pure.js",
     "test:backup": "node scripts/test_backup.js",
+    "test:pomodoro": "node scripts/test_pomodoro.js",
+    "test:widget": "node scripts/test_widget_pure.js",
     "check:i18n": "node scripts/check_i18n.js",
     "release": "node scripts/release.js",
     "build:local": "node scripts/build_local.js",
