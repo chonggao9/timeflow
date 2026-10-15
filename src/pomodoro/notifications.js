@@ -54,26 +54,32 @@ export async function scheduleEndNotification(state, texts) {
   }
 }
 
-export async function cancelEndNotification(state) {
+async function cancelById(id) {
   try {
-    if (state && state.notifId) {
-      await Notifications.cancelScheduledNotificationAsync(state.notifId);
-    }
+    if (id) await Notifications.cancelScheduledNotificationAsync(id);
   } catch (e) {
     /* 静默 */
   }
 }
 
+export async function cancelEndNotification(state) {
+  await cancelById(state && state.notifId);
+}
+
 // 对账：running 且 endAt 在未来 → 确保有排期（notifId 缺失则补排，兜住 headless 排期失败/OEM 清理）；
 // 非 running → 取消残留排期。返回带最新 notifId 的 state（调用方负责落盘）。
-export async function syncNotifications(state, texts) {
+// prev = 变换前的旧 state：engine 的 pause/reset/switchMode 会把 notifId 清成 null，
+// 取消残留排期必须用旧 state 上的 id（否则暂停/切模式后旧结束通知仍会在 endAt 弹出）。
+export async function syncNotifications(state, texts, prev = null) {
+  const staleId = prev && prev.notifId && prev.notifId !== state.notifId ? prev.notifId : null;
+  if (staleId) await cancelById(staleId);
   if (state.running && state.endAt && state.endAt > Date.now()) {
     if (state.notifId) return state;
     const notifId = await scheduleEndNotification(state, texts);
     return notifId ? { ...state, notifId } : state;
   }
   if (state.notifId) {
-    await cancelEndNotification(state);
+    await cancelById(state.notifId);
     return { ...state, notifId: null };
   }
   return state;

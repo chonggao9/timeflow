@@ -1,0 +1,264 @@
+// 行程打卡组件 V2（设计稿「行程打卡」节，足迹模式——已决策取消计划站点）：
+// 时间轴 = 今日已打卡记录，最新一条为「当前」，无「未到」站、无「4 站完成」态。
+// 打卡走 src/services/quickCheckIn.js（与 App 首页「一键打卡」同一函数，headless 安全）。
+import { FlexWidget, TextWidget, SvgWidget } from 'react-native-android-widget';
+import { iconSvg } from '../svg';
+import { RADIUS_WIDGET } from '../widgetTheme';
+
+export const TRAVEL_DEEP_LINK = 'timeflow://checkin';
+
+// 84dp 圆形打卡按钮（设计稿为渐变，组件端用纯色 #17805A：白字对比度 4.92:1 达标）
+function CtaCircle({ strings, pal, size = 84 }) {
+  return (
+    <FlexWidget
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: pal.btn,
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <SvgWidget
+        svg={iconSvg('pin', { size: 24, color: pal.btnText })}
+        style={{ width: 24, height: 24 }}
+      />
+      <TextWidget
+        text={strings.checkinWord}
+        style={{ fontSize: 15, fontWeight: '700', color: pal.btnText, marginTop: 4 }}
+      />
+    </FlexWidget>
+  );
+}
+
+// 时间轴单行：左（站点圆点 + 连接线段）+ 地名 + 时刻。last 行不画连接线。
+function TimelineRow({ row, strings, pal, last }) {
+  return (
+    <FlexWidget style={{ height: 26, flexDirection: 'row', width: 'match_parent' }}>
+      <FlexWidget style={{ width: 18, height: 26, flexDirection: 'column', alignItems: 'center' }}>
+        {row.cur ? (
+          <FlexWidget
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: 9,
+              backgroundColor: pal.bg,
+              borderWidth: 2,
+              borderColor: pal.accent,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <FlexWidget style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: pal.accent }} />
+          </FlexWidget>
+        ) : (
+          <FlexWidget
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: 9,
+              backgroundColor: pal.accent,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <SvgWidget
+              svg={iconSvg('check', { size: 10, color: pal.bg })}
+              style={{ width: 10, height: 10 }}
+            />
+          </FlexWidget>
+        )}
+        {!last && <FlexWidget style={{ width: 2, flex: 1, backgroundColor: pal.accent }} />}
+      </FlexWidget>
+      <TextWidget
+        text={row.name}
+        maxLines={1}
+        truncate="END"
+        style={{
+          flex: 1,
+          fontSize: 13,
+          fontWeight: row.cur ? '700' : '500',
+          color: row.cur ? pal.textPrimary : pal.textSecondary,
+          marginLeft: 10,
+          alignSelf: 'center',
+        }}
+      />
+      <TextWidget
+        text={row.time}
+        style={{ fontSize: 12, fontWeight: '700', color: pal.chipText, alignSelf: 'center' }}
+      />
+    </FlexWidget>
+  );
+}
+
+// 4×2 今日行程：左（打卡圆钮 + 最近一站说明）+ 右（标题行 + 足迹时间轴）
+export function TravelWidget4x2({ timeline, strings, pal }) {
+  const capMain = timeline.empty ? strings.todayTrip : timeline.latestName;
+  const capSub = timeline.empty
+    ? strings.emptyCtaSub
+    : strings.justChecked.replace('{t}', timeline.latestTime);
+  return (
+    <FlexWidget
+      clickAction="OPEN_URI"
+      clickActionData={{ uri: TRAVEL_DEEP_LINK }}
+      style={{
+        height: 'match_parent',
+        width: 'match_parent',
+        backgroundColor: pal.bg,
+        borderRadius: RADIUS_WIDGET,
+        flexDirection: 'row',
+        padding: 16,
+      }}
+    >
+      {/* 左列：打卡 CTA + 说明 */}
+      <FlexWidget
+        style={{ width: 104, flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <FlexWidget clickAction="checkIn" style={{ width: 84, height: 84 }}>
+          <CtaCircle strings={strings} pal={pal} />
+        </FlexWidget>
+        <FlexWidget style={{ width: 104, flexDirection: 'column', alignItems: 'center', marginTop: 6 }}>
+          <TextWidget
+            text={capMain}
+            maxLines={1}
+            truncate="END"
+            style={{ fontSize: 12, fontWeight: '700', color: pal.textPrimary, width: 104, textAlign: 'center' }}
+          />
+          <TextWidget
+            text={capSub}
+            maxLines={1}
+            truncate="END"
+            style={{ fontSize: 11, color: pal.textSecondary, marginTop: 1, width: 104, textAlign: 'center' }}
+          />
+        </FlexWidget>
+      </FlexWidget>
+
+      {/* 右列：标题 + 时间轴 */}
+      <FlexWidget style={{ flex: 1, flexDirection: 'column', marginLeft: 14 }}>
+        <FlexWidget
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: 'match_parent' }}
+        >
+          <TextWidget text={strings.todayTrip} style={{ fontSize: 14, fontWeight: '700', color: pal.textPrimary }} />
+          <TextWidget
+            text={timeline.empty ? timeline.weekday : `${timeline.countText} · ${timeline.weekday}`}
+            style={{ fontSize: 12, color: pal.textSecondary }}
+          />
+        </FlexWidget>
+        {timeline.empty ? (
+          <FlexWidget
+            style={{ flex: 1, width: 'match_parent', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <TextWidget
+              text={strings.emptyTimeline}
+              style={{ fontSize: 12, fontWeight: '500', color: pal.textSecondary }}
+            />
+          </FlexWidget>
+        ) : (
+          <FlexWidget style={{ flexDirection: 'column', marginTop: 6 }}>
+            {timeline.rows.map((row, i) => (
+              <TimelineRow
+                key={`${row.time}-${i}`}
+                row={row}
+                strings={strings}
+                pal={pal}
+                last={i === timeline.rows.length - 1}
+              />
+            ))}
+          </FlexWidget>
+        )}
+      </FlexWidget>
+    </FlexWidget>
+  );
+}
+
+// 2×2 一键打卡：整卡可点（盲操友好），下方显示最近一站 / 空态引导
+export function TravelWidget2x2({ timeline, strings, pal }) {
+  const main = timeline.empty ? strings.emptyTimeline : timeline.latestName;
+  const sub = timeline.empty
+    ? strings.emptyCtaSub
+    : strings.justChecked.replace('{t}', timeline.latestTime);
+  return (
+    <FlexWidget
+      clickAction="checkIn"
+      style={{
+        height: 'match_parent',
+        width: 'match_parent',
+        backgroundColor: pal.bg,
+        borderRadius: RADIUS_WIDGET,
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingTop: 16,
+        paddingHorizontal: 8,
+        paddingBottom: 14,
+      }}
+    >
+      <CtaCircle strings={strings} pal={pal} />
+      <FlexWidget style={{ flexDirection: 'column', alignItems: 'center', marginTop: 10, width: 'match_parent' }}>
+        <TextWidget
+          text={main}
+          maxLines={1}
+          truncate="END"
+          style={{ fontSize: 13, fontWeight: '700', color: pal.textPrimary, textAlign: 'center' }}
+        />
+        <TextWidget
+          text={sub}
+          maxLines={1}
+          truncate="END"
+          style={{ fontSize: 11, color: pal.textSecondary, marginTop: 2, textAlign: 'center' }}
+        />
+      </FlexWidget>
+    </FlexWidget>
+  );
+}
+
+// 旧 TimeFlowWidget 过渡卡（保留一个版本）：提示重新添加新组件，点击跳 App 说明入口。
+// 下下版本删除 app.json 条目后，桌面旧组件显示系统占位，不崩溃。
+export function LegacyUpgradeCard({ strings, pal }) {
+  return (
+    <FlexWidget
+      clickAction="OPEN_URI"
+      clickActionData={{ uri: 'timeflow://widgets' }}
+      style={{
+        height: 'match_parent',
+        width: 'match_parent',
+        backgroundColor: pal.bg,
+        borderRadius: RADIUS_WIDGET,
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 18,
+      }}
+    >
+      <TextWidget text={strings.title} style={{ fontSize: 13, fontWeight: '800', color: pal.textSecondary }} />
+      <TextWidget
+        text={strings.upgradedTitle}
+        style={{ fontSize: 15, fontWeight: '700', color: pal.textPrimary, marginTop: 8 }}
+      />
+      <TextWidget
+        text={strings.upgradedBody}
+        maxLines={2}
+        truncate="END"
+        style={{ fontSize: 12, color: pal.textSecondary, marginTop: 4, textAlign: 'center' }}
+      />
+      <FlexWidget
+        style={{
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: pal.textPrimary,
+          paddingHorizontal: 18,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginTop: 12,
+        }}
+      >
+        <TextWidget
+          text={strings.upgradedBtn}
+          style={{ fontSize: 14, fontWeight: '700', color: pal.bg }}
+        />
+      </FlexWidget>
+    </FlexWidget>
+  );
+}

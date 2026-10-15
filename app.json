@@ -2,6 +2,7 @@
   "expo": {
     "name": "TimeFlow",
     "slug": "timeflow",
+    "scheme": "timeflow",
     "version": "1.2.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -72,9 +73,49 @@
         {
           "widgets": [
             {
+              "name": "PomodoroWidget4x2",
+              "label": "番茄专注 · 完整版",
+              "description": "番茄钟：开始/暂停/重置/切模式",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "PomodoroWidget2x2",
+              "label": "番茄专注 · 圆环",
+              "description": "整卡点击开始/暂停",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "TravelWidget4x2",
+              "label": "行程打卡 · 今日行程",
+              "description": "一键打卡 + 今日足迹时间轴",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "TravelWidget2x2",
+              "label": "行程打卡 · 一键打卡",
+              "description": "整卡点击一键打卡",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000
+            },
+            {
               "name": "TimeFlowWidget",
-              "label": "TimeFlow 打卡",
-              "description": "一键打卡 + 今日状态",
+              "label": "TimeFlow 打卡（旧版）",
+              "description": "已升级：请改用新版番茄专注/行程打卡组件",
               "minWidth": "250dp",
               "minHeight": "120dp",
               "targetCellWidth": 4,

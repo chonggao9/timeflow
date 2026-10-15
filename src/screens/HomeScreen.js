@@ -21,7 +21,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 import * as Location from 'expo-location';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   saveRecord,
@@ -47,7 +47,8 @@ import { getPlaceOptions } from '../utils/analytics';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import { getPositionFast, reverseGeocodeWithTimeout } from '../utils/location';
-import { refreshWidget } from '../utils/widgetRefresh';
+import { refreshTravelWidgets, refreshPomodoroWidgets } from '../utils/widgetRefresh';
+import { quickCheckIn } from '../services/quickCheckIn';
 import { notifyDataChanged } from '../backup/schedule';
 import Timeline from '../components/Timeline';
 import ModeIcon from '../components/ModeIcon';
@@ -73,6 +74,7 @@ const ALL_MODES = [...PRIMARY_MODES, ...MORE_MODES];
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const route = useRoute();
   const { t, formatDate, lang } = useI18n();
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
@@ -193,6 +195,16 @@ export default function HomeScreen() {
     }, [loadToday])
   );
 
+  // 深链驱动场景：小组件空白区点击 timeflow://focus|checkin → 切到对应场景。
+  // 消费后清除 params，避免下次聚焦重复跳转（route.params 不随聚焦自动清空）。
+  useEffect(() => {
+    const p = route.params;
+    if (p && (p.scene === 'focus' || p.scene === 'travel')) {
+      setScene(p.scene);
+      navigation.setParams({ scene: undefined });
+    }
+  }, [route.params, navigation]);
+
   // 前台唤醒时静默补定位
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (nextState) => {
@@ -269,19 +281,10 @@ export default function HomeScreen() {
     if (checkingInRef.current) return;
     checkingInRef.current = true;
     setLoading(true);
-    const tnow = Date.now();
     try {
-      const tripId = await ensureTrip();
-      const id = makeId();
-      await saveRecord({
-        id,
-        timestamp: tnow,
-        locationName: UNNAMED,
-        lat: null,
-        lng: null,
-        mode,
-        tripId,
-      });
+      // 与桌面小组件「打卡」同一段数据写入逻辑（quickCheckIn）：乐观落库占位记录。
+      // UI 反馈（振动/提示/补定位）仍留在本页；写入路径单一，避免两处漂移。
+      const { id } = await quickCheckIn({ mode });
       await setLastMode(mode);
 
       if (isEndTrip) {
@@ -297,7 +300,7 @@ export default function HomeScreen() {
       }
 
       await loadToday();
-      refreshWidget();
+      refreshTravelWidgets();
       notifyDataChanged();
       setTimeout(() => setSuccess(false), isEndTrip ? 1500 : 1200);
 
@@ -360,7 +363,7 @@ export default function HomeScreen() {
       }
       await updateRecord(id, patch);
       await loadToday();
-      refreshWidget();
+      refreshTravelWidgets();
       if (!isStale()) setLocStatus(null);
     } catch (e) {
       if (!isStale()) setLocStatus('failed');
@@ -463,7 +466,7 @@ export default function HomeScreen() {
     });
     closeRename();
     await loadToday();
-    refreshWidget();
+    refreshTravelWidgets();
   };
 
   const handleModalEndTrip = async () => {
@@ -485,7 +488,7 @@ export default function HomeScreen() {
           setLocStatus(null);
           closeRename();
           await loadToday();
-          refreshWidget();
+          refreshTravelWidgets();
         },
       },
     ]);
@@ -509,7 +512,7 @@ export default function HomeScreen() {
       Vibration.vibrate(25);
       setBackfillVisible(false);
       await loadToday();
-      refreshWidget();
+      refreshTravelWidgets();
       notifyDataChanged();
     } catch (e) {
       Alert.alert(t('home.failTitle'), t('home.failBody'));
@@ -529,7 +532,7 @@ export default function HomeScreen() {
     await updateRecord(segmentTarget.id, { mode: newMode });
     setSegmentTarget(null);
     await loadToday();
-    refreshWidget();
+    refreshTravelWidgets();
   };
 
   // ---- 室内专注处理 ----
@@ -537,7 +540,7 @@ export default function HomeScreen() {
     try {
       // 专注会话的完整持久化上下文由 PomodoroTimer 自行维护，
       // 这里只负责触发桌面小部件刷新。
-      refreshWidget();
+      refreshPomodoroWidgets();
     } catch (e) {}
   };
 
@@ -557,7 +560,7 @@ export default function HomeScreen() {
       });
       Vibration.vibrate(40);
       await loadToday();
-      refreshWidget();
+      refreshPomodoroWidgets();
       notifyDataChanged();
     } catch (e) {
       Alert.alert(t('home.failTitle'), t('home.failBody'));
@@ -567,13 +570,13 @@ export default function HomeScreen() {
   const handleUpdateFocusSession = async (id, patch) => {
     await updateFocusSession(id, patch);
     await loadToday();
-    refreshWidget();
+    refreshPomodoroWidgets();
   };
 
   const handleDeleteFocusSession = async (id) => {
     await deleteFocusSession(id);
     await loadToday();
-    refreshWidget();
+    refreshPomodoroWidgets();
   };
 
   // ---- 数据分离与统计 ----

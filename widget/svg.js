@@ -45,6 +45,66 @@ export function tomatoSvg({ size = 24, color = '#EE5A4F', leaf = '#2DB37C', prog
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24">${inner}${leaves}</svg>`;
 }
 
+// 圆环 + 中心内容（大数字/小标签/图标）合成为一张 SVG：
+// 库的 FlexWidget 是 LinearLayout，无绝对定位，无法把 TextWidget 叠在 SvgWidget 上，
+// 故中心文字用 androidsvg 的 <text>（原生渲染，设备字体）。
+// big/small/icon 三段：big 必选；small 与 icon 二选一（第二行）。
+export function ringCenterSvg({
+  size = 120,
+  progress = 0,
+  track = '#F3E6DA',
+  color = '#EE5A4F',
+  width = 9,
+  big = { text: '', size: 29, color: '#2A211B' },
+  small = null, // {text,size,color}
+  icon = null, // {name,size,color}
+} = {}) {
+  const cx = size / 2;
+  const base = ringSvg({ size, progress, track, color, width });
+  const inner = base.slice(0, base.lastIndexOf('</svg>')); // 去掉收尾，追加内容
+  const bigY = small || icon ? cx + 2 : cx + big.size * 0.35;
+  let content =
+    `<text x="${cx}" y="${round(bigY)}" text-anchor="middle" font-size="${big.size}" ` +
+    `font-weight="bold" fill="${big.color}">${escapeXml(big.text)}</text>`;
+  if (small) {
+    content +=
+      `<text x="${cx}" y="${round(cx + 22)}" text-anchor="middle" font-size="${small.size || 12}" ` +
+      `font-weight="bold" fill="${small.color || color}">${escapeXml(small.text)}</text>`;
+  } else if (icon && ICON_PATHS[icon.name]) {
+    const s = (icon.size || 16) / 24;
+    content +=
+      `<path d="${ICON_PATHS[icon.name]}" fill="${icon.color || color}" ` +
+      `transform="translate(${round(cx - 12 * s)} ${round(cx + 8)}) scale(${round(s)})"/>`;
+  }
+  return `${inner}${content}</svg>`;
+}
+
+function escapeXml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// 4 番茄循环点（设计稿 .dots）：done=实心主色，cur=主色描边+中心点，其余=轨道色。
+// width = 4*size + 3*gap。
+export function cycleDotsSvg({ done = 0, cur = false, size = 8, gap = 4, accent = '#EE5A4F', track = '#F3E6DA' } = {}) {
+  const d = Math.max(0, Math.min(4, done));
+  const w = size * 4 + gap * 3;
+  const r = size / 2;
+  let circles = '';
+  for (let i = 0; i < 4; i++) {
+    const cx = r + i * (size + gap);
+    if (i < d) {
+      circles += `<circle cx="${cx}" cy="${r}" r="${r}" fill="${accent}"/>`;
+    } else if (i === d && cur) {
+      circles +=
+        `<circle cx="${cx}" cy="${r}" r="${round(r - 1)}" fill="none" stroke="${accent}" stroke-width="1.6"/>` +
+        `<circle cx="${cx}" cy="${r}" r="1.6" fill="${accent}"/>`;
+    } else {
+      circles += `<circle cx="${cx}" cy="${r}" r="${r}" fill="${track}"/>`;
+    }
+  }
+  return `<svg width="${w}" height="${size}" viewBox="0 0 ${w} ${size}">${circles}</svg>`;
+}
+
 // 24×24 material 风格图标路径表
 const ICON_PATHS = {
   play: 'M8 5v14l11-7z',

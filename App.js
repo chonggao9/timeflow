@@ -91,6 +91,19 @@ function TabNavigator() {
   );
 }
 
+// 小组件深链（app.json scheme:"timeflow"）：组件空白区/过渡卡点击跳转对应页面。
+// focus → 首页专注场景；checkin → 首页行程场景（不自动打卡，防误触写库）；widgets → 我的页（说明入口，阶段 2 接说明页）。
+const linking = {
+  prefixes: ['timeflow://'],
+  getStateFromPath(path) {
+    const p = String(path || '').replace(/^\/+/, '');
+    if (p === 'focus') return { routes: [{ name: 'Home', params: { scene: 'focus' } }] };
+    if (p === 'checkin') return { routes: [{ name: 'Home', params: { scene: 'travel' } }] };
+    if (p === 'widgets') return { routes: [{ name: 'Profile', params: { openWidgets: true } }] };
+    return { routes: [{ name: 'Home' }] };
+  },
+};
+
 const PRIVACY_KEY = 'timeflow_privacy_agreed';
 
 function PrivacyModal({ visible, onAgree }) {
@@ -266,7 +279,7 @@ function AppInner() {
   }, [isDark, colors]);
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer theme={navTheme} linking={linking}>
       <TabNavigator />
       <PrivacyModal visible={privacyAgreed === false} onAgree={handleAgree} />
     </NavigationContainer>

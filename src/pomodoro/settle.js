@@ -25,8 +25,9 @@ export async function settleAndPersist(now = Date.now()) {
 }
 
 // 通知对账并落盘（running 缺排期则补排；停止则取消）。返回最新 state。
-export async function syncAndPersist(state, texts) {
-  const synced = await syncNotifications(state, texts);
+// prev = 变换前旧 state（engine 变换会清 notifId，取消残留排期需要旧 id，见 notifications.js）。
+export async function syncAndPersist(state, texts, prev = null) {
+  const synced = await syncNotifications(state, texts, prev);
   if (synced.notifId !== state.notifId) {
     return await saveState(synced);
   }

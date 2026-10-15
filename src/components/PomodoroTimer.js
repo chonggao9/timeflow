@@ -44,6 +44,22 @@ import {
 } from '../utils/focusCategories';
 import FocusHistoryModal from './FocusHistoryModal';
 import FocusSettingsCard, { STORAGE_KEY_LAST_AMBIENT } from './FocusSettingsCard';
+// 番茄引擎：App 与桌面小组件共用同一份状态（AsyncStorage timeflow_pomodoro_state）。
+// UI/动画不动，只把计时真值从组件内 refs 换成 engine 派生（deriveDisplay）。
+import {
+  createState,
+  start as engineStart,
+  pause as enginePause,
+  reset as engineReset,
+  switchMode as engineSwitchMode,
+  setFocusMin as engineSetFocusMin,
+  deriveDisplay,
+  ackHarvest,
+} from '../pomodoro/engine';
+import { loadState, saveState } from '../pomodoro/stateStore';
+import { settleAndPersist } from '../pomodoro/settle';
+import { ensureNotificationSetup, syncNotifications } from '../pomodoro/notifications';
+import { refreshPomodoroWidgets } from '../utils/widgetRefresh';
 
 // 时长与手势参数
 const DEFAULT_DURATION_MIN = 25;
@@ -96,7 +112,6 @@ const AMBIENT_SOUND_FILES = {
   whitenoise: require('../../assets/sounds/stream.mp3'),
 };
 
-const STORAGE_KEY_ACTIVE = 'timeflow_active_focus';
 const STORAGE_KEY_LAST_CATEGORY = 'timeflow_last_focus_category';
 const STORAGE_KEY_SLID_ADJUST = 'timeflow_pomodoro_has_slid';
 
@@ -122,8 +137,6 @@ const hapticNotify = (type) => {
     Haptics.notificationAsync(type).catch(() => {});
   } catch (e) {}
 };
-
-const makeSessionId = (ts) => `focus-${ts}`;
 
 const formatTime = (secs) => {
   const m = Math.floor(secs / 60);
@@ -229,15 +242,11 @@ export default function PomodoroTimer({
   // 用户是否曾经滑动手势（用于控制“上下滑动调节”提示的展示）
   const [hasSlidAdjust, setHasSlidAdjust] = useState(false);
 
-  // Refs for timestamp logic
-  const startTsRef = useRef(null);
-  const totalDurationSecRef = useRef(DEFAULT_DURATION_MIN * 60);
-  const pausedTotalSecRef = useRef(0);
-  const lastPauseTsRef = useRef(null);
+  // 引擎真值：计时状态不再存组件 refs，统一读写 engine（App 与小组件同源）
+  const engineRef = useRef(null);
+  const harvestedRef = useRef(null); // 收获页待手动保存的已结束 focus 会话
   const timerRef = useRef(null);
-  const restEndTsRef = useRef(null);
   const categoryRef = useRef('study');
-  const sessionIdRef = useRef(null);
   const savedRef = useRef(false);
   const phaseRef = useRef('idle');
 
@@ -356,7 +365,7 @@ export default function PomodoroTimer({
   );
 
   // 番茄成熟进度 p (0 到 1)
-  const totalSecForCalc = totalDurationSecRef.current || durationMin * 60;
+  const totalSecForCalc = durationMin * 60;
   const tomatoProgress = totalSecForCalc > 0
     ? 1 - Math.min(1, Math.max(0, timeLeftSec) / totalSecForCalc)
     : 0;
@@ -465,6 +474,23 @@ export default function PomodoroTimer({
     }
   }, [category]);
 
+  // 空闲态调时长 → 防抖写入 engine.focusMin（组件与 App 同源共享时长设置）
+  useEffect(() => {
+    if (phase !== 'idle') return undefined;
+    const id = setTimeout(async () => {
+      try {
+        const st = await ensureEngine();
+        if (!st.running && st.mode === 'focus' && st.focusMin !== durationMin) {
+          const next = engineSetFocusMin(st, durationMin, Date.now());
+          engineRef.current = next;
+          await saveState(next);
+          refreshPomodoroWidgets();
+        }
+      } catch (e) {}
+    }, 400);
+    return () => clearTimeout(id);
+  }, [durationMin, phase, ensureEngine]);
+
 
 
   // 恢复是否已滑动手势调节的持久化状态（调节过一次后永久隐藏）
@@ -480,9 +506,16 @@ export default function PomodoroTimer({
   }, []);
 
   useEffect(() => {
+    ensureNotificationSetup(); // handler + Android channel（结束通知唯一封装）
     if (Platform.OS === 'android' || Platform.OS === 'ios') {
       Notifications.requestPermissionsAsync().catch(() => {});
     }
+  }, []);
+
+  // 首次挂载同步（修复旧版「首挂载不恢复」缺口）：补结算 + 通知对账 + UI 相位恢复，
+  // 含小组件发起、App 全程未打开的会话 → pendingHarvests 补显收获页。
+  useEffect(() => {
+    syncEngineToUiRef.current?.();
   }, []);
 
   useEffect(() => {
@@ -522,12 +555,12 @@ export default function PomodoroTimer({
     };
   }, []);
 
-  // AppState 前后台恢复
-  const recoverActiveSessionRef = useRef(null);
+  // AppState 回前台：统一同步（放宽旧条件——无论当前相位都对账，杀进程结束/小组件操作都能恢复）
+  const syncEngineToUiRef = useRef(null);
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (nextState) => {
-      if (nextState === 'active' && (phaseRef.current === 'running' || phaseRef.current === 'paused')) {
-        await recoverActiveSessionRef.current?.();
+      if (nextState === 'active') {
+        await syncEngineToUiRef.current?.();
       }
     });
     return () => sub?.remove?.();
@@ -544,20 +577,18 @@ export default function PomodoroTimer({
     }
 
     timerRef.current = setInterval(() => {
+      const st = engineRef.current;
+      if (!st) return;
+      const d = deriveDisplay(st, Date.now());
       if (phase === 'resting') {
-        const restEnd = restEndTsRef.current;
-        const next = restEnd ? Math.max(0, Math.ceil((restEnd - Date.now()) / 1000)) : 0;
-        setRestTimeLeftSec(next);
-        if (next <= 0) {
-          setPhaseAndRef('idle');
-          hapticNotify(Haptics.NotificationFeedbackType.Success);
-          if (onRunningChange) onRunningChange(false);
+        setRestTimeLeftSec(d.remainingSec);
+        if (d.ended || d.remainingSec <= 0) {
+          handleRestDone();
         }
         return;
       }
-      const remaining = computeRemainingSec();
-      setTimeLeftSec(Math.max(0, remaining));
-      if (remaining <= 0) {
+      setTimeLeftSec(Math.max(0, d.remainingSec));
+      if (d.ended || d.remainingSec <= 0) {
         handleTimerDone();
       }
     }, 250);
@@ -654,117 +685,90 @@ export default function PomodoroTimer({
 
   // ==================== Core Timer Logic ====================
 
-  const computeRemainingSec = useCallback(() => {
-    if (!startTsRef.current) return durationMin * 60;
+  // 读取并缓存 engine 状态（stateStore 内部含 v1 旧 key 一次性迁移，复制不删除）
+  const ensureEngine = useCallback(async () => {
+    if (engineRef.current) return engineRef.current;
     const now = Date.now();
-    let elapsed = (now - startTsRef.current) / 1000;
-
-    let currentPause = 0;
-    if (lastPauseTsRef.current) {
-      currentPause = (now - lastPauseTsRef.current) / 1000;
-    }
-    elapsed -= pausedTotalSecRef.current + currentPause;
-
-    const remaining = totalDurationSecRef.current - elapsed;
-    return Math.ceil(remaining);
+    let loaded = null;
+    try {
+      loaded = await loadState(now);
+    } catch (e) {}
+    engineRef.current = loaded || createState({ now, focusMin: durationMin });
+    return engineRef.current;
   }, [durationMin]);
 
-  const persistActiveSession = useCallback(async () => {
-    const payload = {
-      sessionId: sessionIdRef.current,
-      phase: phaseRef.current,
-      startTs: startTsRef.current,
-      totalDurationSec: totalDurationSecRef.current,
-      durationSec: totalDurationSecRef.current,
-      pausedTotalSec: pausedTotalSecRef.current,
-      lastPauseTs: lastPauseTsRef.current,
-      category: categoryRef.current,
-      goalName: goalName.trim() || t('home.unnamedFocus', '未命名专注'),
-      durationMin,
-      ambient,
-    };
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY_ACTIVE, JSON.stringify(payload));
-    } catch (e) {}
-  }, [durationMin, ambient, t, goalName]);
-
-  const clearActiveSession = useCallback(async () => {
-    try {
-      await AsyncStorage.removeItem(STORAGE_KEY_ACTIVE);
-    } catch (e) {}
-  }, []);
-
-  const recoverActiveSession = useCallback(async () => {
-    try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY_ACTIVE);
-      if (!raw) return;
-      const data = JSON.parse(raw);
-      if (!data || !data.startTs) return;
-
-      if (savedRef.current) return;
-
-      const total = data.totalDurationSec || data.durationSec || data.durationMin * 60 || durationMin * 60;
-      const pausedSoFar = data.pausedTotalSec || 0;
-
-      let extraPause = 0;
-      if (data.phase === 'paused' && data.lastPauseTs) {
-        extraPause = (Date.now() - data.lastPauseTs) / 1000;
-      }
-
-      const elapsed = (Date.now() - data.startTs) / 1000 - pausedSoFar - extraPause;
-      const remaining = Math.ceil(total - elapsed);
-
-      startTsRef.current = data.startTs;
-      totalDurationSecRef.current = total;
-      pausedTotalSecRef.current = pausedSoFar;
-      lastPauseTsRef.current = data.lastPauseTs || null;
-      sessionIdRef.current = data.sessionId;
-      categoryRef.current = data.category || 'study';
-      setCategory(data.category || 'study');
-      setGoalName(data.goalName || '');
-      setAmbient(data.ambient || 'none');
-      setDurationMin(data.durationMin || DEFAULT_DURATION_MIN);
-
-      if (data.phase === 'running' && remaining <= 0) {
-        setTimeLeftSec(0);
-        setPhaseAndRef('done');
-      } else if (data.phase === 'running') {
-        setTimeLeftSec(Math.max(0, remaining));
-        setPhaseAndRef('running');
-        await scheduleNotification();
-      } else {
-        setTimeLeftSec(Math.max(0, remaining));
-        setPhaseAndRef(data.phase);
-      }
-    } catch (e) {}
-  }, [durationMin]);
-
-  recoverActiveSessionRef.current = recoverActiveSession;
-
-  const scheduleNotification = useCallback(async () => {
-    try {
-      await Notifications.cancelAllScheduledNotificationsAsync();
-      if (phaseRef.current !== 'running' || !startTsRef.current) return;
-      const endTime = startTsRef.current + totalDurationSecRef.current * 1000 - pausedTotalSecRef.current * 1000;
-      const trigger = new Date(endTime);
-      if (trigger <= new Date()) return;
-
-      await Notifications.scheduleNotificationAsync({
-        content: {
+  // engine 变换落盘的唯一出口：通知对账（补排/精确取消）→ 保存 → 刷新桌面番茄组件
+  const persistEngine = useCallback(async (next, prev = null) => {
+    const texts = next.mode === 'focus'
+      ? {
           title: t('pomodoro.harvestTitle', '收获一颗番茄'),
           body: t('pomodoro.doneBody', '番茄钟时间到了，快来查看你的收获吧'),
-          sound: 'default',
-        },
-        trigger: { type: 'date', date: trigger },
-      });
+        }
+      : null; // 休息结束文案用 notifications.js 内置
+    // 无条件落盘：reset/abandon 等变换 notifId 前后同为 null，条件保存会漏持久化
+    let saved = next;
+    try {
+      saved = await syncNotifications(next, texts, prev);
+      saved = await saveState(saved);
     } catch (e) {}
+    engineRef.current = saved;
+    refreshPomodoroWidgets();
+    return saved;
   }, [t]);
 
-  const cancelNotification = useCallback(async () => {
+  // 统一同步（首次挂载 / AppState 回前台共用）：
+  // 补结算（杀进程/小组件侧错过的结束迁移）→ 通知对账 → engine 真值恢复 UI 相位。
+  const syncEngineToUi = useCallback(async () => {
+    if (phaseRef.current === 'holding') return; // 长按开始中不打断
+    let state = await ensureEngine();
     try {
-      await Notifications.cancelAllScheduledNotificationsAsync();
-    } catch (e) {}
-  }, []);
+      const settled = await settleAndPersist(Date.now()); // 含惰性结算 + CAS 防双写
+      state = await persistEngine(settled.state); // 通知对账（running 缺排期补排 / 停止取消）
+    } catch (e) { /* 用内存态兜底 */ }
+
+    const now = Date.now();
+    const d = deriveDisplay(state, now);
+    const hasPending = (state.pendingHarvests || []).length > 0;
+
+    // 有活动/暂停会话：恢复用户偏好上下文（idle 时不动，避免覆盖用户在页面上的选择）
+    if (d.running || d.status === 'paused') {
+      if (state.focusMin && state.focusMin !== durationMin) {
+        setDurationMin(state.focusMin);
+        currentMinShared.value = state.focusMin;
+      }
+      if (state.category) {
+        categoryRef.current = state.category;
+        setCategory(state.category);
+      }
+      if (state.goalName) setGoalName(state.goalName);
+      if (state.ambient) setAmbient(state.ambient);
+    }
+
+    if (hasPending && phaseRef.current !== 'done') {
+      // 补显收获页（含从组件发起、App 未打开时结束的会话）；手动保存才落库
+      harvestedRef.current = state.pendingHarvests[0];
+      savedRef.current = false;
+      setTimeLeftSec(0);
+      setPhaseAndRef('done');
+      if (onRunningChange) onRunningChange(false);
+      return;
+    }
+    if (d.running && d.mode === 'focus') {
+      setTimeLeftSec(d.remainingSec);
+      setPhaseAndRef('running');
+    } else if (d.running) {
+      setRestTimeLeftSec(d.remainingSec);
+      setPhaseAndRef('resting');
+    } else if (d.status === 'paused') {
+      setTimeLeftSec(d.remainingSec);
+      setPhaseAndRef('paused');
+    } else if (phaseRef.current !== 'done') {
+      // idle：不覆盖收获页（收获页由保存/关闭流程退出）
+      setPhaseAndRef('idle');
+    }
+  }, [ensureEngine, persistEngine, durationMin, onRunningChange]);
+
+  syncEngineToUiRef.current = syncEngineToUi;
 
   const playAmbientSound = useCallback(async (key) => {
     const reqId = ++playReqIdRef.current;
@@ -841,11 +845,22 @@ export default function PomodoroTimer({
     hapticImpact(Haptics.ImpactFeedbackStyle.Heavy);
     const now = Date.now();
     const totalSec = durationMin * 60;
-    startTsRef.current = now;
-    totalDurationSecRef.current = totalSec;
-    pausedTotalSecRef.current = 0;
-    lastPauseTsRef.current = null;
-    sessionIdRef.current = makeSessionId(now);
+    const resolvedGoal = goalName.trim() || t('home.unnamedFocus', '未命名专注');
+
+    let st = await ensureEngine();
+    // 空闲开始：强制回 focus 满时长新会话；本次上下文写入 state（收获页补显需要）
+    if (st.mode !== 'focus' || st.running) st = engineSwitchMode(st, 'focus', now);
+    st = engineSetFocusMin(st, durationMin, now);
+    st = {
+      ...st,
+      category: categoryRef.current || 'study',
+      goalName: resolvedGoal,
+      ambient,
+      sessionId: null,
+      startTs: null,
+    };
+    st = engineStart(st, now);
+
     savedRef.current = false;
     setTimeLeftSec(totalSec);
     setPhaseAndRef('running');
@@ -853,50 +868,86 @@ export default function PomodoroTimer({
     if (onStartFocus) {
       onStartFocus({
         durationSec: totalSec,
-        goalName: goalName.trim() || t('home.unnamedFocus', '未命名专注'),
-        category: categoryRef.current || 'study',
+        goalName: resolvedGoal,
+        category: st.category,
       });
     }
 
-    await persistActiveSession();
-    await scheduleNotification();
+    await persistEngine(st); // 落盘 + 排期结束通知 + 刷新组件
     setGoalName('');
     if (ambient !== 'none') {
       await playAmbientSound(ambient);
     }
-  }, [durationMin, goalName, t, onStartFocus, persistActiveSession, scheduleNotification, ambient, playAmbientSound]);
+  }, [durationMin, goalName, t, ambient, onStartFocus, ensureEngine, persistEngine, playAmbientSound]);
 
+  // 前台计时到点：settle 推进状态机（completedToday++、模式循环、取消通知），
+  // 会话进 pendingHarvests——收获页手动保存仍是 focus_sessions 唯一写入口径。
   const handleTimerDone = useCallback(async () => {
     if (phaseRef.current !== 'running') return;
-    setPhaseAndRef('done');
+    setPhaseAndRef('done'); // 先切相位防 interval 重入
     setTimeLeftSec(0);
     hapticNotify(Haptics.NotificationFeedbackType.Success);
-    await cancelNotification();
     await stopAmbientSound();
-    await clearActiveSession();
-  }, [cancelNotification, stopAmbientSound, clearActiveSession]);
+    let state = engineRef.current;
+    let harvested = null;
+    try {
+      const settled = await settleAndPersist(Date.now());
+      state = settled.state;
+      harvested = settled.harvested;
+      engineRef.current = state;
+      refreshPomodoroWidgets();
+    } catch (e) {}
+    const pending = harvested || (state && state.pendingHarvests || [])[0] || null;
+    harvestedRef.current = pending;
+    savedRef.current = false;
+    if (!pending) {
+      // 异常兜底（结算失败/已被他处消费）：回待开始，不卡收获页
+      setPhaseAndRef('idle');
+      if (state) setTimeLeftSec(state.focusMin * 60);
+      if (onRunningChange) onRunningChange(false);
+    }
+  }, [stopAmbientSound, onRunningChange]);
+
+  // 休息到点：结算落盘（回 focus 待开始），刷新组件
+  const handleRestDone = useCallback(async () => {
+    if (phaseRef.current !== 'resting') return;
+    setPhaseAndRef('idle');
+    hapticNotify(Haptics.NotificationFeedbackType.Success);
+    try {
+      const { state } = await settleAndPersist(Date.now());
+      engineRef.current = state;
+      setTimeLeftSec(state.focusMin * 60);
+    } catch (e) {
+      const st = engineRef.current;
+      if (st) setTimeLeftSec(st.focusMin * 60);
+    }
+    refreshPomodoroWidgets();
+    if (onRunningChange) onRunningChange(false);
+  }, [onRunningChange]);
 
   const pauseFocus = useCallback(async () => {
     if (phase !== 'running') return;
-    lastPauseTsRef.current = Date.now();
+    const prev = engineRef.current;
+    if (!prev) return;
+    const now = Date.now();
+    const next = enginePause(prev, now);
     setPhaseAndRef('paused');
-    await persistActiveSession();
-    await cancelNotification();
+    setTimeLeftSec(deriveDisplay(next, now).remainingSec);
     await pauseAmbientSound();
-  }, [phase, persistActiveSession, cancelNotification, pauseAmbientSound]);
+    await persistEngine(next, prev); // prev 携带 notifId：精确取消结束通知
+  }, [phase, pauseAmbientSound, persistEngine]);
 
   const resumeFocus = useCallback(async () => {
     if (phase !== 'paused') return;
-    if (lastPauseTsRef.current) {
-      const pauseDuration = (Date.now() - lastPauseTsRef.current) / 1000;
-      pausedTotalSecRef.current += pauseDuration;
-      lastPauseTsRef.current = null;
-    }
+    const prev = engineRef.current;
+    if (!prev) return;
+    const now = Date.now();
+    const next = engineStart(prev, now); // start = resume：按 remainingMs 重算 endAt
     setPhaseAndRef('running');
-    await persistActiveSession();
-    await scheduleNotification();
+    setTimeLeftSec(deriveDisplay(next, now).remainingSec);
     await resumeAmbientSound();
-  }, [phase, persistActiveSession, scheduleNotification, resumeAmbientSound]);
+    await persistEngine(next, prev); // 重新排期结束通知
+  }, [phase, resumeAmbientSound, persistEngine]);
 
   // 放弃专注（二次确认机制；确认放弃后清空任务名）
   const abandonFocus = useCallback(async () => {
@@ -908,18 +959,17 @@ export default function PomodoroTimer({
       }
       setAbandonArmed(false);
       hapticImpact(Haptics.ImpactFeedbackStyle.Light);
-      await cancelNotification();
       await stopAmbientSound();
-      await clearActiveSession();
+      // 放弃 = 回当前模式满时长（pendingHarvests 不动，未保存收获保留）
+      const prev = engineRef.current;
+      const now = Date.now();
+      const next = engineReset(prev || createState({ now, focusMin: durationMin }), now);
       savedRef.current = false;
+      harvestedRef.current = null;
       setGoalName('');
       setPhaseAndRef('idle');
-      setTimeLeftSec(durationMin * 60);
-      startTsRef.current = null;
-      totalDurationSecRef.current = durationMin * 60;
-      pausedTotalSecRef.current = 0;
-      lastPauseTsRef.current = null;
-      sessionIdRef.current = null;
+      setTimeLeftSec(next.focusMin * 60);
+      await persistEngine(next, prev); // 取消结束通知 + 落盘 + 刷新组件
       return;
     }
     abandonArmedRef.current = true;
@@ -931,10 +981,14 @@ export default function PomodoroTimer({
       setAbandonArmed(false);
       abandonTimerRef.current = null;
     }, ABANDON_CONFIRM_MS);
-  }, [cancelNotification, stopAmbientSound, clearActiveSession, durationMin]);
+  }, [stopAmbientSound, persistEngine, durationMin]);
 
   const resetToIdle = useCallback(async (notifyParent = true) => {
-    await clearActiveSession();
+    const now = Date.now();
+    const prev = engineRef.current || createState({ now, focusMin: durationMin });
+    // 回 focus 待开始（休息/收获关闭后统一落点）；pendingHarvests 不动
+    let next = engineReset(prev, now);
+    if (next.mode !== 'focus') next = engineSwitchMode(next, 'focus', now);
     if (abandonTimerRef.current) {
       clearTimeout(abandonTimerRef.current);
       abandonTimerRef.current = null;
@@ -944,45 +998,64 @@ export default function PomodoroTimer({
     setGoalName('');
     setIsNoteEditing(false);
     setPhaseAndRef('idle');
-    setTimeLeftSec(durationMin * 60);
+    setTimeLeftSec(next.focusMin * 60);
     setRestTimeLeftSec(REST_DURATION_SEC);
-    restEndTsRef.current = null;
-    startTsRef.current = null;
-    totalDurationSecRef.current = durationMin * 60;
-    pausedTotalSecRef.current = 0;
-    lastPauseTsRef.current = null;
-    sessionIdRef.current = null;
     savedRef.current = false;
     if (notifyParent && onRunningChange) onRunningChange(false);
-  }, [clearActiveSession, durationMin, onRunningChange]);
+    await persistEngine(next, prev);
+  }, [persistEngine, durationMin, onRunningChange]);
 
+  // 收获出队：用户确认（保存或计入）后即从 pendingHarvests 移除，防止重复补显。
+  const ackCurrentHarvest = useCallback(async () => {
+    const h = harvestedRef.current;
+    harvestedRef.current = null;
+    if (!h) return;
+    const st = engineRef.current;
+    if (!st || !(st.pendingHarvests || []).length) return;
+    const next = ackHarvest(st, h.sessionId);
+    if (next !== st) {
+      engineRef.current = next;
+      try {
+        await saveState(next);
+      } catch (e) {}
+      refreshPomodoroWidgets();
+    }
+  }, []);
+
+  // 手动保存：focus_sessions 唯一写入口径不变（数据来自结算快照 harvested）
   const saveFocusRecord = useCallback(async () => {
-    const totalSec = totalDurationSecRef.current;
-    if (onSaveFocus && totalSec > 0) {
+    const h = harvestedRef.current;
+    const totalSec = h ? h.durationSec : durationMin * 60;
+    if (onSaveFocus && totalSec > 0 && !savedRef.current) {
       savedRef.current = true;
       await onSaveFocus({
         duration: totalSec,
-        goalName: goalName.trim() || t('home.unnamedFocus', '未命名专注'),
-        category: categoryRef.current || 'study',
+        goalName: (h && h.goalName) || goalName.trim() || t('home.unnamedFocus', '未命名专注'),
+        category: (h && h.category) || categoryRef.current || 'study',
         note: '',
       });
     }
-  }, [onSaveFocus, goalName, t]);
+    await ackCurrentHarvest();
+  }, [onSaveFocus, goalName, t, durationMin, ackCurrentHarvest]);
 
   const saveDoneFocus = useCallback(async () => {
     await saveFocusRecord();
     await resetToIdle(false);
   }, [saveFocusRecord, resetToIdle]);
 
+  // 计入并开始休息：settle 后 engine 已是 short/long（4 番茄自动长休），直接启动
   const startRest = useCallback(async () => {
-    await saveFocusRecord();
+    await saveFocusRecord(); // 落库 + 出队
     hapticImpact(Haptics.ImpactFeedbackStyle.Medium);
-    await clearActiveSession();
-    restEndTsRef.current = Date.now() + REST_DURATION_SEC * 1000;
-    setRestTimeLeftSec(REST_DURATION_SEC);
+    const now = Date.now();
+    const prev = engineRef.current || createState({ now });
+    const base = prev.mode === 'focus' ? engineSwitchMode(prev, 'short', now) : prev;
+    const next = engineStart(base, now);
+    setRestTimeLeftSec(deriveDisplay(next, now).remainingSec);
     setPhaseAndRef('resting');
     if (onRunningChange) onRunningChange(true);
-  }, [saveFocusRecord, clearActiveSession, onRunningChange]);
+    await persistEngine(next, prev); // 排期休息结束通知 + 刷新组件
+  }, [saveFocusRecord, onRunningChange, persistEngine]);
 
   // ==================== 按住开始 (Hold to Start) ====================
 
