@@ -63,7 +63,7 @@
             "enableProguardInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
             "enableBundleCompression": true,
-            "extraProguardRules": "-keep class com.facebook.react.** { *; }\\n-keep class com.facebook.soloader.** { *; }\\n-keep class com.facebook.soloader.nativeloader.** { *; }\\n-keep class expo.modules.** { *; }\\n-keep class * extends expo.modules.kotlin.modules.Module { <init>(...); public <methods>; }\\n-keep class com.timeflow.amap.** { *; }\\n-keep class com.amap.api.location.** { *; }\\n-keep class com.reactnativeandroidwidget.** { *; }"
+            "extraProguardRules": "-keep class com.facebook.react.** { *; }\n-keep class com.facebook.soloader.** { *; }\n-keep class com.facebook.soloader.nativeloader.** { *; }\n-keep class expo.modules.** { *; }\n-keep class * extends expo.modules.kotlin.modules.Module { <init>(...); public <methods>; }\n-keep class com.timeflow.amap.** { *; }\n-keep class com.amap.api.location.** { *; }\n-keep class com.reactnativeandroidwidget.** { *; }"
           }
         }
       ],
