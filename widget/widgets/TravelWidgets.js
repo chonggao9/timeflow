@@ -2,8 +2,8 @@
 // 时间轴 = 今日已打卡记录，最新一条为「当前」，无「未到」站、无「4 站完成」态。
 // 打卡走 src/services/quickCheckIn.js（与 App 首页「一键打卡」同一函数，headless 安全）。
 import { FlexWidget, TextWidget, SvgWidget } from 'react-native-android-widget';
-import { iconSvg } from '../svg';
-import { RADIUS_WIDGET } from '../widgetTheme';
+import { iconSvg, weekCirclesSvg, mapPolylineSvg, heatGridSvg } from '../svg';
+import { RADIUS_WIDGET, tripPalette } from '../widgetTheme';
 
 export const TRAVEL_DEEP_LINK = 'timeflow://checkin';
 
@@ -344,3 +344,159 @@ export function TravelWidget4x1({ timeline, strings, pal }) {
     </FlexWidget>
   );
 }
+
+// 4×1 本周连续打卡卡片：深色卡片，左（连续天数）+ 右（周一至周日状态点）
+export function TravelWidgetWeek4x1({ streakDays = 0, weekDays = { days: [], active: [], todayIdx: 0 }, strings, darkPal }) {
+  const pal = darkPal || tripPalette(true);
+  return (
+    <FlexWidget
+      clickAction="OPEN_URI"
+      clickActionData={{ uri: TRAVEL_DEEP_LINK }}
+      style={{
+        height: 'match_parent',
+        width: 'match_parent',
+        backgroundColor: pal.bg,
+        borderRadius: RADIUS_WIDGET,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 18,
+      }}
+    >
+      {/* 左侧：连续天数 */}
+      <FlexWidget style={{ width: 72, flexDirection: 'column', justifyContent: 'center' }}>
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+          <TextWidget
+            text={String(streakDays)}
+            style={{ fontSize: 28, fontWeight: '700', color: pal.textPrimary }}
+          />
+          <TextWidget
+            text={strings.dayUnit}
+            style={{ fontSize: 12, fontWeight: '500', color: pal.textSecondary, marginLeft: 3 }}
+          />
+        </FlexWidget>
+        <TextWidget
+          text={strings.continuousCheckin}
+          maxLines={1}
+          style={{ fontSize: 11, color: pal.textSecondary, marginTop: 1 }}
+        />
+      </FlexWidget>
+
+      {/* 右侧：7 天状态点 */}
+      <FlexWidget style={{ flex: 1, alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}>
+        <SvgWidget
+          svg={weekCirclesSvg({
+            width: 210,
+            height: 48,
+            days: weekDays.days,
+            active: weekDays.active,
+            todayIdx: weekDays.todayIdx,
+            accent: pal.accent,
+            track: pal.track,
+            textSecondary: pal.textSecondary,
+          })}
+          style={{ width: 210, height: 48 }}
+        />
+      </FlexWidget>
+    </FlexWidget>
+  );
+}
+
+// 2×2 足迹地图卡片：上（微缩地图路线）+ 下（打卡次数与今日足迹）
+export function TravelWidgetMap2x2({ timeline, strings, pal, isDark }) {
+  return (
+    <FlexWidget
+      clickAction="OPEN_URI"
+      clickActionData={{ uri: TRAVEL_DEEP_LINK }}
+      style={{
+        height: 'match_parent',
+        width: 'match_parent',
+        backgroundColor: pal.bg,
+        borderRadius: RADIUS_WIDGET,
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        padding: 8,
+      }}
+    >
+      {/* 上部微缩地图 */}
+      <SvgWidget
+        svg={mapPolylineSvg({
+          width: 154,
+          height: 108,
+          count: timeline.count || 0,
+          isDark,
+        })}
+        style={{ width: 154, height: 108 }}
+      />
+
+      {/* 底部信息 */}
+      <FlexWidget
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 8,
+          paddingBottom: 4,
+          width: 'match_parent',
+        }}
+      >
+        <TextWidget
+          text={strings.checkedCount.replace('{n}', timeline.countText || `${timeline.count || 0}次`)}
+          style={{ fontSize: 12, fontWeight: '700', color: pal.textPrimary }}
+        />
+        <TextWidget
+          text={strings.todayFootprint}
+          style={{ fontSize: 11, color: pal.textSecondary }}
+        />
+      </FlexWidget>
+    </FlexWidget>
+  );
+}
+
+// 2×2 深色打卡热力卡片：连续天数大字 + 近四周 28 格热力图
+export function TravelWidgetHeat2x2({ streakDays = 0, heatGrid = [], strings, darkPal }) {
+  const pal = darkPal || tripPalette(true);
+  return (
+    <FlexWidget
+      clickAction="OPEN_URI"
+      clickActionData={{ uri: TRAVEL_DEEP_LINK }}
+      style={{
+        height: 'match_parent',
+        width: 'match_parent',
+        backgroundColor: pal.bg,
+        borderRadius: RADIUS_WIDGET,
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        padding: 16,
+      }}
+    >
+      <FlexWidget style={{ flexDirection: 'column' }}>
+        <TextWidget
+          text={strings.continuousCheckin}
+          style={{ fontSize: 12, fontWeight: '700', color: pal.textSecondary }}
+        />
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 2 }}>
+          <TextWidget
+            text={String(streakDays)}
+            style={{ fontSize: 44, fontWeight: '700', color: pal.textPrimary }}
+          />
+          <TextWidget
+            text={strings.dayUnit}
+            style={{ fontSize: 13, fontWeight: '500', color: pal.textSecondary, marginLeft: 4 }}
+          />
+        </FlexWidget>
+      </FlexWidget>
+
+      {/* 近四周热力格 */}
+      <SvgWidget
+        svg={heatGridSvg({
+          width: 138,
+          height: 48,
+          grid: heatGrid,
+          isDark: true,
+        })}
+        style={{ width: 138, height: 48 }}
+      />
+    </FlexWidget>
+  );
+}
+

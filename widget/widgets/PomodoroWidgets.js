@@ -3,8 +3,8 @@
 // 重绘时机 = 用户点击 / 模式切换 / 30min 系统心跳（updatePeriodMillis），无秒级刷新。
 // 图标全矢量（widget/svg.js），无 emoji；可点区域 ≥44dp；配色来自 widgetTheme（对比度已门禁）。
 import { FlexWidget, TextWidget, SvgWidget } from 'react-native-android-widget';
-import { ringCenterSvg, cycleDotsSvg, iconSvg, progressBarSvg } from '../svg';
-import { RADIUS_WIDGET } from '../widgetTheme';
+import { ringCenterSvg, cycleDotsSvg, iconSvg, progressBarSvg, tomatoSvg, focusWeekBarsSvg } from '../svg';
+import { RADIUS_WIDGET, modePalette } from '../widgetTheme';
 
 export const FOCUS_DEEP_LINK = 'timeflow://focus';
 
@@ -292,3 +292,162 @@ export function PomodoroWidget4x1({ d, strings, pal }) {
     </FlexWidget>
   );
 }
+
+// 2×2 番茄外观卡：上（第 N 个番茄 / 休息）+ 中（番茄图形）+ 下（大字剩余时间）
+export function PomodoroWidgetTomato2x2({ d, strings, pal }) {
+  const topText =
+    d.mode === 'focus'
+      ? strings.nthTomato.replace('{n}', String((d.completedToday || 0) + 1))
+      : strings.restTime;
+  return (
+    <FlexWidget
+      clickAction="pomo.toggle"
+      style={{
+        height: 'match_parent',
+        width: 'match_parent',
+        backgroundColor: pal.bg,
+        borderRadius: RADIUS_WIDGET,
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 14,
+        paddingHorizontal: 8,
+      }}
+    >
+      <TextWidget
+        text={topText}
+        maxLines={1}
+        style={{ fontSize: 12, fontWeight: '700', color: pal.textSecondary }}
+      />
+      <SvgWidget
+        svg={tomatoSvg({
+          size: 76,
+          color: pal.accent,
+          progress: remainFrac(d),
+        })}
+        style={{ width: 76, height: 76 }}
+      />
+      <TextWidget
+        text={bigText(d, strings)}
+        maxLines={1}
+        style={{ fontSize: 26, fontWeight: '700', color: pal.textPrimary }}
+      />
+    </FlexWidget>
+  );
+}
+
+// 2×2 深色大数字卡：高对比 OLED 深色，上（模式与状态）+ 中（超大数字）+ 下（4番茄循环点 + 44dp按钮）
+export function PomodoroWidgetDark2x2({ d, strings, darkPal }) {
+  const pal = darkPal || modePalette(d.mode, true);
+  return (
+    <FlexWidget
+      clickAction="OPEN_URI"
+      clickActionData={{ uri: FOCUS_DEEP_LINK }}
+      style={{
+        height: 'match_parent',
+        width: 'match_parent',
+        backgroundColor: pal.bg,
+        borderRadius: RADIUS_WIDGET,
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        padding: 16,
+      }}
+    >
+      {/* 顶部标签 */}
+      <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <FlexWidget style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: pal.accent }} />
+        <TextWidget
+          text={`${strings.mode[d.mode]} · ${strings.status[d.status]}`}
+          maxLines={1}
+          style={{ fontSize: 12, fontWeight: '700', color: pal.textSecondary, marginLeft: 6 }}
+        />
+      </FlexWidget>
+
+      {/* 中部超大数字 */}
+      <TextWidget
+        text={bigText(d, strings)}
+        maxLines={1}
+        style={{ fontSize: 40, fontWeight: '700', color: pal.textPrimary, alignSelf: 'center' }}
+      />
+
+      {/* 底部：循环点 + 启停按钮 */}
+      <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: 'match_parent' }}>
+        <SvgWidget
+          svg={cycleDotsSvg({
+            done: (d.completedToday || 0) % 4,
+            cur: d.mode === 'focus',
+            accent: pal.accent,
+            track: pal.track,
+          })}
+          style={{ width: 44, height: 8 }}
+        />
+        <FlexWidget
+          clickAction="pomo.toggle"
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: pal.btn,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <SvgWidget
+            svg={iconSvg(d.running ? 'pause' : 'play', { size: 18, color: pal.btnText })}
+            style={{ width: 18, height: 18 }}
+          />
+        </FlexWidget>
+      </FlexWidget>
+    </FlexWidget>
+  );
+}
+
+// 2×2 今日专注统计卡：今日专注分钟数 + 7 天柱状图
+export function PomodoroWidgetStats2x2({ strings, pal, todayMin = 0, weekBars = { days: [], values: [] } }) {
+  return (
+    <FlexWidget
+      clickAction="OPEN_URI"
+      clickActionData={{ uri: FOCUS_DEEP_LINK }}
+      style={{
+        height: 'match_parent',
+        width: 'match_parent',
+        backgroundColor: pal.bg,
+        borderRadius: RADIUS_WIDGET,
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        padding: 16,
+      }}
+    >
+      <FlexWidget style={{ flexDirection: 'column' }}>
+        <TextWidget
+          text={strings.todayFocus}
+          style={{ fontSize: 12, fontWeight: '700', color: pal.textSecondary }}
+        />
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 2 }}>
+          <TextWidget
+            text={String(todayMin)}
+            style={{ fontSize: 34, fontWeight: '700', color: pal.textPrimary }}
+          />
+          <TextWidget
+            text={strings.minuteUnit}
+            style={{ fontSize: 12, fontWeight: '500', color: pal.textSecondary, marginLeft: 4, marginBottom: 4 }}
+          />
+        </FlexWidget>
+      </FlexWidget>
+
+      {/* 7 天柱状图 */}
+      <SvgWidget
+        svg={focusWeekBarsSvg({
+          days: weekBars.days,
+          values: weekBars.values,
+          accent: pal.accent,
+          track: pal.track,
+          activeText: pal.chipText,
+          subText: pal.textSecondary,
+        })}
+        style={{ width: 136, height: 54 }}
+      />
+    </FlexWidget>
+  );
+}
+

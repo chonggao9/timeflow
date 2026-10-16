@@ -147,3 +147,150 @@ export function progressBarSvg({
     `</svg>`
   );
 }
+
+// 7天专注统计柱状图 SVG（宽约 136，高约 54）
+export function focusWeekBarsSvg({
+  width = 136,
+  height = 54,
+  days = ['四', '五', '六', '日', '一', '二', '今'],
+  values = [0, 0, 0, 0, 0, 0, 0], // 分钟数
+  accent = '#EE5A4F',
+  track = '#EBD9C9',
+  activeText = '#C23128',
+  subText = '#6B5B50',
+} = {}) {
+  const maxVal = Math.max(150, ...values);
+  const count = 7;
+  const colW = 14;
+  const gap = round((width - colW * count) / (count - 1));
+  let bars = '';
+  for (let i = 0; i < count; i++) {
+    const x = i * (colW + gap);
+    const val = values[i] || 0;
+    const barH = Math.max(4, Math.min(34, Math.round((val / maxVal) * 34)));
+    const y = 34 - barH;
+    const isToday = i === count - 1;
+    const barColor = isToday ? accent : track;
+    const txtColor = isToday ? activeText : subText;
+    const fw = isToday ? 'bold' : 'normal';
+    bars +=
+      `<rect x="${x}" y="${y}" width="${colW}" height="${barH}" rx="3" fill="${barColor}"/>` +
+      `<text x="${x + colW / 2}" y="48" text-anchor="middle" font-size="10" font-weight="${fw}" fill="${txtColor}">${days[i] || ''}</text>`;
+  }
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${bars}</svg>`;
+}
+
+// 今日足迹地图矢量 SVG（宽 154，高 108）
+export function mapPolylineSvg({ width = 154, height = 108, count = 0, isDark = false } = {}) {
+  const roadColor = isDark ? '#3A302A' : '#FFFDFA';
+  const greenFill = isDark ? '#2B4A37' : '#D3E9D8';
+  const accent = isDark ? '#4FD6A0' : '#2DB37C';
+  const bg = isDark ? '#241D19' : '#F6EEE6';
+
+  const baseSvg =
+    `<rect x="0" y="0" width="${width}" height="${height}" rx="12" fill="${bg}"/>` +
+    `<rect x="98" y="8" width="44" height="26" rx="10" fill="${greenFill}"/>` +
+    `<path d="M-4 92L52 72L98 100L160 80" fill="none" stroke="${roadColor}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `<path d="M44 -4L58 44L36 112" fill="none" stroke="${roadColor}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `<path d="M-4 30L70 20L160 52" fill="none" stroke="${roadColor}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+  // 4 个站点参考坐标
+  const XY = [{ x: 26, y: 78 }, { x: 62, y: 36 }, { x: 104, y: 66 }, { x: 130, y: 26 }];
+  let lineSegments = '';
+  for (let i = 0; i < Math.min(3, Math.max(0, count - 1)); i++) {
+    const a = XY[i];
+    const b = XY[i + 1];
+    lineSegments += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${accent}" stroke-width="3" stroke-linecap="round"/>`;
+  }
+
+  let pins = '';
+  for (let i = 0; i < 4; i++) {
+    const q = XY[i];
+    const done = i < count;
+    const cur = i === count - 1 && count > 0;
+    if (done) {
+      pins +=
+        `<circle cx="${q.x}" cy="${q.y}" r="9" fill="${accent}"/>` +
+        `<path d="M${q.x - 4} ${q.y}l2.5 2.5 5.5-5" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    } else {
+      pins +=
+        `<circle cx="${q.x}" cy="${q.y}" r="8" fill="${bg}" stroke="#D8C9BB" stroke-width="2"/>` +
+        (cur ? `<circle cx="${q.x}" cy="${q.y}" r="3" fill="${accent}"/>` : '');
+    }
+  }
+
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${baseSvg}${lineSegments}${pins}</svg>`;
+}
+
+// 4×1 本周连续打卡 7 天状态 SVG（宽 210，高 48）
+export function weekCirclesSvg({
+  width = 210,
+  height = 48,
+  days = ['一', '二', '三', '四', '五', '六', '日'],
+  active = [false, false, false, false, false, false, false],
+  todayIdx = 2,
+  accent = '#4FD6A0',
+  track = '#3A302A',
+  textSecondary = '#D9C9BA',
+} = {}) {
+  const count = 7;
+  const dSize = 24;
+  const gap = round((width - dSize * count) / (count - 1));
+  let circles = '';
+  for (let i = 0; i < count; i++) {
+    const cx = round(dSize / 2 + i * (dSize + gap));
+    const cy = 14;
+    const isToday = i === todayIdx;
+    const isOn = active[i];
+    if (isOn) {
+      circles +=
+        `<circle cx="${cx}" cy="${cy}" r="11" fill="${accent}"/>` +
+        `<path d="M${cx - 4} ${cy}l2.5 2.5 5.5-5" fill="none" stroke="#1B1512" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    } else {
+      circles +=
+        `<circle cx="${cx}" cy="${cy}" r="11" fill="none" stroke="${isToday ? accent : track}" stroke-width="2"/>`;
+    }
+    const label = isToday ? '今' : (days[i] || '');
+    const txtColor = isToday ? accent : textSecondary;
+    const fw = isToday ? 'bold' : 'normal';
+    circles += `<text x="${cx}" y="42" text-anchor="middle" font-size="11" font-weight="${fw}" fill="${txtColor}">${label}</text>`;
+  }
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${circles}</svg>`;
+}
+
+// 2×2 深色打卡热力图格 SVG（宽 134，高 48，4周×7天 = 28格）
+export function heatGridSvg({
+  width = 134,
+  height = 48,
+  grid = [], // 28 个数值（0 / 1 / 2）
+  activeColor = '#4FD6A0',
+  midColor = '#1F7A57',
+  emptyColor = '#3A302A',
+} = {}) {
+  const cols = 7;
+  const rows = 4;
+  const cellW = 15;
+  const cellH = 8;
+  const gapX = 4;
+  const gapY = 4;
+  let cells = '';
+  const data = Array.isArray(grid) && grid.length === 28 ? grid : Array(28).fill(0);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c;
+      const x = c * (cellW + gapX);
+      const y = r * (cellH + gapY);
+      const val = data[idx] || 0;
+      const isToday = idx === 27;
+      let fill = emptyColor;
+      if (val === 1) fill = midColor;
+      if (val >= 2) fill = activeColor;
+      cells += `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="2" fill="${fill}"/>`;
+      if (isToday) {
+        cells += `<rect x="${x - 1}" y="${y - 1}" width="${cellW + 2}" height="${cellH + 2}" rx="3" fill="none" stroke="#FBEFE4" stroke-width="1.2"/>`;
+      }
+    }
+  }
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${cells}</svg>`;
+}
+

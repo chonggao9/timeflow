@@ -114,6 +114,33 @@ export default function WidgetGuideModal({ visible, onClose }) {
                     <Text style={styles.cardDesc}>高辨识度居中大圆环，整卡盲操轻按即开始/暂停</Text>
                   </View>
                 </View>
+
+                <View style={styles.cardPreview}>
+                  <View style={styles.previewHeader}>
+                    <View style={[styles.badge, { backgroundColor: isDark ? '#3A302A' : '#FDE6E1' }]}>
+                      <Text style={[styles.badgeText, { color: isDark ? '#FF7A6E' : '#C23128' }]}>2×2 番茄卡</Text>
+                    </View>
+                    <Text style={styles.cardDesc}>拟物番茄图形与灌满进度，下方大字显示倒计时</Text>
+                  </View>
+                </View>
+
+                <View style={styles.cardPreview}>
+                  <View style={styles.previewHeader}>
+                    <View style={[styles.badge, { backgroundColor: '#3A302A' }]}>
+                      <Text style={[styles.badgeText, { color: '#FF7A6E' }]}>2×2 深色大字</Text>
+                    </View>
+                    <Text style={styles.cardDesc}>纯黑 OLED 质感：超大数字 + 底部四番茄循环点</Text>
+                  </View>
+                </View>
+
+                <View style={styles.cardPreview}>
+                  <View style={styles.previewHeader}>
+                    <View style={[styles.badge, { backgroundColor: isDark ? '#3A302A' : '#FDE6E1' }]}>
+                      <Text style={[styles.badgeText, { color: isDark ? '#FF7A6E' : '#C23128' }]}>2×2 今日统计</Text>
+                    </View>
+                    <Text style={styles.cardDesc}>今日专注累计时长与过去 7 天专注柱状趋势图</Text>
+                  </View>
+                </View>
               </View>
             ) : (
               <View style={styles.section}>
@@ -137,10 +164,37 @@ export default function WidgetGuideModal({ visible, onClose }) {
 
                 <View style={styles.cardPreview}>
                   <View style={styles.previewHeader}>
+                    <View style={[styles.badge, { backgroundColor: '#3A302A' }]}>
+                      <Text style={[styles.badgeText, { color: '#4FD6A0' }]}>4×1 本周连续</Text>
+                    </View>
+                    <Text style={styles.cardDesc}>左侧连续打卡天数 + 右侧周一至周日 7 天圆圈打卡状态</Text>
+                  </View>
+                </View>
+
+                <View style={styles.cardPreview}>
+                  <View style={styles.previewHeader}>
                     <View style={[styles.badge, { backgroundColor: isDark ? '#3A302A' : '#DCF3E8' }]}>
                       <Text style={[styles.badgeText, { color: isDark ? '#4FD6A0' : '#17805A' }]}>2×2 一键打卡</Text>
                     </View>
                     <Text style={styles.cardDesc}>大号圆形打卡按钮，整卡轻触一键记录当前位置</Text>
+                  </View>
+                </View>
+
+                <View style={styles.cardPreview}>
+                  <View style={styles.previewHeader}>
+                    <View style={[styles.badge, { backgroundColor: isDark ? '#3A302A' : '#DCF3E8' }]}>
+                      <Text style={[styles.badgeText, { color: isDark ? '#4FD6A0' : '#17805A' }]}>2×2 足迹地图</Text>
+                    </View>
+                    <Text style={styles.cardDesc}>微缩地图矢量折线背景，清晰显示今日打卡足迹点</Text>
+                  </View>
+                </View>
+
+                <View style={styles.cardPreview}>
+                  <View style={styles.previewHeader}>
+                    <View style={[styles.badge, { backgroundColor: '#3A302A' }]}>
+                      <Text style={[styles.badgeText, { color: '#4FD6A0' }]}>2×2 打卡热力</Text>
+                    </View>
+                    <Text style={styles.cardDesc}>连续天数大字 + 过去四周 28 格多色阶打卡活跃度热力图</Text>
                   </View>
                 </View>
               </View>

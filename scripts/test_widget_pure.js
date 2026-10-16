@@ -10,7 +10,17 @@
 
 const assert = require('assert');
 
-const { ringSvg, tomatoSvg, iconSvg, ICON_NAMES, progressBarSvg } = require('../widget/svg');
+const {
+  ringSvg,
+  tomatoSvg,
+  iconSvg,
+  ICON_NAMES,
+  progressBarSvg,
+  focusWeekBarsSvg,
+  mapPolylineSvg,
+  weekCirclesSvg,
+  heatGridSvg,
+} = require('../widget/svg');
 const {
   POMODORO_WIDGETS, TRAVEL_WIDGETS, LEGACY_WIDGETS, ALL_WIDGETS, widgetGroup,
 } = require('../widget/widgetNames');
@@ -186,6 +196,74 @@ test('widgetNames Phase 2：4x1 尺寸已注册且分组归属正确', () => {
   assert.ok(TRAVEL_WIDGETS.includes('TravelWidget4x1'));
   assert.strictEqual(widgetGroup('PomodoroWidget4x1'), 'pomodoro');
   assert.strictEqual(widgetGroup('TravelWidget4x1'), 'travel');
+});
+
+// 6. Phase 3 扩展测试：全部 6 个扩展组件注册与 4 种新矢量图生成器
+test('widgetNames Phase 3：全部扩展组件已注册且分组路由无漏项', () => {
+  const pomoP3 = ['PomodoroWidgetTomato2x2', 'PomodoroWidgetDark2x2', 'PomodoroWidgetStats2x2'];
+  const travelP3 = ['TravelWidgetWeek4x1', 'TravelWidgetMap2x2', 'TravelWidgetHeat2x2'];
+
+  for (const name of pomoP3) {
+    assert.ok(POMODORO_WIDGETS.includes(name), `${name} 应在 POMODORO_WIDGETS 中`);
+    assert.strictEqual(widgetGroup(name), 'pomodoro');
+  }
+  for (const name of travelP3) {
+    assert.ok(TRAVEL_WIDGETS.includes(name), `${name} 应在 TRAVEL_WIDGETS 中`);
+    assert.strictEqual(widgetGroup(name), 'travel');
+  }
+  assert.strictEqual(POMODORO_WIDGETS.length, 6);
+  assert.strictEqual(TRAVEL_WIDGETS.length, 6);
+  assert.strictEqual(ALL_WIDGETS.length, 13); // 6 + 6 + 1(Legacy)
+});
+
+test('focusWeekBarsSvg：生成 7 根柱子与对应周标签', () => {
+  const svg = focusWeekBarsSvg({
+    width: 136,
+    height: 54,
+    days: ['四', '五', '六', '日', '一', '二', '今'],
+    values: [30, 45, 60, 20, 80, 100, 150],
+  });
+  assert.ok(svg.startsWith('<svg') && svg.endsWith('</svg>'));
+  assert.ok(svg.includes('>今</text>'));
+  assert.ok(svg.includes('>四</text>'));
+  // 包含 7 根立柱矩形
+  const rectMatches = svg.match(/<rect x="/g);
+  assert.strictEqual(rectMatches.length, 7);
+});
+
+test('mapPolylineSvg：生成微缩地图底图、路线与足迹圆点', () => {
+  const svg0 = mapPolylineSvg({ width: 154, height: 108, count: 0 });
+  assert.ok(svg0.includes('width="154"') && svg0.includes('height="108"'));
+  assert.ok(!svg0.includes('<line x1=')); // 0 打卡无路段
+
+  const svg4 = mapPolylineSvg({ width: 154, height: 108, count: 4 });
+  const lines = svg4.match(/<line x1=/g);
+  assert.strictEqual(lines.length, 3); // 4 站有 3 段连接线
+});
+
+test('weekCirclesSvg：生成 7 个周打卡圆圈与状态', () => {
+  const svg = weekCirclesSvg({
+    width: 210,
+    height: 48,
+    days: ['一', '二', '三', '四', '五', '六', '日'],
+    active: [true, true, false, false, false, false, false],
+    todayIdx: 1,
+  });
+  assert.ok(svg.includes('>今</text>'));
+  assert.ok(svg.includes('>一</text>'));
+  // 两个已打卡站点有勾选 path
+  const checkPaths = svg.match(/<path d=/g);
+  assert.strictEqual(checkPaths.length, 2);
+});
+
+test('heatGridSvg：生成 28 个热力色块与今日高亮边框', () => {
+  const grid = Array(28).fill(0);
+  grid[27] = 2; // 今日
+  grid[10] = 1;
+  const svg = heatGridSvg({ width: 134, height: 48, grid });
+  assert.ok(svg.includes('stroke="#FBEFE4"')); // 今日光晕边框
+  const rects = svg.match(/<rect x="/g);
+  assert.strictEqual(rects.length, 29); // 28 个格子 + 1 个今日外边框
 });
 
 console.log('');

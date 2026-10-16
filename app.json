@@ -103,6 +103,36 @@
               "updatePeriodMillis": 1800000
             },
             {
+              "name": "PomodoroWidgetTomato2x2",
+              "label": "番茄专注 · 番茄卡",
+              "description": "番茄图形与剩余时间",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "PomodoroWidgetDark2x2",
+              "label": "番茄专注 · 深色大字",
+              "description": "深色超大数字与循环点",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "PomodoroWidgetStats2x2",
+              "label": "番茄专注 · 今日统计",
+              "description": "今日专注分钟数与周柱状图",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000
+            },
+            {
               "name": "TravelWidget4x2",
               "label": "行程打卡 · 今日行程",
               "description": "一键打卡 + 今日足迹时间轴",
@@ -123,9 +153,39 @@
               "updatePeriodMillis": 1800000
             },
             {
+              "name": "TravelWidgetWeek4x1",
+              "label": "行程打卡 · 本周连续",
+              "description": "连续天数与周打卡状态",
+              "minWidth": "250dp",
+              "minHeight": "40dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "updatePeriodMillis": 1800000
+            },
+            {
               "name": "TravelWidget2x2",
               "label": "行程打卡 · 一键打卡",
               "description": "整卡点击一键打卡",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "TravelWidgetMap2x2",
+              "label": "行程打卡 · 足迹地图",
+              "description": "今日足迹路线与打卡点",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "TravelWidgetHeat2x2",
+              "label": "行程打卡 · 打卡热力",
+              "description": "深色连续打卡天数与近四周热力图",
               "minWidth": "110dp",
               "minHeight": "110dp",
               "targetCellWidth": 2,

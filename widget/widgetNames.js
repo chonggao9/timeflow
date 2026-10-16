@@ -3,10 +3,24 @@
 // 阶段 2/3 新增尺寸时在此登记（refreshWidgets 对未添加到桌面的名字静默，安全）。
 
 // 番茄专注组
-export const POMODORO_WIDGETS = ['PomodoroWidget4x2', 'PomodoroWidget4x1', 'PomodoroWidget2x2'];
+export const POMODORO_WIDGETS = [
+  'PomodoroWidget4x2',
+  'PomodoroWidget4x1',
+  'PomodoroWidget2x2',
+  'PomodoroWidgetTomato2x2',
+  'PomodoroWidgetDark2x2',
+  'PomodoroWidgetStats2x2',
+];
 
 // 行程打卡组
-export const TRAVEL_WIDGETS = ['TravelWidget4x2', 'TravelWidget4x1', 'TravelWidget2x2'];
+export const TRAVEL_WIDGETS = [
+  'TravelWidget4x2',
+  'TravelWidget4x1',
+  'TravelWidget2x2',
+  'TravelWidgetWeek4x1',
+  'TravelWidgetMap2x2',
+  'TravelWidgetHeat2x2',
+];
 
 // 旧混合组件（过渡期保留：渲染「已升级」卡片，下下版本删除条目）
 export const LEGACY_WIDGETS = ['TimeFlowWidget'];
