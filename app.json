@@ -83,6 +83,16 @@
               "updatePeriodMillis": 1800000
             },
             {
+              "name": "PomodoroWidget4x1",
+              "label": "番茄专注 · 迷你条",
+              "description": "紧凑条形番茄钟：剩余时间与进度条",
+              "minWidth": "250dp",
+              "minHeight": "40dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "updatePeriodMillis": 1800000
+            },
+            {
               "name": "PomodoroWidget2x2",
               "label": "番茄专注 · 圆环",
               "description": "整卡点击开始/暂停",
@@ -100,6 +110,16 @@
               "minHeight": "110dp",
               "targetCellWidth": 4,
               "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "TravelWidget4x1",
+              "label": "行程打卡 · 下一站",
+              "description": "下一站与快捷打卡",
+              "minWidth": "250dp",
+              "minHeight": "40dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
               "updatePeriodMillis": 1800000
             },
             {

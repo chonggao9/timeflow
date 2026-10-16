@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lightColors, darkColors } from '../theme';
+import { refreshAllWidgets } from '../utils/widgetRefresh';
 
 const ThemeContext = createContext(null);
 const STORAGE_KEY = 'timeflow_theme';
@@ -36,6 +37,7 @@ export function ThemeProvider({ children }) {
       setMode('system');
       try { await AsyncStorage.removeItem(STORAGE_KEY); } catch (e) {}
     }
+    refreshAllWidgets().catch(() => {});
   }, []);
 
   const isSystem = mode === 'system';

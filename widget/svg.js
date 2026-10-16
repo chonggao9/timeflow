@@ -124,3 +124,26 @@ export function iconSvg(name, { size = 24, color = '#2A211B' } = {}) {
 }
 
 export const ICON_NAMES = Object.keys(ICON_PATHS);
+
+// 水平胶囊进度条 SVG：width/height 自适应，两端圆角，无布局拉伸失真
+export function progressBarSvg({
+  width = 160,
+  height = 8,
+  progress = 0,
+  track = '#F3E6DA',
+  color = '#EE5A4F',
+} = {}) {
+  const p = Math.max(0, Math.min(1, progress));
+  const r = height / 2;
+  const barW = Math.max(0, Math.min(width, width * p));
+  const fill =
+    barW > 0
+      ? `<rect x="0" y="0" width="${round(barW)}" height="${height}" rx="${round(r)}" fill="${color}"/>`
+      : '';
+  return (
+    `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
+    `<rect x="0" y="0" width="${width}" height="${height}" rx="${round(r)}" fill="${track}"/>` +
+    fill +
+    `</svg>`
+  );
+}

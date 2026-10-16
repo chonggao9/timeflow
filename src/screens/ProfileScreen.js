@@ -26,6 +26,7 @@ import { useTheme } from '../theme/ThemeContext';
 import PrivacyAgreement from './PrivacyAgreement';
 import BackupStatusCard from '../components/backup/BackupStatusCard';
 import DataBackupScreen from './DataBackupScreen';
+import WidgetGuideModal from '../components/WidgetGuideModal';
 
 // 计算连续打卡天数
 function calculateStreakDays(records) {
@@ -102,7 +103,7 @@ const THEME_OPTIONS = [
   { key: 'dark', labelKey: 'theme.dark' },
 ];
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ route }) {
   const insets = useSafeAreaInsets();
   const { t, lang, isSystem, setLang } = useI18n();
   const { colors, theme, isSystem: themeIsSystem, setTheme } = useTheme();
@@ -126,6 +127,13 @@ export default function ProfileScreen() {
   const [showLocationDebug, setShowLocationDebug] = useState(false);
   const [showWidgetGuide, setShowWidgetGuide] = useState(false);
   const [diagRunning, setDiagRunning] = useState(false);
+
+  // 处理深链参数：timeflow://widgets → 打开小组件说明页
+  React.useEffect(() => {
+    if (route?.params?.openWidgets) {
+      setShowWidgetGuide(true);
+    }
+  }, [route?.params?.openWidgets]);
 
   const [streakDays, setStreakDays] = useState(0);
   const [showEditNickname, setShowEditNickname] = useState(false);
@@ -415,27 +423,7 @@ export default function ProfileScreen() {
       </Modal>
 
       {/* 桌面小组件指南 Modal */}
-      <Modal visible={showWidgetGuide} transparent animationType="fade" onRequestClose={() => setShowWidgetGuide(false)}>
-        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowWidgetGuide(false)}>
-          <View style={styles.dialog} onStartShouldSetResponder={() => true}>
-            <Text style={styles.dialogTitle}>{t('profile.sectionWidget')}</Text>
-            <Text style={styles.dialogSub}>
-              长按桌面空白处 → 添加「微件/小组件」→ 找到「TimeFlow 时空流」并拖至桌面，即可无需打开应用一键打卡或查看今日足迹。
-            </Text>
-            <View style={styles.dialogRow}>
-              <TouchableOpacity
-                style={[styles.dialogBtn, styles.dialogOk]}
-                onPress={async () => {
-                  await refreshWidget();
-                  setShowWidgetGuide(false);
-                }}
-              >
-                <Text style={styles.dialogOkText}>{t('common.done') || '知道了'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <WidgetGuideModal visible={showWidgetGuide} onClose={() => setShowWidgetGuide(false)} />
 
       {/* 昵称编辑 Modal */}
       <Modal visible={showEditNickname} transparent animationType="fade" onRequestClose={() => setShowEditNickname(false)}>

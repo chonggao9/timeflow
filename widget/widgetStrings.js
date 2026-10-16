@@ -34,6 +34,8 @@ const STRINGS = {
     emptyCtaSub: '轻触记录今日行程',
     unnamed: '未命名地点',
     openAppHint: '打开 App 完善位置',
+    needLocationPerm: '需要位置权限',
+    openApp: '打开 App',
     // 旧组件过渡卡
     upgradedTitle: '小组件已升级',
     upgradedBody: '请移除本卡片，重新添加新版「番茄专注 / 行程打卡」小组件',
@@ -70,6 +72,8 @@ const STRINGS = {
     emptyCtaSub: 'Tap to record your trip',
     unnamed: 'Unnamed place',
     openAppHint: 'Open app to refine location',
+    needLocationPerm: 'Location permission needed',
+    openApp: 'Open App',
     upgradedTitle: 'Widget upgraded',
     upgradedBody: 'Remove this card and add the new Pomodoro / Trip widgets',
     upgradedBtn: 'Learn how',

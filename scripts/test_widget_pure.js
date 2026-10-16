@@ -10,7 +10,7 @@
 
 const assert = require('assert');
 
-const { ringSvg, tomatoSvg, iconSvg, ICON_NAMES } = require('../widget/svg');
+const { ringSvg, tomatoSvg, iconSvg, ICON_NAMES, progressBarSvg } = require('../widget/svg');
 const {
   POMODORO_WIDGETS, TRAVEL_WIDGETS, LEGACY_WIDGETS, ALL_WIDGETS, widgetGroup,
 } = require('../widget/widgetNames');
@@ -167,6 +167,25 @@ test('对比度：主/次文字对背景（双主题）≥4.5:1；浅色 chip �
     const ratio = contrast(pal.chipText, pal.chipBg);
     assert.ok(ratio >= 4.5, `light ${mode} chip = ${ratio.toFixed(2)}`);
   }
+});
+
+// 5. Phase 2 扩展测试：进度条 SVG、4x1 尺寸
+test('progressBarSvg：0 进度无填充、半程宽度对应、越界钳制', () => {
+  const zero = progressBarSvg({ width: 140, height: 8, progress: 0, color: '#EE5A4F' });
+  assert.ok(!zero.includes('fill="#EE5A4F"')); // 0 进度不画前景色 fill
+  const half = progressBarSvg({ width: 140, height: 8, progress: 0.5, color: '#EE5A4F' });
+  assert.ok(half.includes('width="70"') && half.includes('fill="#EE5A4F"'));
+  const full = progressBarSvg({ width: 140, height: 8, progress: 1 });
+  assert.ok(full.includes('width="140"'));
+  const over = progressBarSvg({ width: 140, height: 8, progress: 1.5 });
+  assert.ok(over.includes('width="140"')); // 钳制到 100%
+});
+
+test('widgetNames Phase 2：4x1 尺寸已注册且分组归属正确', () => {
+  assert.ok(POMODORO_WIDGETS.includes('PomodoroWidget4x1'));
+  assert.ok(TRAVEL_WIDGETS.includes('TravelWidget4x1'));
+  assert.strictEqual(widgetGroup('PomodoroWidget4x1'), 'pomodoro');
+  assert.strictEqual(widgetGroup('TravelWidget4x1'), 'travel');
 });
 
 console.log('');

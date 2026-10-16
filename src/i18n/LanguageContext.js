@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Localization from 'expo-localization';
 import { translations } from './translations';
+import { refreshAllWidgets } from '../utils/widgetRefresh';
 
 const LangContext = createContext(null);
 const STORAGE_KEY = 'timeflow_lang';
@@ -68,6 +69,7 @@ export function LanguageProvider({ children }) {
       setLangState(value);
       try { await AsyncStorage.setItem(STORAGE_KEY, value); } catch (e) {}
     }
+    refreshAllWidgets().catch(() => {});
   }, []);
 
   const t = useCallback((key, params) => {

@@ -262,3 +262,85 @@ export function LegacyUpgradeCard({ strings, pal }) {
     </FlexWidget>
   );
 }
+
+// 4×1 下一站/快捷打卡：左（44dp 图标圈）+ 中（地名/状态文字）+ 右（44dp 胶囊打卡按钮）
+export function TravelWidget4x1({ timeline, strings, pal }) {
+  const main = timeline.empty ? strings.todayTrip : timeline.latestName;
+  const sub = timeline.empty
+    ? strings.emptyCtaSub
+    : strings.justChecked.replace('{t}', timeline.latestTime);
+  return (
+    <FlexWidget
+      clickAction="OPEN_URI"
+      clickActionData={{ uri: TRAVEL_DEEP_LINK }}
+      style={{
+        height: 'match_parent',
+        width: 'match_parent',
+        backgroundColor: pal.bg,
+        borderRadius: RADIUS_WIDGET,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 18,
+      }}
+    >
+      {/* 左侧：44dp 图标圈 */}
+      <FlexWidget
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: pal.chipBg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <SvgWidget
+          svg={iconSvg('pin', { size: 22, color: pal.accent })}
+          style={{ width: 22, height: 22 }}
+        />
+      </FlexWidget>
+
+      {/* 中间：地名主标题 + 状态副标题 */}
+      <FlexWidget
+        style={{
+          flex: 1,
+          flexDirection: 'column',
+          marginHorizontal: 12,
+          justifyContent: 'center',
+        }}
+      >
+        <TextWidget
+          text={main}
+          maxLines={1}
+          truncate="END"
+          style={{ fontSize: 15, fontWeight: '700', color: pal.textPrimary }}
+        />
+        <TextWidget
+          text={sub}
+          maxLines={1}
+          truncate="END"
+          style={{ fontSize: 12, color: pal.textSecondary, marginTop: 2 }}
+        />
+      </FlexWidget>
+
+      {/* 右侧：44dp 胶囊打卡按钮 */}
+      <FlexWidget
+        clickAction="checkIn"
+        style={{
+          height: 44,
+          minWidth: 70,
+          paddingHorizontal: 18,
+          borderRadius: 22,
+          backgroundColor: pal.btn,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <TextWidget
+          text={strings.checkinWord}
+          style={{ fontSize: 14, fontWeight: '700', color: pal.btnText }}
+        />
+      </FlexWidget>
+    </FlexWidget>
+  );
+}

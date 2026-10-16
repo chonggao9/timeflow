@@ -3,7 +3,7 @@
 // 重绘时机 = 用户点击 / 模式切换 / 30min 系统心跳（updatePeriodMillis），无秒级刷新。
 // 图标全矢量（widget/svg.js），无 emoji；可点区域 ≥44dp；配色来自 widgetTheme（对比度已门禁）。
 import { FlexWidget, TextWidget, SvgWidget } from 'react-native-android-widget';
-import { ringCenterSvg, cycleDotsSvg, iconSvg } from '../svg';
+import { ringCenterSvg, cycleDotsSvg, iconSvg, progressBarSvg } from '../svg';
 import { RADIUS_WIDGET } from '../widgetTheme';
 
 export const FOCUS_DEEP_LINK = 'timeflow://focus';
@@ -214,6 +214,79 @@ export function PomodoroWidget2x2({ d, strings, pal }) {
           text={`${strings.mode[d.mode]} · ${strings.status[d.status]}`}
           maxLines={1}
           style={{ fontSize: 12, fontWeight: '700', color: pal.chipText }}
+        />
+      </FlexWidget>
+    </FlexWidget>
+  );
+}
+
+// 4×1 迷你条：左（时间 + 模式·状态）+ 中（水平胶囊进度条）+ 右（44dp 播放/暂停圆形按钮）
+export function PomodoroWidget4x1({ d, strings, pal }) {
+  return (
+    <FlexWidget
+      clickAction="OPEN_URI"
+      clickActionData={{ uri: FOCUS_DEEP_LINK }}
+      style={{
+        height: 'match_parent',
+        width: 'match_parent',
+        backgroundColor: pal.bg,
+        borderRadius: RADIUS_WIDGET,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 18,
+      }}
+    >
+      {/* 左侧：时间与状态 */}
+      <FlexWidget style={{ width: 80, flexDirection: 'column', justifyContent: 'center' }}>
+        <TextWidget
+          text={bigText(d, strings)}
+          maxLines={1}
+          style={{ fontSize: 22, fontWeight: '700', color: pal.textPrimary }}
+        />
+        <TextWidget
+          text={`${strings.mode[d.mode]} · ${strings.status[d.status]}`}
+          maxLines={1}
+          truncate="END"
+          style={{ fontSize: 11, fontWeight: '700', color: pal.chipText, marginTop: 2 }}
+        />
+      </FlexWidget>
+
+      {/* 中间：水平进度条 */}
+      <FlexWidget
+        style={{
+          flex: 1,
+          marginHorizontal: 12,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <SvgWidget
+          svg={progressBarSvg({
+            width: 140,
+            height: 8,
+            progress: remainFrac(d),
+            track: pal.track,
+            color: pal.accent,
+          })}
+          style={{ width: 140, height: 8 }}
+        />
+      </FlexWidget>
+
+      {/* 右侧：44dp 圆形按钮，开始/暂停 */}
+      <FlexWidget
+        clickAction="pomo.toggle"
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: pal.btn,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <SvgWidget
+          svg={iconSvg(d.running ? 'pause' : 'play', { size: 20, color: pal.btnText })}
+          style={{ width: 20, height: 20 }}
         />
       </FlexWidget>
     </FlexWidget>
