@@ -16,6 +16,7 @@ import {
   Easing as RNEasing,
   useWindowDimensions,
   Keyboard,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Reanimated, {
@@ -43,7 +44,7 @@ import {
   normalizeCategory,
 } from '../utils/focusCategories';
 import FocusHistoryModal from './FocusHistoryModal';
-import FocusSettingsCard, { STORAGE_KEY_LAST_AMBIENT } from './FocusSettingsCard';
+import { STORAGE_KEY_LAST_AMBIENT } from './FocusSettingsCard';
 // 番茄引擎：App 与桌面小组件共用同一份状态（AsyncStorage timeflow_pomodoro_state）。
 // UI/动画不动，只把计时真值从组件内 refs 换成 engine 派生（deriveDisplay）。
 import {
@@ -71,6 +72,13 @@ const HOLD_MS = 1000; // 约 1 秒按住
 const ABANDON_CONFIRM_MS = 3000;
 const REST_DURATION_MIN = 5;
 const REST_DURATION_SEC = REST_DURATION_MIN * 60;
+
+const formatOrdinal = (num, currentLang) => {
+  if (currentLang === 'zh') return String(num);
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = num % 100;
+  return num + (s[(v - 20) % 10] || s[v] || s[0]);
+};
 
 // 时长快捷档位：5 / 15 / 25 / 45 / 60，升序排列，统一不带单位
 const DURATION_PRESETS = [5, 15, 25, 45, 60];
@@ -236,8 +244,11 @@ export default function PomodoroTimer({
   const [timeLeftSec, setTimeLeftSec] = useState(DEFAULT_DURATION_MIN * 60);
   const [category, setCategory] = useState('study'); // 首次使用默认「学习」
   const [goalName, setGoalName] = useState('');
+  const [isEditingGoalInRun, setIsEditingGoalInRun] = useState(false);
+  const [runGoalDraft, setRunGoalDraft] = useState('');
   const [isNoteEditing, setIsNoteEditing] = useState(false);
   const [ambient, setAmbient] = useState('none');
+  const [isNoteFocused, setIsNoteFocused] = useState(false);
 
   // 用户是否曾经滑动手势（用于控制“上下滑动调节”提示的展示）
   const [hasSlidAdjust, setHasSlidAdjust] = useState(false);
@@ -473,6 +484,18 @@ export default function PomodoroTimer({
       AsyncStorage.setItem(STORAGE_KEY_LAST_CATEGORY, category).catch(() => {});
     }
   }, [category]);
+
+  // 恢复上次使用的背景声音偏好（静默继承，无需在待开始卡片上重复选择）
+  useEffect(() => {
+    (async () => {
+      try {
+        const last = await AsyncStorage.getItem(STORAGE_KEY_LAST_AMBIENT);
+        if (last && AMBIENT_OPTIONS.some((a) => a.key === last)) {
+          setAmbient(last);
+        }
+      } catch (e) {}
+    })();
+  }, []);
 
   // 空闲态调时长 → 防抖写入 engine.focusMin（组件与 App 同源共享时长设置）
   useEffect(() => {
@@ -740,7 +763,16 @@ export default function PomodoroTimer({
         categoryRef.current = state.category;
         setCategory(state.category);
       }
-      if (state.goalName) setGoalName(state.goalName);
+      if (
+        state.goalName &&
+        state.goalName !== t('home.unnamedFocus', '未命名专注') &&
+        state.goalName !== '未命名专注' &&
+        state.goalName !== 'Unnamed focus'
+      ) {
+        setGoalName(state.goalName);
+      } else {
+        setGoalName('');
+      }
       if (state.ambient) setAmbient(state.ambient);
     }
 
@@ -860,6 +892,7 @@ export default function PomodoroTimer({
       startTs: null,
     };
     st = engineStart(st, now);
+    engineRef.current = st;
 
     savedRef.current = false;
     setTimeLeftSec(totalSec);
@@ -874,7 +907,6 @@ export default function PomodoroTimer({
     }
 
     await persistEngine(st); // 落盘 + 排期结束通知 + 刷新组件
-    setGoalName('');
     if (ambient !== 'none') {
       await playAmbientSound(ambient);
     }
@@ -963,12 +995,14 @@ export default function PomodoroTimer({
       // 放弃 = 回当前模式满时长（pendingHarvests 不动，未保存收获保留）
       const prev = engineRef.current;
       const now = Date.now();
-      const next = engineReset(prev || createState({ now, focusMin: durationMin }), now);
+      let next = engineReset(prev || createState({ now, focusMin: durationMin }), now);
+      next = { ...next, goalName: '' };
       savedRef.current = false;
       harvestedRef.current = null;
       setGoalName('');
       setPhaseAndRef('idle');
       setTimeLeftSec(next.focusMin * 60);
+      engineRef.current = next;
       await persistEngine(next, prev); // 取消结束通知 + 落盘 + 刷新组件
       return;
     }
@@ -989,6 +1023,7 @@ export default function PomodoroTimer({
     // 回 focus 待开始（休息/收获关闭后统一落点）；pendingHarvests 不动
     let next = engineReset(prev, now);
     if (next.mode !== 'focus') next = engineSwitchMode(next, 'focus', now);
+    next = { ...next, goalName: '' };
     if (abandonTimerRef.current) {
       clearTimeout(abandonTimerRef.current);
       abandonTimerRef.current = null;
@@ -1001,6 +1036,7 @@ export default function PomodoroTimer({
     setTimeLeftSec(next.focusMin * 60);
     setRestTimeLeftSec(REST_DURATION_SEC);
     savedRef.current = false;
+    engineRef.current = next;
     if (notifyParent && onRunningChange) onRunningChange(false);
     await persistEngine(next, prev);
   }, [persistEngine, durationMin, onRunningChange]);
@@ -1042,6 +1078,24 @@ export default function PomodoroTimer({
     await saveFocusRecord();
     await resetToIdle(false);
   }, [saveFocusRecord, resetToIdle]);
+
+  // 运行中轻触胶囊修改专注目标
+  const openEditGoalInRun = useCallback(() => {
+    setRunGoalDraft(goalName);
+    setIsEditingGoalInRun(true);
+  }, [goalName]);
+
+  const saveGoalInRun = useCallback(async () => {
+    const trimmed = runGoalDraft.trim();
+    setGoalName(trimmed);
+    setIsEditingGoalInRun(false);
+    const resolved = trimmed || t('home.unnamedFocus', '未命名专注');
+    if (engineRef.current) {
+      const next = { ...engineRef.current, goalName: resolved };
+      engineRef.current = next;
+      await persistEngine(next);
+    }
+  }, [runGoalDraft, t, persistEngine]);
 
   // 计入并开始休息：settle 后 engine 已是 short/long（4 番茄自动长休），直接启动
   const startRest = useCallback(async () => {
@@ -1172,6 +1226,7 @@ export default function PomodoroTimer({
   const handleSelectAmbient = useCallback(async (key) => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Light);
     setAmbient(key);
+    AsyncStorage.setItem(STORAGE_KEY_LAST_AMBIENT, key).catch(() => {});
     scrollToAmbientCenter(key);
     if (key === 'none') {
       await stopAmbientSound();
@@ -1459,23 +1514,55 @@ export default function PomodoroTimer({
           {/* 顶部第 N 次与分类胶囊 */}
           <View style={styles.runTopWrap}>
             <Text style={styles.runCountText}>
-              {t('pomodoro.todayNth', { n: todaySummary.count + 1 }).replace(
-                '{n}',
-                todaySummary.count + 1
-              )}
+              {t('pomodoro.todayNth', { n: formatOrdinal(todaySummary.count + 1, lang) })}
             </Text>
-            <View style={styles.runCatCapsule}>
+            <TouchableOpacity
+              style={[
+                styles.runCatCapsule,
+                {
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF',
+                  borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#EFE5D8',
+                },
+              ]}
+              activeOpacity={0.7}
+              onPress={openEditGoalInRun}
+            >
               <View
                 style={[
                   styles.catChipDot,
                   { backgroundColor: selectedCategoryMeta?.color || colors.primary },
                 ]}
               />
-              <Text style={styles.runCatName}>{selectedCategoryMeta?.name}</Text>
-              {goalName.trim() ? (
-                <Text style={styles.runGoalText}> · {goalName.trim()}</Text>
-              ) : null}
-            </View>
+              <Text style={[styles.runCatName, { color: isDark ? '#F5EDE4' : '#2B211C' }]}>
+                {selectedCategoryMeta?.name}
+              </Text>
+              {(() => {
+                const currentGoal = (goalName || '').trim();
+                const isUnnamed =
+                  !currentGoal ||
+                  currentGoal === t('home.unnamedFocus', '未命名专注') ||
+                  currentGoal === '未命名专注' ||
+                  currentGoal === 'Unnamed focus';
+                if (!isUnnamed) {
+                  return (
+                    <Text
+                      style={[styles.runGoalText, { color: isDark ? '#D5C7BA' : '#5E4F44' }]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {' · ' + currentGoal}
+                    </Text>
+                  );
+                }
+                return null;
+              })()}
+              <Ionicons
+                name="pencil-outline"
+                size={11}
+                color={isDark ? 'rgba(255,255,255,0.4)' : '#A6988D'}
+                style={{ marginLeft: 2 }}
+              />
+            </TouchableOpacity>
           </View>
 
           {/* 中部成熟番茄 */}
@@ -1572,6 +1659,100 @@ export default function PomodoroTimer({
             </ScrollView>
           </View>
         </ScrollView>
+
+        {/* 运行中编辑专注目标 Modal */}
+        <Modal
+          visible={isEditingGoalInRun}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setIsEditingGoalInRun(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalBg}
+          >
+            <View
+              style={[
+                styles.modalContent,
+                {
+                  backgroundColor: colors.card || (isDark ? '#1F1E1D' : '#FFFFFF'),
+                  borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#EFE5D8',
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.modalTitle,
+                  { color: colors.ink || (isDark ? '#F5EDE4' : '#2B211C'), marginBottom: 8 },
+                ]}
+              >
+                {t('home.renameFocusTitle', '修改专注目标')}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 13,
+                  color: isDark ? '#A6988D' : '#6B5B4F',
+                  textAlign: 'center',
+                  marginBottom: 16,
+                }}
+              >
+                {t('home.renameFocusSub', '给这次专注起个响亮的名字')}
+              </Text>
+              <TextInput
+                style={{
+                  height: 48,
+                  borderRadius: 12,
+                  paddingHorizontal: 14,
+                  fontSize: 15,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FAF4EC',
+                  color: colors.ink || (isDark ? '#F5EDE4' : '#2B211C'),
+                  borderWidth: 1,
+                  borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#EADFD0',
+                  marginBottom: 20,
+                }}
+                value={runGoalDraft}
+                onChangeText={setRunGoalDraft}
+                placeholder={t('pomodoro.notePlaceholder', '具体做什么？（选填）')}
+                placeholderTextColor={isDark ? '#7A6F66' : '#A6988D'}
+                maxLength={30}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={saveGoalInRun}
+              />
+              <View style={styles.customDurBtnRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.customDurBtnCancel,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#FAF4EC',
+                      borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#EADFD0',
+                    },
+                  ]}
+                  onPress={() => setIsEditingGoalInRun(false)}
+                >
+                  <Text
+                    style={[
+                      styles.customDurBtnCancelText,
+                      { color: isDark ? '#D5C7BA' : '#6B5B4F' },
+                    ]}
+                  >
+                    {t('common.cancel')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.customDurBtnConfirm,
+                    { backgroundColor: colors.primary || '#C63D31' },
+                  ]}
+                  onPress={saveGoalInRun}
+                >
+                  <Text style={styles.customDurBtnConfirmText}>{t('common.save')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </Animated.View>
     );
   }
@@ -1659,6 +1840,56 @@ export default function PomodoroTimer({
           <View style={styles.catFadeRight} pointerEvents="none" />
         </View>
 
+        {/* 4.5 目标备注输入框（上移至分类下方，自然聚合且防键盘遮挡） */}
+        <View style={styles.noteInputWrap}>
+          <View
+            style={[
+              styles.noteInputCard,
+              {
+                backgroundColor: isDark ? '#1F1915' : '#FAF6F0',
+                borderColor: isNoteFocused
+                  ? '#C63D31'
+                  : (isDark ? '#3D332A' : '#EADFD0'),
+              },
+            ]}
+          >
+            <Ionicons
+              name="pencil-outline"
+              size={15}
+              color={isNoteFocused ? '#C63D31' : (isDark ? '#8C7D73' : '#6B5B4F')}
+              style={styles.pencilIcon}
+            />
+            <TextInput
+              style={[
+                styles.noteInputText,
+                { color: colors?.ink || (isDark ? '#F5EDE4' : '#2B211C') },
+              ]}
+              value={goalName}
+              onChangeText={setGoalName}
+              placeholder={t('pomodoro.notePlaceholder', '具体做什么？（选填）')}
+              placeholderTextColor={isDark ? '#7A6F66' : '#A6988D'}
+              maxLength={30}
+              onFocus={() => setIsNoteFocused(true)}
+              onBlur={() => setIsNoteFocused(false)}
+              returnKeyType="done"
+              onSubmitEditing={() => Keyboard.dismiss()}
+            />
+            {goalName && goalName.length > 0 ? (
+              <TouchableOpacity
+                onPress={() => setGoalName('')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="close-circle"
+                  size={17}
+                  color={isDark ? '#8C7D73' : '#A6988D'}
+                />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+
         {/* 5. 番茄计时器（放大居中，在分类区与时长档位之间垂直居中，支持上下滑动调节时长 5~120） */}
         <GestureDetector gesture={panGesture}>
           <View
@@ -1736,18 +1967,6 @@ export default function PomodoroTimer({
               </Text>
             </TouchableOpacity>
           </View>
-
-          {/* 7. 设置卡片：第一行常驻备注输入框 + 第二行横向吸附背景声音选择器 */}
-          <FocusSettingsCard
-            goalName={goalName}
-            onChangeGoalName={setGoalName}
-            ambient={ambient}
-            onSelectAmbient={setAmbient}
-            soundFiles={AMBIENT_SOUND_FILES}
-            isDark={isDark}
-            colors={colors}
-            t={t}
-          />
 
           {/* 8. 开始按钮（长按 1 秒开始，带进度填充反馈） */}
           <View style={styles.startBtnBottomWrap}>
@@ -1922,12 +2141,35 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // 4. 分类横向滚动条（区块间距 24）
+  // 4. 分类横向滚动条（紧凑连接目标输入框）
   catScrollWrapper: {
     position: 'relative',
     width: '100%',
     minHeight: 44,
-    marginBottom: 24,
+    marginBottom: 10,
+  },
+  // 4.5 目标备注输入框
+  noteInputWrap: {
+    width: '100%',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  noteInputCard: {
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  pencilIcon: {
+    marginRight: 8,
+  },
+  noteInputText: {
+    flex: 1,
+    fontSize: 13,
+    paddingVertical: 0,
+    fontWeight: '500',
   },
   catScrollContent: {
     flexDirection: 'row',
@@ -2025,7 +2267,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 16,
     gap: 6,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   durPill: {
     flex: 1,
@@ -2074,66 +2316,6 @@ const styles = StyleSheet.create({
   durPillCustomTextActive: {
     fontWeight: '700',
     color: '#B33427',
-  },
-
-  // 7. 设置卡片：整合备注输入框与背景声音横向吸附选择器（总高不超 128dp，行距 8dp）
-  focusSettingsCardWrap: {
-    width: '100%',
-    paddingHorizontal: 16,
-    marginBottom: 14,
-  },
-  focusSettingsCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 10,
-    gap: 8,
-  },
-  noteInputRow: {
-    height: 38,
-    borderRadius: 10,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-  },
-  noteInputField: {
-    flex: 1,
-    fontSize: 13,
-    paddingVertical: 0,
-    fontWeight: '500',
-  },
-  ambientCarouselContainer: {
-    height: 52,
-    position: 'relative',
-    justifyContent: 'center',
-  },
-  ambientCardItem: {
-    height: 46,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    paddingHorizontal: 4,
-  },
-  ambientCardText: {
-    fontSize: 11,
-  },
-  carouselFadeLeft: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 24,
-    justifyContent: 'center',
-  },
-  carouselFadeRight: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 24,
-    justifyContent: 'center',
   },
 
   // 8. 开始按钮（下移贴近底部单手拇指热区，长按 1 秒开始进度填充）
@@ -2201,6 +2383,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#EFE5D8',
+    maxWidth: '88%',
   },
   runCatName: {
     fontSize: 15,
@@ -2210,6 +2393,7 @@ const styles = StyleSheet.create({
   runGoalText: {
     fontSize: 15,
     color: '#5E4F44',
+    flexShrink: 1,
   },
   runTomatoWrap: {
     width: '100%',

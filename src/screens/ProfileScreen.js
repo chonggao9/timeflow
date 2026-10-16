@@ -106,7 +106,7 @@ const THEME_OPTIONS = [
 export default function ProfileScreen({ route }) {
   const insets = useSafeAreaInsets();
   const { t, lang, isSystem, setLang } = useI18n();
-  const { colors, theme, isSystem: themeIsSystem, setTheme } = useTheme();
+  const { colors, theme, skin, skins, isSystem: themeIsSystem, setTheme, setSkin, isSkinUnlocked } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [nickname, setNickname] = useState('');
@@ -254,7 +254,8 @@ export default function ProfileScreen({ route }) {
   };
 
   const languageValue = isSystem ? t('language.system') : (lang === 'zh' ? t('language.zh') : t('language.en'));
-  const themeValue = themeIsSystem ? t('theme.system') : theme === 'dark' ? t('theme.dark') : t('theme.light');
+  const currentSkinConf = (skins || []).find((s) => s.id === skin);
+  const themeValue = `${themeIsSystem ? t('theme.system') : (theme === 'dark' ? t('theme.dark') : t('theme.light'))} · ${currentSkinConf ? t(currentSkinConf.nameKey) : t('theme.skinCoral')}`;
 
   return (
     <View style={styles.screen}>
@@ -328,7 +329,7 @@ export default function ProfileScreen({ route }) {
           <Row
             icon="shapes-outline"
             label={t('profile.sectionWidget')}
-            value="查看说明"
+            value={t('profile.widgetGuideAction')}
             onPress={() => setShowWidgetGuide(true)}
           />
           <View style={styles.divider} />
@@ -395,29 +396,98 @@ export default function ProfileScreen({ route }) {
         </TouchableOpacity>
       </Modal>
 
-      {/* 主题选择 Modal */}
+      {/* 主题与皮肤设置 Modal */}
       <Modal visible={showTheme} transparent animationType="fade" onRequestClose={() => setShowTheme(false)}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowTheme(false)}>
           <View style={styles.dialog} onStartShouldSetResponder={() => true}>
-            <Text style={styles.dialogTitle}>{t('profile.theme')}</Text>
-            {THEME_OPTIONS.map((opt) => {
-              const active = themeIsSystem ? opt.key === 'system' : theme === opt.key;
-              return (
-                <TouchableOpacity
-                  key={opt.key}
-                  style={[styles.langOption, active && styles.langOptionActive]}
-                  onPress={async () => {
-                    await setTheme(opt.key);
-                    setShowTheme(false);
-                  }}
-                >
-                  <Text style={[styles.langOptionText, active && styles.langOptionTextActive]}>
-                    {t(opt.labelKey)}
-                  </Text>
-                  {active && <Ionicons name="checkmark" size={18} color={colors.primaryStrong} />}
-                </TouchableOpacity>
-              );
-            })}
+            <Text style={styles.dialogTitle}>{t('profile.themeTitle')}</Text>
+
+            {/* 1. 外观模式 */}
+            <Text style={styles.themeSectionTitle}>{t('theme.appearanceSection')}</Text>
+            <View style={styles.appearanceRow}>
+              {[
+                { key: 'system', icon: 'hardware-chip-outline', labelKey: 'theme.system' },
+                { key: 'light', icon: 'sunny-outline', labelKey: 'theme.light' },
+                { key: 'dark', icon: 'moon-outline', labelKey: 'theme.dark' },
+              ].map((opt) => {
+                const active = themeIsSystem ? opt.key === 'system' : (!themeIsSystem && theme === opt.key);
+                return (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[styles.appearancePill, active && styles.appearancePillActive]}
+                    onPress={() => setTheme(opt.key)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={opt.icon}
+                      size={15}
+                      color={active ? colors.primary : colors.textSecondary}
+                    />
+                    <Text style={[styles.appearanceText, active && styles.appearanceTextActive]}>
+                      {t(opt.labelKey)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* 2. 色彩皮肤 */}
+            <Text style={styles.themeSectionTitle}>{t('theme.skinSection')}</Text>
+            <View style={styles.skinsGrid}>
+              {(skins || []).map((s) => {
+                const active = skin === s.id;
+                const unlocked = isSkinUnlocked ? isSkinUnlocked(s.id, streakDays) : true;
+                return (
+                  <TouchableOpacity
+                    key={s.id}
+                    style={[
+                      styles.skinCard,
+                      active && styles.skinCardActive,
+                      !unlocked && styles.skinCardLocked,
+                    ]}
+                    onPress={() => {
+                      if (!unlocked) {
+                        Alert.alert(
+                          t(s.nameKey),
+                          t('theme.streakDaysLeft', { n: Math.max(0, (s.unlockDays || 0) - streakDays) })
+                        );
+                        return;
+                      }
+                      setSkin(s.id);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.skinSwatchOuter, { borderColor: s.colorPreview }]}>
+                      <View style={[styles.skinSwatchInner, { backgroundColor: s.colorPreview }]} />
+                    </View>
+                    <View style={styles.skinInfo}>
+                      <Text
+                        style={[styles.skinName, active && styles.skinNameActive]}
+                        numberOfLines={1}
+                      >
+                        {t(s.nameKey)}
+                      </Text>
+                      {!unlocked && (
+                        <Text style={styles.skinLockedLabel} numberOfLines={1}>
+                          {t('theme.skinUnlockDays', { days: s.unlockDays })}
+                        </Text>
+                      )}
+                    </View>
+                    {active && (
+                      <Ionicons name="checkmark-circle" size={17} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={styles.dialogCloseBtn}
+              onPress={() => setShowTheme(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dialogCloseText}>{t('common.done', '完成')}</Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -545,7 +615,7 @@ export default function ProfileScreen({ route }) {
           <View style={styles.dialog} onStartShouldSetResponder={() => true}>
             <Text style={styles.dialogTitle}>{t('profile.locationDebug')}</Text>
             <Text style={styles.dialogSub}>
-              检测当前设备的系统定位服务、运行时权限、高德定位 SDK 及逆地理编码状态。
+              {t('profile.locationDebugSub')}
             </Text>
             <TouchableOpacity style={styles.keyRow} onPress={openAmapKey} activeOpacity={0.6}>
               <Ionicons name="map-outline" size={16} color={colors.ico} />
@@ -581,7 +651,7 @@ export default function ProfileScreen({ route }) {
                   await handleLocationDiag();
                 }}
               >
-                <Text style={styles.dialogOkText}>{diagRunning ? '检测中…' : t('profile.locationDiag')}</Text>
+                <Text style={styles.dialogOkText}>{diagRunning ? t('profile.locationDiagRunning') : t('profile.locationDiag')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -747,4 +817,112 @@ const makeStyles = (colors) => StyleSheet.create({
   langOptionActive: { backgroundColor: colors.primarySofter },
   langOptionText: { fontSize: 15, color: colors.ink },
   langOptionTextActive: { color: colors.primaryStrong, fontWeight: '700' },
+
+  themeSectionTitle: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginTop: 12,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  appearanceRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  appearancePill: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: colors.divider,
+    backgroundColor: colors.card,
+  },
+  appearancePillActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryTint,
+  },
+  appearanceText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  appearanceTextActive: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  skinsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  skinCard: {
+    width: '48.5%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    borderColor: colors.divider,
+    backgroundColor: colors.card,
+    marginBottom: 8,
+  },
+  skinCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryTint,
+  },
+  skinCardLocked: {
+    opacity: 0.65,
+  },
+  skinSwatchOuter: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  skinSwatchInner: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  skinInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  skinName: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  skinNameActive: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  skinLockedLabel: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  dialogCloseBtn: {
+    marginTop: 14,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialogCloseText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
 });

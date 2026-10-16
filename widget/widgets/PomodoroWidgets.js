@@ -1,3 +1,4 @@
+'use no memo';
 // 番茄专注组件 V2（设计稿 docs/design/timeflow-widgets-v2-ui.html「番茄专注」节）。
 // 退化显示决策：运行中只显示静态「hh:mm 结束」，不显示会变旧的剩余分钟；
 // 重绘时机 = 用户点击 / 模式切换 / 30min 系统心跳（updatePeriodMillis），无秒级刷新。

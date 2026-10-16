@@ -159,14 +159,15 @@ export function focusWeekBarsSvg({
   activeText = '#C23128',
   subText = '#6B5B50',
 } = {}) {
-  const maxVal = Math.max(150, ...values);
+  const safeValues = Array.isArray(values) ? values : [0, 0, 0, 0, 0, 0, 0];
+  const maxVal = Math.max(150, ...safeValues);
   const count = 7;
   const colW = 14;
   const gap = round((width - colW * count) / (count - 1));
   let bars = '';
   for (let i = 0; i < count; i++) {
     const x = i * (colW + gap);
-    const val = values[i] || 0;
+    const val = safeValues[i] || 0;
     const barH = Math.max(4, Math.min(34, Math.round((val / maxVal) * 34)));
     const y = 34 - barH;
     const isToday = i === count - 1;
@@ -229,6 +230,7 @@ export function weekCirclesSvg({
   days = ['一', '二', '三', '四', '五', '六', '日'],
   active = [false, false, false, false, false, false, false],
   todayIdx = 2,
+  todayWord = '',
   accent = '#4FD6A0',
   track = '#3A302A',
   textSecondary = '#D9C9BA',
@@ -250,7 +252,7 @@ export function weekCirclesSvg({
       circles +=
         `<circle cx="${cx}" cy="${cy}" r="11" fill="none" stroke="${isToday ? accent : track}" stroke-width="2"/>`;
     }
-    const label = isToday ? '今' : (days[i] || '');
+    const label = isToday ? (todayWord || '今') : (days[i] || '');
     const txtColor = isToday ? accent : textSecondary;
     const fw = isToday ? 'bold' : 'normal';
     circles += `<text x="${cx}" y="42" text-anchor="middle" font-size="11" font-weight="${fw}" fill="${txtColor}">${label}</text>`;

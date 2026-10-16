@@ -1,3 +1,4 @@
+'use no memo';
 // 行程打卡组件 V2（设计稿「行程打卡」节，足迹模式——已决策取消计划站点）：
 // 时间轴 = 今日已打卡记录，最新一条为「当前」，无「未到」站、无「4 站完成」态。
 // 打卡走 src/services/quickCheckIn.js（与 App 首页「一键打卡」同一函数，headless 安全）。
@@ -390,6 +391,7 @@ export function TravelWidgetWeek4x1({ streakDays = 0, weekDays = { days: [], act
             days: weekDays.days,
             active: weekDays.active,
             todayIdx: weekDays.todayIdx,
+            todayWord: strings?.todayWord || '',
             accent: pal.accent,
             track: pal.track,
             textSecondary: pal.textSecondary,
@@ -440,7 +442,7 @@ export function TravelWidgetMap2x2({ timeline, strings, pal, isDark }) {
         }}
       >
         <TextWidget
-          text={strings.checkedCount.replace('{n}', timeline.countText || `${timeline.count || 0}次`)}
+          text={strings.checkedCount.replace('{n}', timeline.countText || strings.timesCount.replace('{n}', String(timeline.count || 0)))}
           style={{ fontSize: 12, fontWeight: '700', color: pal.textPrimary }}
         />
         <TextWidget

@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TimeFlow 桌面小组件指南 · UI 设计稿</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Outfit:wght@500;600;700&display=swap">
+<style>
+:root{
+  --bg:#FAF5EE; --page:#E9DFD2; --ink:#2A211B; --sub:#6B5B50; --line:#F0E6DA; --chip:#F5E8DE;
+  --acc:#D63B32; --acc-tx:#C23128; --acc-soft:#FDE6E1;
+}
+.phone[data-g=trip]{--acc:#17805A;--acc-tx:#17805A;--acc-soft:#DCF3E8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font-family:'Noto Sans SC',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;border:0;padding:0;background:none;color:inherit;cursor:pointer;text-align:left}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.num{font-family:'Outfit',sans-serif;font-variant-numeric:tabular-nums;font-weight:600;line-height:1}
+.num small{font-size:.5em;font-weight:500;margin-left:2px}
+.svg{display:inline-flex}.svg svg{display:block}
+
+.stagewrap{display:flex;gap:48px;justify-content:center;align-items:flex-start;padding:40px 20px;flex-wrap:wrap}
+.phone{position:relative;width:390px;height:800px;border-radius:40px;background:var(--bg);overflow:hidden;box-shadow:0 0 0 10px #2A211B,0 30px 60px rgba(60,40,20,.35);flex:none}
+.top{position:absolute;left:0;right:0;top:0;height:56px;display:flex;align-items:center;gap:2px;padding:0 8px;background:var(--bg);z-index:3}
+.top h2{margin:0;font-size:17px}
+.iconbtn{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.body{position:absolute;left:0;right:0;top:56px;bottom:0;overflow:auto;padding:4px 16px 36px}
+.intro{margin:0 4px 14px;font-size:13px;line-height:19px;color:var(--sub)}
+
+/* 分段滑块 */
+.seg{position:relative;display:flex;height:52px;padding:4px;border-radius:26px;background:#EFE5DA}
+.seg .pill{position:absolute;top:4px;left:4px;width:calc(50% - 4px);height:44px;border-radius:22px;background:#fff;box-shadow:0 2px 8px rgba(95,62,32,.16);transition:transform .28s cubic-bezier(.3,.8,.3,1)}
+.phone[data-g=trip] .seg .pill{transform:translateX(100%)}
+.seg button{position:relative;flex:1;height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:14px;font-weight:500;color:var(--sub);text-align:center;transition:color .2s}
+.seg button[aria-selected=true]{color:var(--acc-tx);font-weight:700}
+
+/* 预览舞台 */
+.stage{position:relative;height:270px;margin-top:14px;padding-bottom:62px;border-radius:28px;overflow:hidden;background:linear-gradient(165deg,#F8E8D8 0%,#F3D5C5 55%,#E8C7C0 100%);display:flex;align-items:center;justify-content:center}
+.hold{position:relative;animation:pop .3s cubic-bezier(.3,.8,.3,1)}
+@keyframes pop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+.arrow{position:absolute;bottom:8px;width:44px;height:44px;border-radius:50%;background:rgba(255,253,250,.8);color:var(--ink);display:flex;align-items:center;justify-content:center;z-index:2}
+.arrow.l{left:10px}.arrow.r{right:10px}
+.arrow[disabled]{opacity:.35;cursor:default}
+.counter{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);padding:3px 12px;border-radius:12px;background:rgba(42,33,27,.55);color:#fff;font-size:12px;font-weight:500;z-index:2}
+
+/* 尺寸芯片 */
+.chips{display:flex;gap:8px;overflow-x:auto;margin:12px -16px 0;padding:2px 16px 6px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;height:44px;padding:0 14px;border-radius:22px;background:#fff;box-shadow:inset 0 0 0 1.5px var(--line);display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--sub);white-space:nowrap}
+.chip.on{background:var(--ink);color:#FBEFE4;box-shadow:none;font-weight:700}
+.shp{display:inline-block;border:1.6px solid currentColor;border-radius:3px;flex:none}
+.shp.a{width:18px;height:10px}.shp.b{width:18px;height:6px}.shp.c{width:11px;height:11px}
+
+/* 信息卡 */
+.card{background:#fff;border-radius:20px;box-shadow:0 2px 10px rgba(95,62,32,.07)}
+.info{margin-top:10px;padding:16px 18px 14px}
+.info .h{display:flex;align-items:center;gap:8px}
+.info .h b{font-size:17px}
+.badge{padding:2px 9px;border-radius:10px;background:var(--acc-soft);color:var(--acc-tx);font-size:12px;font-weight:700}
+.info p{margin:8px 0 10px;font-size:13px;line-height:20px;color:var(--sub)}
+.info ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.info li{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:19px}
+.info li .svg{color:var(--acc-tx);margin-top:2px}
+.gt{font-size:12px;font-weight:500;color:var(--sub);margin:22px 4px 8px}
+
+/* 步骤 */
+.steps{padding:6px 18px}
+.st{position:relative;display:flex;gap:14px;padding:12px 0}
+.st + .st:before{content:"";position:absolute;left:13px;top:-12px;height:24px;width:2px;background:#F1C9C3}
+.st .n{width:28px;height:28px;border-radius:50%;background:#D63B32;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;position:relative;z-index:1}
+.st b{display:block;font-size:14px;line-height:20px}
+.st small{display:block;font-size:12px;line-height:18px;color:var(--sub);margin-top:1px}
+
+/* 提示（默认折叠） */
+.tip{display:block;width:100%;margin-top:14px;border-radius:18px;background:#FFF3D6;color:#6B4306;padding:0 16px}
+.tip .hd{display:flex;align-items:center;gap:10px;min-height:52px;font-size:14px;font-weight:700}
+.tip .hd .t{flex:1}
+.tip .chv{transition:transform .2s;color:#8F5608}
+.tip.open .chv{transform:rotate(90deg)}
+.tip .bd{display:none;padding:0 0 14px;font-size:13px;line-height:20px;font-weight:400}
+.tip.open .bd{display:block}
+
+/* 组件样式 */
+.wg{position:relative;border-radius:28px;background:#FFFDFA;color:var(--ink);box-shadow:0 14px 30px rgba(95,62,32,.22),0 2px 4px rgba(95,62,32,.08)}
+.wg.dark{background:#241D19;color:#FBEFE4;box-shadow:0 14px 30px rgba(40,22,10,.4),0 2px 4px rgba(40,22,10,.2),inset 0 0 0 1px rgba(255,255,255,.06)}
+.w42{width:358px;height:168px}.w41{width:358px;height:80px}.w22{width:170px;height:168px}
+.ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.bar{flex:1;height:8px;border-radius:4px;background:#F3E6DA;overflow:hidden}
+.bar i{display:block;height:8px;border-radius:4px}
+.rb{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none}
+.pc{flex:1;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#F6EEE6;color:#6B5B50}
+.dot{width:7px;height:7px;border-radius:50%;display:block}
+.srow{position:relative;height:26px;display:flex;align-items:center;gap:10px}
+.sdot{width:18px;height:18px;flex:none;border-radius:50%;background:#FFFDFA;border:2px solid #D8C9BB;color:#fff;display:flex;align-items:center;justify-content:center}
+.srow.done .sdot{background:#2DB37C;border-color:#2DB37C}
+.srow.cur .sdot{border-color:#2DB37C}
+.srow.cur .sdot:after{content:"";width:6px;height:6px;border-radius:50%;background:#2DB37C}
+.srow .nm{flex:1;min-width:0;font-size:13px;line-height:18px;font-weight:500;color:#7A6A5E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srow.cur .nm{color:#2A211B;font-weight:700}.srow.done .nm{color:#6B5B50}
+.srow .tm{font-family:'Outfit',sans-serif;font-size:12px;font-weight:500;color:#7A6A5E}
+.srow.done .tm,.srow.cur .tm{color:#17805A;font-weight:700}
+.wd{display:flex;flex-direction:column;align-items:center;gap:4px}
+.wd i{width:26px;height:26px;border-radius:50%;border:2px solid #3A302A;color:#1B1512;display:flex;align-items:center;justify-content:center}
+.wd.on i{background:#4FD6A0;border-color:#4FD6A0}.wd.today i{border-color:#4FD6A0}
+.wd span{font-size:11px;line-height:12px;font-weight:500;color:#D9C9BA}.wd.today span{font-weight:700;color:#4FD6A0}
+.pin{position:absolute;width:22px;height:22px;box-sizing:border-box;border-radius:50%;background:#FFFDFA;border:3px solid #CBBFB3;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(60,40,20,.2)}
+.pin.done{background:#2DB37C;border-color:#FFFDFA}.pin.cur{border-color:#2DB37C}
+.seg2{position:absolute;height:0;border-top:3px dashed #9DBBA6;transform-origin:0 50%}
+.seg2.done{border-top-style:solid;border-top-color:#2DB37C}
+.heat{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.heat i{height:12px;border-radius:4px;background:#3A302A;display:block}
+.heat i.l1{background:#1F7A57}.heat i.l2{background:#4FD6A0}.heat i.td{box-shadow:0 0 0 1.5px #FBEFE4}
+
+/* 右侧说明 */
+.panel{width:330px;flex:none}
+.panel h1{font-size:20px;margin:6px 0 10px}
+.panel p{font-size:13px;line-height:20px;color:var(--sub);margin:0 0 16px}
+.panel ol{margin:0;padding:0 0 0 18px;font-size:13px;line-height:21px}
+.panel li{margin-bottom:10px}
+.panel b{color:var(--ink)}
+.bad{margin-top:20px;padding:14px;border-radius:14px;background:#F4EBE1;font-size:12px;line-height:19px;color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="stagewrap">
+  <div class="phone" id="phone" data-g="pomo">
+    <div class="top"><button class="iconbtn" aria-label="返回"><span class="svg" id="icBack"></span></button><h2>桌面小组件</h2></div>
+    <div class="body">
+      <p class="intro">两个独立的小组件，挑顺手的尺寸放到桌面。</p>
+      <div class="seg" role="tablist" aria-label="选择小组件">
+        <i class="pill"></i>
+        <button role="tab" id="tabP" data-g="pomo" aria-selected="true"><span class="svg" id="icClock"></span>番茄专注</button>
+        <button role="tab" id="tabT" data-g="trip" aria-selected="false"><span class="svg" id="icPin"></span>行程打卡</button>
+      </div>
+      <div class="stage" id="stage">
+        <div class="counter" id="counter"></div>
+        <button class="arrow l" id="prev" aria-label="上一个"><span class="svg" id="icL"></span></button>
+        <button class="arrow r" id="next" aria-label="下一个"><span class="svg" id="icR"></span></button>
+        <div id="hold"></div>
+      </div>
+      <div class="chips" id="chips" role="tablist" aria-label="选择尺寸"></div>
+      <div class="card info" id="info"></div>
+
+      <div class="gt">添加到桌面</div>
+      <div class="card steps">
+        <div class="st"><span class="n">1</span><div><b>长按桌面空白处</b><small>选择「小组件」</small></div></div>
+        <div class="st"><span class="n">2</span><div><b>找到「TimeFlow 时空流」</b><small>番茄专注、行程打卡各有一组</small></div></div>
+        <div class="st"><span class="n">3</span><div><b>选好尺寸，拖到桌面</b><small>4×2、4×1、2×2 任选</small></div></div>
+      </div>
+
+      <button class="tip" id="tip" aria-expanded="false">
+        <span class="hd"><span class="svg" id="icBat"></span><span class="t">倒计时不准时怎么办</span><span class="svg chv" id="icChv"></span></span>
+        <span class="bd">部分手机系统会清理后台。请在「设置 → 应用管理 → TimeFlow」里开启「允许自启动」，并关闭电池优化，番茄结束提醒才会准时。</span>
+      </button>
+    </div>
+  </div>
+
+  <aside class="panel">
+    <h1>指南页 · 重新设计</h1>
+    <p>左侧可以点：切换上方的两个小组件，点尺寸芯片或舞台两侧的箭头换预览，展开底部的省电提示。</p>
+    <ol>
+      <li><b>用真实组件做预览。</b>原来 12 张文字卡片长得一模一样，现在一屏只看一个组件，看到什么就是什么。</li>
+      <li><b>做成独立页面，带返回键。</b>不再用半透明弹层盖在「我的」页上，标题和下面的卡片不会叠在一起。</li>
+      <li><b>分段切换改成滑块。</b>去掉选中时多出来的灰色焦点框，颜色跟着组件走：番茄红、行程绿。</li>
+      <li><b>添加步骤用连线串起来。</b>三步一眼看完，不用再翻到底。</li>
+      <li><b>省电提示默认折叠。</b>需要时再展开，不再被底部 Tab 栏挡住。</li>
+      <li><b>所有按钮不小于 44dp，</b>预览可以左右切换，也方便单手操作。</li>
+    </ol>
+    <div class="bad"><b>实现提示：</b>预览里的组件直接复用真实组件的绘制代码（静态数据），不要另画一套图，这样小组件改版时指南页会自动同步。</div>
+  </aside>
+</div>
+
+<script>
+const P = {
+  back:'<path d="M15 5l-7 7 7 7"/>', chev:'<path d="M9 5l7 7-7 7"/>', l:'<path d="M15 5l-7 7 7 7"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  pin:'<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+  check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  bat:'<rect x="3" y="8" width="16" height="9" rx="2.5"/><path d="M21 11v3M7 12.5h4"/>',
+  reset:'<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'
+};
+const ic = (k,s=22,w=2)=>`<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[k]}</svg>`;
+const play = s=>`<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" fill="currentColor"/></svg>`;
+const pause = s=>`<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><rect x="6" y="5" width="4.5" height="14" rx="1.5" fill="currentColor"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.5" fill="currentColor"/></svg>`;
+const set = (id,k,s,w)=>{document.getElementById(id).innerHTML = ic(k,s,w)};
+set('icBack','back',24); set('icClock','clock',18); set('icPin','pin',18); set('icL','l',22); set('icR','chev',22); set('icBat','bat',22); set('icChv','chev',18);
+
+const ring = (size,off,ac)=>`<svg viewBox="0 0 100 100" width="${size}" height="${size}" style="transform:rotate(-90deg);display:block"><circle cx="50" cy="50" r="44" fill="none" stroke="#F3E6DA" stroke-width="9"/><circle cx="50" cy="50" r="44" fill="none" stroke="${ac}" stroke-width="9" stroke-linecap="round" stroke-dasharray="276.46" stroke-dashoffset="${off}"/></svg>`;
+const dots = (cs)=>cs.map(c=>`<i class="dot" style="background:${c}"></i>`).join('');
+
+/* ---------- 组件（静态示例数据） ---------- */
+const W = {
+p42:()=>`<div class="wg w42" style="padding:18px;display:flex;align-items:center;gap:16px">
+  <div style="position:relative;width:120px;height:120px;flex:none">${ring(120,69.7,'#EE5A4F')}<div class="ctr"><div class="num" style="font-size:30px">19<small>分</small></div><div style="font-size:12px;font-weight:700;color:#C23128">专注</div></div></div>
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">
+    <div style="display:flex;gap:6px"><div class="pc" style="background:#FDE6E1;color:#C23128;box-shadow:inset 0 0 0 1.5px #EE5A4F">专注</div><div class="pc">短休</div><div class="pc">长休</div></div>
+    <div><div style="font-size:15px;font-weight:700;line-height:20px">深度工作</div><div style="display:flex;align-items:center;gap:4px;font-size:12px;line-height:16px;color:#6B5B50">${dots(['#EE5A4F','#EE5A4F','rgba(238,90,79,.35)','#EBDCCD'])}<span style="margin-left:3px">第 3 个番茄</span></div></div>
+    <div style="display:flex;align-items:center;gap:8px"><div style="height:44px;padding:0 18px 0 14px;border-radius:22px;background:#D63B32;color:#fff;display:flex;align-items:center;gap:6px;font-size:14px;font-weight:700;box-shadow:0 6px 14px rgba(214,59,50,.32)">${pause(18)}暂停</div><div style="width:44px;height:44px;border-radius:50%;background:#F6EEE6;color:#6B5B50;display:flex;align-items:center;justify-content:center">${ic('reset',20)}</div></div>
+  </div></div>`,
+p41:()=>`<div class="wg w41" style="padding:0 16px 0 20px;display:flex;align-items:center;gap:16px">
+  <div style="width:96px;flex:none;display:flex;flex-direction:column;gap:3px"><div class="num" style="font-size:28px">19<small>分</small></div><div style="font-size:12px;font-weight:700;color:#C23128;white-space:nowrap">专注 · 专注中</div></div>
+  <div class="bar"><i style="width:25%;background:#EE5A4F"></i></div>
+  <div class="rb" style="background:#D63B32;color:#fff;box-shadow:0 6px 14px rgba(214,59,50,.32)">${pause(20)}</div></div>`,
+p22ring:()=>`<div class="wg w22" style="padding:14px 0;display:flex;flex-direction:column;align-items:center;justify-content:space-between">
+  <div style="position:relative;width:112px;height:112px">${ring(112,69.7,'#EE5A4F')}<div class="ctr" style="gap:4px"><div class="num" style="font-size:28px">19<small>分</small></div><div style="color:#D63B32;display:flex">${pause(16)}</div></div></div>
+  <div style="padding:4px 12px;border-radius:12px;background:#FDE6E1;color:#C23128;font-size:12px;font-weight:700">专注 · 专注中</div></div>`,
+p22tomato:()=>`<div class="wg w22" style="padding:16px 0 14px;display:flex;flex-direction:column;align-items:center;justify-content:space-between">
+  <div style="font-size:12px;font-weight:700;color:#6B5B50">第 3 个番茄</div>
+  <div style="position:relative;width:88px;height:84px">
+    <div style="position:absolute;top:6px;left:0;width:88px;height:78px;overflow:hidden;border-radius:50% 50% 46% 46%/56% 56% 44% 44%;background:#FDE6E1"><div style="position:absolute;left:0;bottom:0;width:88px;height:25%;background:linear-gradient(180deg,#EE5A4F,#D63B32)"></div><div style="position:absolute;top:12px;left:14px;width:16px;height:9px;border-radius:50%;background:rgba(255,255,255,.55);transform:rotate(-28deg)"></div></div>
+    <svg viewBox="0 0 40 20" width="30" height="15" style="position:absolute;top:-1px;left:29px"><path d="M20 18C12 18 6 12 4 4c8 0 14 4 16 8 2-4 8-8 16-8-2 8-8 14-16 14z" fill="#3E9B5F"/></svg></div>
+  <div class="num" style="font-size:28px">19<small>分</small></div></div>`,
+p22dark:()=>`<div class="wg dark w22" style="padding:16px 14px 14px 18px;display:flex;flex-direction:column;justify-content:space-between">
+  <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#D9C9BA"><i class="dot" style="width:8px;height:8px;background:#FF7A6E"></i>专注 · 专注中</div>
+  <div class="num" style="font-size:50px;letter-spacing:-.01em">19<small>分</small></div>
+  <div style="display:flex;align-items:center;justify-content:space-between"><div style="display:flex;gap:4px">${dots(['#FF7A6E','#FF7A6E','rgba(255,122,110,.45)','#3A302A'])}</div><div class="rb" style="width:44px;height:44px;background:#FF7A6E;color:#241D19">${pause(18)}</div></div></div>`,
+p22stat:()=>{const hs=[26,15,34,20,29,34,12],ls=['四','五','六','日','一','二','今'];return `<div class="wg w22" style="padding:16px 16px 14px 18px;display:flex;flex-direction:column;justify-content:space-between">
+  <div><div style="font-size:12px;font-weight:700;color:#6B5B50;margin-bottom:4px">今日专注</div><div style="display:flex;align-items:baseline;gap:4px"><span class="num" style="font-size:38px">75</span><span style="font-size:12px;font-weight:500;color:#6B5B50">分钟</span></div></div>
+  <div style="display:flex;align-items:flex-end;gap:5px">${hs.map((h,i)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><i style="display:block;width:100%;height:${h}px;border-radius:4px;background:${i==6?'#EE5A4F':'#EBD9C9'}"></i><span style="font-size:11px;line-height:12px;font-weight:${i==6?700:500};color:${i==6?'#C23128':'#6B5B50'}">${ls[i]}</span></div>`).join('')}</div></div>`},
+
+t42:()=>`<div class="wg w42" style="padding:16px;display:flex;gap:14px">
+  <div style="width:104px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:space-between">
+    <div style="width:84px;height:84px;margin-top:4px;border-radius:50%;background:linear-gradient(160deg,#2DB37C,#17805A);color:#fff;box-shadow:0 8px 18px rgba(23,128,90,.34);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:15px;font-weight:700;line-height:1">${ic('pin',24)}打卡</div>
+    <div style="text-align:center;width:104px"><div style="font-size:12px;font-weight:700;line-height:16px">老街面馆午餐</div><div style="font-size:11px;line-height:14px;color:#6B5B50">计划 12:30</div></div></div>
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between"><b style="font-size:14px;line-height:20px">今日行程</b><span style="font-size:12px;color:#6B5B50">1/4 · 周五</span></div>
+    <div style="position:relative;height:104px"><div style="position:absolute;left:8px;top:13px;width:2px;height:78px;border-radius:1px;background:#EBDCCD"></div><div style="position:absolute;left:8px;top:13px;width:2px;height:26px;border-radius:1px;background:#2DB37C"></div>
+      <div class="srow done"><div class="sdot">${ic('check',10,4)}</div><div class="nm">到达公司</div><div class="tm">09:02</div></div>
+      <div class="srow cur"><div class="sdot"></div><div class="nm">老街面馆午餐</div><div class="tm">待打卡</div></div>
+      <div class="srow"><div class="sdot"></div><div class="nm">健身房</div><div class="tm">18:30</div></div>
+      <div class="srow"><div class="sdot"></div><div class="nm">回家</div><div class="tm">21:00</div></div></div></div></div>`,
+t41:()=>`<div class="wg w41" style="padding:0 16px 0 18px;display:flex;align-items:center;gap:12px">
+  <div style="width:44px;height:44px;flex:none;border-radius:50%;background:#DCF3E8;color:#17805A;display:flex;align-items:center;justify-content:center">${ic('pin',22)}</div>
+  <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">下一站 · 老街面馆午餐</div><div style="font-size:12px;line-height:16px;color:#6B5B50">距离 270 m · 计划 12:30</div></div>
+  <div style="height:44px;padding:0 18px;border-radius:22px;background:#17805A;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;box-shadow:0 6px 14px rgba(23,128,90,.3)">打卡</div></div>`,
+t41week:()=>{const l=['一','二','三','四','五','六','日'];return `<div class="wg dark w41" style="padding:0 18px;display:flex;align-items:center;gap:14px">
+  <div style="width:70px;flex:none"><div style="display:flex;align-items:baseline;gap:3px"><span class="num" style="font-size:32px">12</span><span style="font-size:12px">天</span></div><div style="font-size:12px;line-height:16px;color:#D9C9BA;margin-top:3px">连续打卡</div></div>
+  <div style="flex:1;display:flex;justify-content:space-between">${l.map((d,i)=>{const on=i<4,td=i==4;return `<div class="wd${on||td?' on':''}${td?' today':''}"><i>${on||td?ic('check',12,4):''}</i><span>${td?'今':d}</span></div>`}).join('')}</div></div>`},
+t22cta:()=>`<div class="wg w22" style="padding:16px 8px 14px;display:flex;flex-direction:column;align-items:center;justify-content:space-between">
+  <div style="width:88px;height:88px;border-radius:50%;background:linear-gradient(160deg,#2DB37C,#17805A);color:#fff;box-shadow:0 8px 18px rgba(23,128,90,.34);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:15px;font-weight:700;line-height:1">${ic('pin',26)}打卡</div>
+  <div style="text-align:center"><div style="font-size:13px;font-weight:700;line-height:18px">老街面馆午餐</div><div style="font-size:11px;line-height:14px;color:#6B5B50">计划 12:30</div></div></div>`,
+t22map:()=>`<div class="wg w22" style="padding:8px;display:flex;flex-direction:column;justify-content:space-between">
+  <div style="position:relative;width:154px;height:108px;border-radius:21px;background:#E6F2EA;overflow:hidden">
+    <svg viewBox="0 0 154 108" width="154" height="108" style="position:absolute;inset:0"><rect x="98" y="8" width="44" height="26" rx="10" fill="#D3E9D8"/><path d="M-4 92L52 72L98 100L160 80" fill="none" stroke="#FFFDFA" stroke-width="7" stroke-linecap="round"/><path d="M44 -4L58 44L36 112" fill="none" stroke="#FFFDFA" stroke-width="5" stroke-linecap="round"/><path d="M-4 30L70 20L160 52" fill="none" stroke="#FFFDFA" stroke-width="4" stroke-linecap="round"/></svg>
+    <div class="seg2" style="left:26px;top:76.5px;width:45px;transform:rotate(-42.3deg)"></div><div class="seg2" style="left:62px;top:34.5px;width:52px;transform:rotate(35.5deg)"></div><div class="seg2" style="left:104px;top:64.5px;width:45px;transform:rotate(-57.7deg)"></div>
+    <div class="pin done" style="left:15px;top:67px">${ic('check',10,4)}</div><div class="pin cur" style="left:51px;top:25px"></div><div class="pin" style="left:93px;top:55px"></div><div class="pin" style="left:119px;top:15px"></div></div>
+  <div style="display:flex;justify-content:space-between;padding:0 8px 4px 10px"><b style="font-size:13px">已打卡 1/4</b><span style="font-size:11px;color:#6B5B50">今日足迹</span></div></div>`,
+t22heat:()=>{const b=[1,0,2,2,1,0,2, 2,1,2,2,1,2,2, 2,1,2,2,1,2,2, 1,2,2,0,2,2,2];return `<div class="wg dark w22" style="padding:16px 18px 14px;display:flex;flex-direction:column;justify-content:space-between">
+  <div><div style="font-size:12px;font-weight:700;color:#D9C9BA;margin-bottom:2px">连续打卡</div><div style="display:flex;align-items:baseline;gap:4px"><span class="num" style="font-size:50px">12</span><span style="font-size:14px;font-weight:500">天</span></div></div>
+  <div class="heat">${b.map((v,i)=>`<i class="l${v}${i==27?' td':''}"></i>`).join('')}</div></div>`}
+};
+
+const G = {
+ pomo:[
+  {k:'p42',size:'4×2',name:'完整版',sh:'a',w:358,h:168,s:.9,d:'大圆环显示进度，在一个组件里切换专注、短休、长休，直接开始、暂停、重置。',pts:['圆环每分钟走一格，剩余时间一目了然','三种模式一点即切，颜色随模式变化']},
+  {k:'p41',size:'4×1',name:'迷你条',sh:'b',w:358,h:80,s:.9,d:'最省空间的一行：剩余分钟、进度条和一个播放键。',pts:['剩余分钟 + 进度条，一眼看完','右侧按钮直接开始 / 暂停']},
+  {k:'p22ring',size:'2×2',name:'圆环版',sh:'c',w:170,h:168,s:1.08,d:'居中的大圆环，整张卡片就是开始 / 暂停按钮。',pts:['整卡可点，单手盲操不用瞄准','状态标签随专注 / 休息变化']},
+  {k:'p22tomato',size:'2×2',name:'番茄卡',sh:'c',w:170,h:168,s:1.08,d:'拟物小番茄，随进度从下往上灌满。',pts:['进度直观，不看数字也知道还剩多少','下方大字显示剩余分钟']},
+  {k:'p22dark',size:'2×2',name:'深色大字',sh:'c',w:170,h:168,s:1.08,d:'深色底、超大数字，夜间不刺眼。',pts:['数字足够大，隔着桌面也能看清','底部四个点记录一轮番茄']},
+  {k:'p22stat',size:'2×2',name:'今日统计',sh:'c',w:170,h:168,s:1.08,d:'今天专注了多久，一眼就知道。',pts:['今日累计专注分钟数','近 7 天柱状图，今天高亮']}
+ ],
+ trip:[
+  {k:'t42',size:'4×2',name:'今日行程',sh:'a',w:358,h:168,s:.9,d:'左边一个大按钮一键打卡，右边是今天每一站的时间轴。',pts:['打卡后时间轴立刻推进','已打卡显示实际时间，未到显示计划时间']},
+  {k:'t41',size:'4×1',name:'下一站',sh:'b',w:358,h:80,s:.9,d:'一行显示最近的一站，右侧直接打卡。',pts:['显示地点、距离和计划时间','右侧按钮轻触即打卡']},
+  {k:'t41week',size:'4×1',name:'本周连续',sh:'b',w:358,h:80,s:.9,d:'连续打卡天数，加周一到周日每天的打卡状态。',pts:['左侧连续天数','今天用描边标出']},
+  {k:'t22cta',size:'2×2',name:'一键打卡',sh:'c',w:170,h:168,s:1.08,d:'大号圆形按钮，整张卡片轻触就记录当前位置。',pts:['整卡可点，单手就能打卡','打卡后立即显示「已打卡」']},
+  {k:'t22map',size:'2×2',name:'足迹地图',sh:'c',w:170,h:168,s:1.08,d:'微缩地图，用折线串起今天的每一站。',pts:['已打卡为实线，未到为虚线','当前站点高亮']},
+  {k:'t22heat',size:'2×2',name:'打卡热力',sh:'c',w:170,h:168,s:1.08,d:'连续天数，加最近四周的打卡热力图。',pts:['格子颜色越亮，当天打卡越多','今天用描边标出']}
+ ]
+};
+
+let group='pomo', idx=0;
+const $=id=>document.getElementById(id);
+
+function render(first){
+  const list=G[group], it=list[idx];
+  $('phone').dataset.g=group;
+  $('tabP').setAttribute('aria-selected',group==='pomo');
+  $('tabT').setAttribute('aria-selected',group==='trip');
+  $('counter').textContent=(idx+1)+' / '+list.length;
+  $('prev').disabled=idx===0; $('next').disabled=idx===list.length-1;
+  $('hold').innerHTML=`<div class="hold" style="width:${it.w*it.s}px;height:${it.h*it.s}px"><div style="width:${it.w}px;height:${it.h}px;transform:scale(${it.s});transform-origin:0 0">${W[it.k]()}</div></div>`;
+  $('chips').innerHTML=list.map((x,i)=>`<button class="chip${i===idx?' on':''}" role="tab" aria-selected="${i===idx}" data-i="${i}"><span class="shp ${x.sh}"></span>${x.size} ${x.name}</button>`).join('');
+  $('info').innerHTML=`<div class="h"><b>${it.name}</b><span class="badge">${it.size}</span></div><p>${it.d}</p><ul>${it.pts.map(t=>`<li><span class="svg">${ic('check',16,2.6)}</span><span>${t}</span></li>`).join('')}</ul>`;
+  const c=$('chips'), on=c.querySelector('.on');
+  if(on) c.scrollTo({left:on.offsetLeft-(c.clientWidth-on.offsetWidth)/2,behavior:first?'auto':'smooth'});
+}
+document.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>{group=b.dataset.g;idx=0;render();}));
+$('chips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(b){idx=+b.dataset.i;render();}});
+$('prev').addEventListener('click',()=>{if(idx>0){idx--;render();}});
+$('next').addEventListener('click',()=>{if(idx<G[group].length-1){idx++;render();}});
+$('tip').addEventListener('click',()=>{const o=$('tip').classList.toggle('open');$('tip').setAttribute('aria-expanded',o);});
+let sx=null;
+$('stage').addEventListener('pointerdown',e=>{sx=e.clientX});
+$('stage').addEventListener('pointerup',e=>{if(sx===null)return;const d=e.clientX-sx;sx=null;if(Math.abs(d)>50){if(d<0&&idx<G[group].length-1)idx++;else if(d>0&&idx>0)idx--;render();}});
+render(true);
+</script>
+</body>
+</html>

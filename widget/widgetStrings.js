@@ -88,7 +88,7 @@ const STRINGS = {
     continuousCheckin: 'Daily Streak',
     dayUnit: 'd',
     todayFootprint: 'Footprints',
-    todayWord: 'Today',
+    todayWord: 'Now',
     checkedCount: 'Checked {n}',
     upgradedTitle: 'Widget upgraded',
     upgradedBody: 'Remove this card and add the new Pomodoro / Trip widgets',
