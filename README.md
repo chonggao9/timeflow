@@ -1,11 +1,13 @@
 # TimeFlow · 时光流
 
+[![Google Play](https://img.shields.io/badge/Google%20Play-TimeFlow-414141?style=flat-square&logo=google-play&logoColor=white)](https://play.google.com/store/apps/details?id=com.chonggao.timeflow)
 [![GitHub Release](https://img.shields.io/github/v/release/chonggao9/timeflow?color=FF6B6B&style=flat-square)](https://github.com/chonggao9/timeflow/releases/latest)
 [![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square)](#平台支持)
 [![Expo](https://img.shields.io/badge/Expo-SDK%2053-blue?style=flat-square)](https://expo.dev)
 [![React Native](https://img.shields.io/badge/React%20Native-0.79-61DAFB?style=flat-square)](https://reactnative.dev)
 
-> [📥 **点击直接下载最新 Android 安装包 (v1.2.7 APK)**](https://github.com/chonggao9/timeflow/releases/download/v1.2.7/timeflow-v1.2.7.apk)  
+> 📲 **[在 Google Play 上获取 TimeFlow (官方应用商店)](https://play.google.com/store/apps/details?id=com.chonggao.timeflow)**  
+> 📥 [**点击直接下载 Android 安装包 (v1.2.7 APK 直装)**](https://github.com/chonggao9/timeflow/releases/download/v1.2.7/timeflow-v1.2.7.apk)  
 > *Google Play AAB 专供格式可通过本地执行 `npm run build:aab` 构建*
 
 极简双模时间管理与轨迹记录 App（出行打卡 + 室内番茄专注），基于 Expo (React Native) + SQLite，纯本地离线优先存储，支持高德/系统双兼容定位、8款治愈环境白噪音、智能路线洞察与免密极速云备份。
@@ -72,7 +74,7 @@
 
 ## 平台支持
 
-- **Android**：完整支持。集成高德定位原生模块、Google Maps 瓦片地图、Android 桌面小组件（Widget），完美适配 Android 16 与 16KB 内存分页。
+- **Android**：完整支持。已上架 [Google Play 商店](https://play.google.com/store/apps/details?id=com.chonggao.timeflow)。集成高德定位原生模块、Google Maps 瓦片地图、Android 桌面小组件（Widget），完美适配 Android 16 与 16KB 内存分页。
 - **iOS**：暂不支持。项目依赖定制的 Kotlin 原生定位模块 `modules/amap-location`，目前尚未提供 iOS 原生桥接层，请勿直接在 iOS 环境下构建运行。
 
 ---
