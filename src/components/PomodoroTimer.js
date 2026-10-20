@@ -54,6 +54,9 @@ import {
   reset as engineReset,
   switchMode as engineSwitchMode,
   setFocusMin as engineSetFocusMin,
+  nextModeAfterEnd,
+  SHORT_MS,
+  LONG_MS,
   deriveDisplay,
   ackHarvest,
 } from '../pomodoro/engine';
@@ -72,6 +75,11 @@ const HOLD_MS = 1000; // 约 1 秒按住
 const ABANDON_CONFIRM_MS = 3000;
 const REST_DURATION_MIN = 5;
 const REST_DURATION_SEC = REST_DURATION_MIN * 60;
+const STORAGE_KEY_RECENT_GOALS = '@timeflow_recent_pomodoro_goals';
+const MAX_RECENT_GOALS = 5;
+// 休息时长统一由引擎常量派生，避免文案与逻辑漂移
+const SHORT_REST_MIN = SHORT_MS / 60000;
+const LONG_REST_MIN = LONG_MS / 60000;
 
 const formatOrdinal = (num, currentLang) => {
   if (currentLang === 'zh') return String(num);
@@ -236,7 +244,7 @@ export default function PomodoroTimer({
   const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
 
-  // Phase 状态机: 'idle' | 'holding' | 'running' | 'paused' | 'done' | 'resting'
+  // Phase 状态机: 'idle' | 'holding' | 'running' | 'paused' | 'done' | 'rest'（兼容旧持久化值 'resting'）
   const [phase, setPhase] = useState('idle');
 
   // 基础计时状态
@@ -249,6 +257,8 @@ export default function PomodoroTimer({
   const [isNoteEditing, setIsNoteEditing] = useState(false);
   const [ambient, setAmbient] = useState('none');
   const [isNoteFocused, setIsNoteFocused] = useState(false);
+  const [recentGoals, setRecentGoals] = useState([]);
+  const recentGoalsRef = useRef([]);
 
   // 用户是否曾经滑动手势（用于控制“上下滑动调节”提示的展示）
   const [hasSlidAdjust, setHasSlidAdjust] = useState(false);
@@ -344,6 +354,8 @@ export default function PomodoroTimer({
   const holdProgressAnim = useRef(new Animated.Value(0)).current;
   const pageBgAnim = useRef(new Animated.Value(0)).current;
   const harvestParticleAnim = useRef(new Animated.Value(0)).current;
+  const breatheAnim = useRef(new Animated.Value(1)).current;
+  const restDoneHandlingRef = useRef(false);
 
   // 今日统计派生
   const totalFocusCountCalculated = todayFocusCount || 0;
@@ -442,7 +454,7 @@ export default function PomodoroTimer({
 
   useEffect(() => {
     if (onRunningChange) {
-      onRunningChange(phase === 'running' || phase === 'paused' || phase === 'resting');
+      onRunningChange(phase === 'running' || phase === 'paused' || phase === 'rest' || phase === 'resting');
     }
   }, [phase, onRunningChange]);
 
@@ -554,7 +566,7 @@ export default function PomodoroTimer({
   useEffect(() => {
     if (Platform.OS !== 'android') return undefined;
     const onBackPress = () => {
-      if (phase === 'done' || phase === 'resting') {
+      if (phase === 'done' || phase === 'rest' || phase === 'resting') {
         return true;
       }
       return false;
@@ -591,7 +603,7 @@ export default function PomodoroTimer({
 
   // 计时器主循环
   useEffect(() => {
-    if (phase !== 'running' && phase !== 'resting') {
+    if (phase !== 'running' && phase !== 'rest' && phase !== 'resting') {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -603,7 +615,7 @@ export default function PomodoroTimer({
       const st = engineRef.current;
       if (!st) return;
       const d = deriveDisplay(st, Date.now());
-      if (phase === 'resting') {
+      if (phase === 'rest' || phase === 'resting') {
         setRestTimeLeftSec(d.remainingSec);
         if (d.ended || d.remainingSec <= 0) {
           handleRestDone();
@@ -697,6 +709,73 @@ export default function PomodoroTimer({
     }
   }, [phase, reduceMotion]);
 
+  // 休息态 8 秒循环呼吸动画（吸气 4s 放大，呼气 4s 还原；开启减少动态效果时关闭）
+  useEffect(() => {
+    if (phase === 'rest' || phase === 'resting') {
+      if (reduceMotion) {
+        breatheAnim.setValue(1);
+        return;
+      }
+      breatheAnim.setValue(1);
+      const anim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(breatheAnim, {
+            toValue: 1.15,
+            duration: 4000,
+            easing: RNEasing.inOut(RNEasing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(breatheAnim, {
+            toValue: 1.0,
+            duration: 4000,
+            easing: RNEasing.inOut(RNEasing.sin),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      anim.start();
+      return () => anim.stop();
+    }
+  }, [phase, reduceMotion, breatheAnim]);
+
+  // 加载最近使用的任务名（最多 5 个，去重，最新排前）
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE_KEY_RECENT_GOALS);
+        if (raw) {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            const filtered = list.filter((x) => typeof x === 'string' && x.trim()).slice(0, MAX_RECENT_GOALS);
+            recentGoalsRef.current = filtered;
+            setRecentGoals(filtered);
+          }
+        }
+      } catch (e) {}
+    })();
+  }, []);
+
+  const addRecentGoal = useCallback(async (name) => {
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    const isUnnamed =
+      trimmed === t('home.unnamedFocus', '未命名专注') ||
+      trimmed === '未命名专注' ||
+      trimmed === 'Unnamed focus';
+    if (isUnnamed) return;
+
+    // 以 ref 为单一真值计算并落盘，不在 setState updater 内执行副作用
+    const nextList = [trimmed, ...recentGoalsRef.current.filter((item) => item !== trimmed)].slice(
+      0,
+      MAX_RECENT_GOALS
+    );
+    recentGoalsRef.current = nextList;
+    setRecentGoals(nextList);
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY_RECENT_GOALS, JSON.stringify(nextList));
+    } catch (e) {}
+  }, [t]);
+
   const animatedTomatoStyle = useAnimatedStyle(() => {
     return {
       transform: [
@@ -727,7 +806,10 @@ export default function PomodoroTimer({
           title: t('pomodoro.harvestTitle', '收获一颗番茄'),
           body: t('pomodoro.doneBody', '番茄钟时间到了，快来查看你的收获吧'),
         }
-      : null; // 休息结束文案用 notifications.js 内置
+      : {
+          title: t('pomodoro.restEndTitle', '休息结束'),
+          body: t('pomodoro.restEndBody', '准备好开始下一个番茄了吗？'),
+        };
     // 无条件落盘：reset/abandon 等变换 notifId 前后同为 null，条件保存会漏持久化
     let saved = next;
     try {
@@ -790,7 +872,7 @@ export default function PomodoroTimer({
       setPhaseAndRef('running');
     } else if (d.running) {
       setRestTimeLeftSec(d.remainingSec);
-      setPhaseAndRef('resting');
+      setPhaseAndRef('rest');
     } else if (d.status === 'paused') {
       setTimeLeftSec(d.remainingSec);
       setPhaseAndRef('paused');
@@ -942,16 +1024,20 @@ export default function PomodoroTimer({
 
   // 休息到点：结算落盘（回 focus 待开始），刷新组件
   const handleRestDone = useCallback(async () => {
-    if (phaseRef.current !== 'resting') return;
-    setPhaseAndRef('idle');
-    hapticNotify(Haptics.NotificationFeedbackType.Success);
+    if (phaseRef.current !== 'rest' && phaseRef.current !== 'resting') return;
+    if (restDoneHandlingRef.current) return;
     try {
+      restDoneHandlingRef.current = true;
+      setPhaseAndRef('idle');
+      hapticNotify(Haptics.NotificationFeedbackType.Success);
       const { state } = await settleAndPersist(Date.now());
       engineRef.current = state;
       setTimeLeftSec(state.focusMin * 60);
     } catch (e) {
       const st = engineRef.current;
       if (st) setTimeLeftSec(st.focusMin * 60);
+    } finally {
+      restDoneHandlingRef.current = false;
     }
     refreshPomodoroWidgets();
     if (onRunningChange) onRunningChange(false);
@@ -1062,22 +1148,33 @@ export default function PomodoroTimer({
   const saveFocusRecord = useCallback(async () => {
     const h = harvestedRef.current;
     const totalSec = h ? h.durationSec : durationMin * 60;
+    const currentGoal = (h && h.goalName) || goalName.trim();
     if (onSaveFocus && totalSec > 0 && !savedRef.current) {
       savedRef.current = true;
       await onSaveFocus({
         duration: totalSec,
-        goalName: (h && h.goalName) || goalName.trim() || t('home.unnamedFocus', '未命名专注'),
+        goalName: currentGoal || t('home.unnamedFocus', '未命名专注'),
         category: (h && h.category) || categoryRef.current || 'study',
         note: '',
       });
+      if (currentGoal) {
+        addRecentGoal(currentGoal);
+      }
     }
     await ackCurrentHarvest();
-  }, [onSaveFocus, goalName, t, durationMin, ackCurrentHarvest]);
+  }, [onSaveFocus, goalName, t, durationMin, ackCurrentHarvest, addRecentGoal]);
 
   const saveDoneFocus = useCallback(async () => {
     await saveFocusRecord();
     await resetToIdle(false);
   }, [saveFocusRecord, resetToIdle]);
+
+  // 收获页「再来一个」：先幂等保存上一个番茄，沿用上一番茄分类、时长、任务名立即开始新番茄
+  const startAnotherFocus = useCallback(async () => {
+    hapticImpact(Haptics.ImpactFeedbackStyle.Heavy);
+    await saveFocusRecord();
+    await startFocus();
+  }, [saveFocusRecord, startFocus]);
 
   // 运行中轻触胶囊修改专注目标
   const openEditGoalInRun = useCallback(() => {
@@ -1097,16 +1194,27 @@ export default function PomodoroTimer({
     }
   }, [runGoalDraft, t, persistEngine]);
 
-  // 计入并开始休息：settle 后 engine 已是 short/long（4 番茄自动长休），直接启动
+  // 长/短休由引擎周期唯一决定：settle 后 mode 已是 short/long（LONG_REST_EVERY 控制）；
+  // 仅当结算失败（mode 仍为 focus）时按 nextModeAfterEnd 预测，避免与引擎漂移
+  const isLongRest = (() => {
+    const st = engineRef.current;
+    if (!st) return false;
+    if (st.mode === 'long') return true;
+    if (st.mode === 'short') return false;
+    return nextModeAfterEnd(st) === 'long';
+  })();
+
+  // 计入并开始休息：引擎周期决定长/短休（第 1~3 个短休，第 4/8/12... 个长休）
   const startRest = useCallback(async () => {
-    await saveFocusRecord(); // 落库 + 出队
+    await saveFocusRecord(); // 幂等落库 + 出队
     hapticImpact(Haptics.ImpactFeedbackStyle.Medium);
     const now = Date.now();
     const prev = engineRef.current || createState({ now });
-    const base = prev.mode === 'focus' ? engineSwitchMode(prev, 'short', now) : prev;
+    // settle 已把 mode 置为 short/long 时沿用；仍为 focus（结算失败）才切换，目标模式由引擎推导
+    const base = prev.mode === 'focus' ? engineSwitchMode(prev, nextModeAfterEnd(prev), now) : prev;
     const next = engineStart(base, now);
     setRestTimeLeftSec(deriveDisplay(next, now).remainingSec);
-    setPhaseAndRef('resting');
+    setPhaseAndRef('rest');
     if (onRunningChange) onRunningChange(true);
     await persistEngine(next, prev); // 排期休息结束通知 + 刷新组件
   }, [saveFocusRecord, onRunningChange, persistEngine]);
@@ -1448,20 +1556,49 @@ export default function PomodoroTimer({
           <View style={styles.doneBtnGroup}>
             <TouchableOpacity
               style={styles.doneSaveBtn}
-              onPress={saveDoneFocus}
+              onPress={startAnotherFocus}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={t('pomodoro.anotherOne', { min: durationMin })}
             >
               <Text style={styles.doneSaveBtnText}>
-                {t('pomodoro.saveToToday', '记入今日专注')}
+                {t('pomodoro.anotherOne', { min: durationMin })}
               </Text>
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={styles.doneRestBtn}
+              style={[
+                styles.doneRestBtn,
+                {
+                  backgroundColor: isDark ? '#261F1A' : '#F5EFE6',
+                  borderColor: isDark ? '#3D332A' : '#E8DDD0',
+                },
+              ]}
               onPress={startRest}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isLongRest
+                  ? t('pomodoro.saveAndRestLong', { min: LONG_REST_MIN })
+                  : t('pomodoro.saveAndRestShort', { min: SHORT_REST_MIN })
+              }
             >
-              <Text style={styles.doneRestBtnText}>
-                {t('pomodoro.saveAndRest', '记入并休息 5 分钟')}
+              <Text style={[styles.doneRestBtnText, { color: isDark ? '#F5EDE4' : '#2B211C' }]}>
+                {isLongRest
+                  ? t('pomodoro.saveAndRestLong', { min: LONG_REST_MIN })
+                  : t('pomodoro.saveAndRestShort', { min: SHORT_REST_MIN })}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.doneOnlySaveBtn}
+              onPress={saveDoneFocus}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t('pomodoro.saveToToday', '记入今日专注')}
+            >
+              <Text style={[styles.doneOnlySaveBtnText, { color: isDark ? '#A6988D' : '#6B5B4F' }]}>
+                {t('pomodoro.saveToToday', '记入今日专注')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1470,27 +1607,64 @@ export default function PomodoroTimer({
     );
   }
 
-  // ==================== 休息中 (RESTING) ====================
-  if (phase === 'resting') {
+  // ==================== 休息中 (REST) ====================
+  if (phase === 'rest' || phase === 'resting') {
     return (
       <Animated.View
         style={[
           styles.restContainer,
-          { backgroundColor: animatedPageBg, paddingTop: insets.top, paddingBottom: insets.bottom },
+          { backgroundColor: animatedPageBg, paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
         ]}
       >
         <View style={styles.restContent}>
-          <Text style={styles.restTitle}>{t('pomodoro.restTitle', '休息一下')}</Text>
-          <Text style={styles.restTimer}>{formatTime(restTimeLeftSec)}</Text>
-          <Text style={styles.restHint}>
+          <Text style={[styles.restTitle, { color: isDark ? '#F5EDE4' : '#2B211C' }]}>
+            {t('pomodoro.relaxTitle', '放松一下')}
+          </Text>
+
+          {/* 8 秒呼吸动画环与大倒计时 */}
+          <Animated.View
+            style={[
+              styles.restTimerWrap,
+              {
+                transform: [{ scale: reduceMotion ? 1 : breatheAnim }],
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.restBreatheRing,
+                {
+                  backgroundColor: isDark ? 'rgba(78, 143, 74, 0.12)' : 'rgba(78, 143, 74, 0.08)',
+                  borderColor: isDark ? 'rgba(78, 143, 74, 0.3)' : 'rgba(78, 143, 74, 0.2)',
+                },
+              ]}
+            >
+              <Text style={[styles.restTimer, { color: isDark ? '#81C784' : '#4E8F4A' }]}>
+                {formatTime(restTimeLeftSec)}
+              </Text>
+            </View>
+          </Animated.View>
+
+          <Text style={[styles.restHint, { color: isDark ? '#A6988D' : '#6B5B4F' }]}>
             {t('pomodoro.restHint', '让大脑喘口气，倒计时结束后会自动返回')}
           </Text>
+
           <TouchableOpacity
-            style={styles.restSkipBtn}
+            style={[
+              styles.restSkipBtn,
+              {
+                backgroundColor: isDark ? '#261F1A' : '#FAF6F0',
+                borderColor: isDark ? '#3D332A' : '#E8DDD0',
+              },
+            ]}
             onPress={() => resetToIdle(true)}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={t('pomodoro.skipRest', '跳过休息')}
           >
-            <Text style={styles.restSkipBtnText}>{t('pomodoro.skipRest', '跳过休息')}</Text>
+            <Text style={[styles.restSkipBtnText, { color: isDark ? '#D5C7BA' : '#5E4F44' }]}>
+              {t('pomodoro.skipRest', '跳过休息')}
+            </Text>
           </TouchableOpacity>
         </View>
       </Animated.View>
@@ -1840,6 +2014,62 @@ export default function PomodoroTimer({
           <View style={styles.catFadeRight} pointerEvents="none" />
         </View>
 
+        {/* 4.5 最近任务名快捷选择（最多 5 个芯片，去重，最新排前；无记录时整行隐藏） */}
+        {recentGoals.length > 0 ? (
+          <View style={styles.recentGoalsWrap}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.recentGoalsScroll}
+              keyboardShouldPersistTaps="handled"
+            >
+              {recentGoals.map((item) => {
+                const isSelected = goalName === item;
+                return (
+                  <TouchableOpacity
+                    key={`recent-goal-${item}`}
+                    style={[
+                      styles.recentGoalChip,
+                      {
+                        backgroundColor: isSelected
+                          ? (isDark ? 'rgba(198, 61, 49, 0.18)' : '#FDE8E6')
+                          : (isDark ? '#261F1A' : '#FAF6F0'),
+                        borderColor: isSelected
+                          ? '#C63D31'
+                          : (isDark ? '#3D332A' : '#E8DDD0'),
+                      },
+                    ]}
+                    onPress={() => {
+                      setGoalName(isSelected ? '' : item);
+                      hapticImpact(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={item}
+                  >
+                    <Text
+                      style={[
+                        styles.recentGoalChipText,
+                        {
+                          color: isSelected
+                            ? '#C63D31'
+                            : (isDark ? '#D5C7BA' : '#5E4F44'),
+                          fontWeight: isSelected ? '700' : '500',
+                        },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
+
         {/* 4.5 目标备注输入框（上移至分类下方，自然聚合且防键盘遮挡） */}
         <View style={styles.noteInputWrap}>
           <View
@@ -2147,6 +2377,30 @@ const styles = StyleSheet.create({
     width: '100%',
     minHeight: 44,
     marginBottom: 10,
+  },
+  // 4.4 最近任务名快捷选择芯片
+  recentGoalsWrap: {
+    width: '100%',
+    marginBottom: 8,
+  },
+  recentGoalsScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  recentGoalChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 32,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  recentGoalChipText: {
+    fontSize: 12,
+    maxWidth: 160,
   },
   // 4.5 目标备注输入框
   noteInputWrap: {
@@ -2616,16 +2870,26 @@ const styles = StyleSheet.create({
   },
   doneRestBtn: {
     width: '100%',
-    height: 44,
+    height: 48,
     borderRadius: 999,
-    backgroundColor: 'transparent',
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   doneRestBtnText: {
     fontSize: 14,
+    fontWeight: '600',
+  },
+  doneOnlySaveBtn: {
+    width: '100%',
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  doneOnlySaveBtnText: {
+    fontSize: 14,
     fontWeight: '500',
-    color: '#5E4F44',
   },
 
   // 休息中
@@ -2643,23 +2907,32 @@ const styles = StyleSheet.create({
   restTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#2B211C',
-    marginBottom: 16,
+    marginBottom: 24,
+  },
+  restTimerWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  restBreatheRing: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   restTimer: {
-    fontSize: 64,
+    fontSize: 54,
     fontWeight: '800',
-    color: '#C63D31',
-    marginBottom: 16,
     fontVariant: ['tabular-nums'],
     letterSpacing: -1,
   },
   restHint: {
-    fontSize: 13,
-    color: '#6B5B4F',
+    fontSize: 14,
     textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 32,
+    lineHeight: 20,
+    marginBottom: 36,
     paddingHorizontal: 20,
   },
   restSkipBtn: {
