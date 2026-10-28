@@ -85,7 +85,7 @@
       <ul>
         <li><b>全本地存储（Local-First）</b>：您的所有打卡记录、时间、轨迹点与通勤数据均默认且仅存储在您手机本机的沙盒存储（SQLite 数据库）中，数据所有权 100% 归您所有。</li>
         <li><b>加密传输</b>：获取坐标及地名解析均通过 HTTPS 强加密传输链路进行，杜绝中间人嗅探。</li>
-        <li><b>WebDAV 私有云同步与军工级加密</b>：若您主动启用第三方 WebDAV 云同步功能，备份数据在离开手机前将基于您的私有口令进行 PBKDF2 密钥派生及 AES-256-CBC 强加密，并直接上传至您指定的个人私有云盘（如坚果云、Nextcloud）。开发者与任何第三方均无密钥，绝对无法解密或窥视备份内容。</li>
+        <li><b>WebDAV 私有云副本</b>：若您主动启用第三方 WebDAV 云端副本功能，备份文件（可直接阅读的明文 JSON，不含任何账号凭证）将直接上传至您指定的个人私有网盘（如坚果云、Nextcloud）。请确保该空间仅有您自己能访问；开发者无任何集中式服务器，无法访问您上传的任何文件。</li>
       </ul>
 
       <h2>四、信息的使用目的</h2>
@@ -105,7 +105,7 @@
         <li><b>单条记录删除</b>：在首页时间轴中可就地左滑或点击删除任意误触打卡点。</li>
         <li><b>应用内一键清空全部数据</b>：可在「我的 → 数据管理与备份 → 清空所有打卡记录」或「洞察 → 历史 → 清空所有打卡记录」中随时一键抹除本地 SQLite 数据库中的全部历史数据，该操作不可逆。</li>
         <li><b>设备卸载物理清除</b>：直接在手机桌面卸载 TimeFlow 应用，操作系统将物理擦除本应用沙盒内的全部数据库文件与配置文件。</li>
-        <li><b>云端备份删除</b>：您可随时在您绑定的 WebDAV 网盘目录中直接删除 <code>.tfbak</code> 备份文件，或在 App 内点击「清除 WebDAV 配置 / 清除口令」。</li>
+        <li><b>云端备份删除</b>：您可随时在您绑定的 WebDAV 网盘中直接删除 <code>timeflow/</code> 目录下的备份文件（<code>timeflow-*.json</code>），或在 App 内关闭云端副本/清除 WebDAV 配置。</li>
         <li><b>数据导出与权利请求</b>：您可在设置中导出全部打卡明细。若有任何数据处理疑问或权利行使需求，可通过官方邮箱与开发者联系。</li>
       </ul>
 
@@ -165,7 +165,7 @@
       <ul>
         <li><b>100% Local-First Storage</b>: All your check-in logs, timestamps, routes, and statistics are stored exclusively in your device's local application sandbox (SQLite database). You own 100% of your data.</li>
         <li><b>Encryption in Transit</b>: Location coordinate lookups and geocoding queries are transmitted over encrypted HTTPS channels.</li>
-        <li><b>WebDAV Private Cloud Sync &amp; AES-256 Encryption</b>: If you choose to enable WebDAV cloud backup, backup packages are strongly encrypted locally with AES-256-CBC (derived via PBKDF2 from your private passphrase) before being sent directly to your self-hosted or chosen WebDAV cloud server (e.g. Nextcloud). Neither the developer nor any third party possesses the decryption key.</li>
+        <li><b>WebDAV Private Cloud Copy</b>: If you choose to enable the optional WebDAV cloud copy feature, backup files (plain, readable JSON containing no account credentials) are uploaded directly to your designated self-hosted or private WebDAV cloud storage (e.g. Nextcloud, Jianguoyun). Please ensure that space is accessible only by you. The developer has no centralized servers and cannot access any files you upload.</li>
       </ul>
 
       <h2>4. Purpose of Data Use</h2>
@@ -185,7 +185,7 @@
         <li><b>Granular In-App Deletion</b>: Swipe or tap to delete any single milestone or trip directly from the timeline.</li>
         <li><b>Complete In-App Data Wipe</b>: Navigate to "Profile → Data &amp; Cloud Backup → Clear All Check-In Records" or "Insights → History → Clear All Check-In Records" to permanently erase your local SQLite database with one tap. This action is irreversible.</li>
         <li><b>App Uninstallation</b>: Uninstalling TimeFlow from your device permanently purges all local sandbox database files, cache, and configurations via the operating system.</li>
-        <li><b>Cloud Backup Deletion</b>: You can delete `.tfbak` files directly on your WebDAV cloud server, or tap "Clear WebDAV Config" within the app.</li>
+        <li><b>Cloud Backup Deletion</b>: You can delete the backup files (<code>timeflow-*.json</code>) under the <code>timeflow/</code> folder directly on your WebDAV cloud server, or disable Cloud Copy / clear WebDAV config within the app.</li>
         <li><b>Developer Contact for Data Inquiries</b>: Although we hold no server copies of your data, you can email us at <code>chonggao9@gmail.com</code> for any data deletion assistance or privacy inquiries.</li>
       </ul>
 

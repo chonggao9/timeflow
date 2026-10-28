@@ -541,10 +541,7 @@ export default function PomodoroTimer({
   }, []);
 
   useEffect(() => {
-    ensureNotificationSetup(); // handler + Android channel（结束通知唯一封装）
-    if (Platform.OS === 'android' || Platform.OS === 'ios') {
-      Notifications.requestPermissionsAsync().catch(() => {});
-    }
+    ensureNotificationSetup(); // handler + Android channel（结束通知唯一封装，仅配置通道不弹窗）
   }, []);
 
   // 首次挂载同步（修复旧版「首挂载不恢复」缺口）：补结算 + 通知对账 + UI 相位恢复，
@@ -957,6 +954,13 @@ export default function PomodoroTimer({
 
   const startFocus = useCallback(async () => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Heavy);
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      Notifications.getPermissionsAsync().then(({ status }) => {
+        if (status !== 'granted') {
+          Notifications.requestPermissionsAsync().catch(() => {});
+        }
+      }).catch(() => {});
+    }
     const now = Date.now();
     const totalSec = durationMin * 60;
     const resolvedGoal = goalName.trim() || t('home.unnamedFocus', '未命名专注');
@@ -1150,30 +1154,47 @@ export default function PomodoroTimer({
     const totalSec = h ? h.durationSec : durationMin * 60;
     const currentGoal = (h && h.goalName) || goalName.trim();
     if (onSaveFocus && totalSec > 0 && !savedRef.current) {
-      savedRef.current = true;
-      await onSaveFocus({
-        duration: totalSec,
-        goalName: currentGoal || t('home.unnamedFocus', '未命名专注'),
-        category: (h && h.category) || categoryRef.current || 'study',
-        note: '',
-      });
-      if (currentGoal) {
-        addRecentGoal(currentGoal);
+      try {
+        const ok = await onSaveFocus({
+          timestamp: (h && (h.endAt || h.startTs)) || Date.now(),
+          duration: totalSec,
+          goalName: currentGoal || t('home.unnamedFocus', '未命名专注'),
+          category: (h && h.category) || categoryRef.current || 'study',
+          note: '',
+        });
+        if (ok !== false) {
+          savedRef.current = true;
+          if (currentGoal) {
+            addRecentGoal(currentGoal);
+          }
+          await ackCurrentHarvest();
+          return true;
+        }
+        return false;
+      } catch (e) {
+        return false;
       }
+    } else if (savedRef.current) {
+      await ackCurrentHarvest();
+      return true;
     }
-    await ackCurrentHarvest();
+    return true;
   }, [onSaveFocus, goalName, t, durationMin, ackCurrentHarvest, addRecentGoal]);
 
   const saveDoneFocus = useCallback(async () => {
-    await saveFocusRecord();
-    await resetToIdle(false);
+    const ok = await saveFocusRecord();
+    if (ok) {
+      await resetToIdle(false);
+    }
   }, [saveFocusRecord, resetToIdle]);
 
   // 收获页「再来一个」：先幂等保存上一个番茄，沿用上一番茄分类、时长、任务名立即开始新番茄
   const startAnotherFocus = useCallback(async () => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Heavy);
-    await saveFocusRecord();
-    await startFocus();
+    const ok = await saveFocusRecord();
+    if (ok) {
+      await startFocus();
+    }
   }, [saveFocusRecord, startFocus]);
 
   // 运行中轻触胶囊修改专注目标

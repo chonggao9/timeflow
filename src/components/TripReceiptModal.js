@@ -168,16 +168,19 @@ export default function TripReceiptModal({ visible, trip, onClose }) {
         result: 'tmpfile',
       });
 
-      // 2. 构造持久化文件路径并拷贝
+      // 2. 构造持久化文件路径并拷贝（防同名冲突）
       const targetFilename = `TimeFlow-Receipt-${serialNo}.png`;
       const targetUri = `${FileSystem.documentDirectory}${targetFilename}`;
+      try {
+        await FileSystem.deleteAsync(targetUri, { idempotent: true });
+      } catch (delErr) {}
       await FileSystem.copyAsync({ from: uri, to: targetUri });
 
       // 3. 优先直接保存到手机系统相册（writeOnly 纯写模式，不申请敏感读相册权限）
       let savedToAlbum = false;
       try {
         const perm = await MediaLibrary.requestPermissionsAsync(true);
-        if (perm.status === 'granted' || perm.granted || Platform.OS === 'android') {
+        if (perm.status === 'granted' || perm.granted) {
           const asset = await MediaLibrary.createAssetAsync(targetUri);
           try {
             await MediaLibrary.createAlbumAsync('TimeFlow', asset, false);
@@ -185,6 +188,7 @@ export default function TripReceiptModal({ visible, trip, onClose }) {
             /* 忽略部分系统无法建独立相册的异常 */
           }
           savedToAlbum = true;
+          FileSystem.deleteAsync(targetUri, { idempotent: true }).catch(() => {});
           Alert.alert(t('receipt.saveSuccessTitle'), t('receipt.saveSuccessMsg'));
           return;
         }

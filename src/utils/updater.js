@@ -1,3 +1,4 @@
+import { Linking } from 'react-native';
 import Constants from 'expo-constants';
 
 // 版本台账：GitHub Releases。releases/latest 永远指向最新版，稳定不变。
@@ -59,5 +60,22 @@ export async function checkForUpdate() {
     return null;
   } catch (e) {
     return null;
+  }
+}
+
+export async function openUpdateUrl(updateInfo) {
+  if (!updateInfo) return;
+  const playUrl = 'market://details?id=com.chonggao.timeflow';
+  try {
+    const canOpenPlay = await Linking.canOpenURL(playUrl);
+    if (canOpenPlay) {
+      await Linking.openURL(playUrl);
+      return;
+    }
+  } catch (e) {}
+
+  const target = updateInfo.releaseUrl || updateInfo.downloadUrl;
+  if (target) {
+    await Linking.openURL(target).catch(() => {});
   }
 }

@@ -26,6 +26,8 @@ const REPO = 'chonggao9/timeflow';
 const args = process.argv.slice(2);
 const val = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : undefined; };
 const versionArg = val('--version');
+const notesArg = val('--notes');
+const notesFileArg = val('--notes-file');
 const doCommit = args.includes('--commit');
 const doPush = args.includes('--push');
 
@@ -145,6 +147,9 @@ async function gh(url, opts = {}) {
 
 (async () => {
   try {
+    const defaultNotes = `TimeFlow v${next}\n\n### 🚀 更新与优化内容\n- 修复小组件专注统计与自定义时长展示\n- 优化离线恢复与合并导入事务稳定性\n- 统一高德与系统定位坐标系，消除轨迹与反查偏移\n- 优化小组件与首页数据加载性能，杜绝全表扫描\n- 优化通知权限申请时机与版本更新检测合规分流\n\n安装：下载下方 APK 即可直接安装。`;
+    const releaseBody = notesArg || (notesFileArg && fs.existsSync(notesFileArg) ? fs.readFileSync(notesFileArg, 'utf8') : defaultNotes);
+
     step(`创建 GitHub Release v${next}`);
     const release = await gh(`https://api.github.com/repos/${REPO}/releases`, {
       method: 'POST',
@@ -152,7 +157,7 @@ async function gh(url, opts = {}) {
       body: JSON.stringify({
         tag_name: `v${next}`,
         name: `v${next}`,
-        body: `TimeFlow v${next}\n\n### 🚀 更新与优化内容\n- **UI 全面焕新升级**：引入现代流体卡片设计、暖色双板质感、动态水波纹打卡主按钮与悬浮灵动定位胶囊状态条；\n- **补记打卡（方向 A）**：支持离线/遗漏场景下的快捷补记打卡，具备时间偏移选取、常用地点快选与出行方式指定能力；\n- **弱网与离线地点快选**：重命名与补卡模态框内自动提取历史高频地点 Chip，弱网环境下秒级一触即选；\n- **桌面小组件规范对齐**：全面同步上下内嵌流体卡片视觉体系，增加出行方式 Emoji 动态映射与最新地点实时时间同步；\n- **全方位代码审查与架构优化**：\n  * 修复补卡未刷新行程活跃时间戳 (BUG-1)；\n  * 消除切回前台双重 SQLite 查库，提速 App 唤醒渲染 (BUG-2)；\n  * 补全轨迹查看按钮国际化词条 (BUG-3)；\n  * 补卡保存增加原子防重锁与防抖冷却 (Q-4)；\n  * 时间轴脉冲动画抽离并按需挂载，消除历史节点冗余动效循环 (Q-3)；\n  * 统一小组件占位符规范为 {n}，强化模态框 Chip 键名唯一性 (Q-1, Q-2, Q-5)。\n\n安装：下载下方 APK 即可直接安装。`,
+        body: releaseBody,
         draft: false,
         prerelease: false,
       }),

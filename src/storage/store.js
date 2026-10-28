@@ -348,8 +348,14 @@ export async function getActiveTrip() {
 export async function getCurrentTripId() {
   const trip = await getActiveTrip();
   if (!trip) return null;
+  const db = await getDb();
+  const lastRecord = await db.getFirstAsync(
+    'SELECT timestamp FROM records WHERE trip_id = ? ORDER BY timestamp DESC LIMIT 1',
+    trip.id
+  );
+  const lastActiveTs = lastRecord?.timestamp || trip.startTs || 0;
   const now = Date.now();
-  if (now - (trip.startTs || 0) > TRIP_TIMEOUT_MS || dayStart(now) !== dayStart(trip.startTs || 0)) {
+  if (now - lastActiveTs > TRIP_TIMEOUT_MS || dayStart(now) !== dayStart(lastActiveTs)) {
     await endTrip();
     return null;
   }
@@ -486,6 +492,12 @@ export async function countRecords() {
   return row ? row.c : 0;
 }
 
+export async function getRecentRecordsForWidget(days = 60, now = Date.now()) {
+  const db = await getDb();
+  const start = dayStart(now) - days * 86400000;
+  return db.getAllAsync('SELECT timestamp FROM records WHERE timestamp >= ? ORDER BY timestamp ASC', start);
+}
+
 // ---------------- focus_sessions ----------------
 
 const FOCUS_COLS = 'id, timestamp, goal_name AS goalName, duration, category, note';
@@ -511,6 +523,38 @@ export async function getFocusSessionById(id) {
   return db.getFirstAsync(`SELECT ${FOCUS_COLS} FROM focus_sessions WHERE id = ?`, id);
 }
 
+export const WIDGET_FOCUS_WEEK_KEY = 'timeflow_widget_focus_week';
+
+export async function syncWidgetFocusStats(now = Date.now()) {
+  try {
+    const db = await getDb();
+    const today0 = dayStart(now);
+    const start0 = today0 - 6 * 86400000;
+    const rows = await db.getAllAsync(
+      'SELECT timestamp, duration FROM focus_sessions WHERE timestamp >= ? ORDER BY timestamp ASC',
+      start0
+    );
+    const minutes = Array(7).fill(0);
+    for (const r of rows || []) {
+      if (!r || !r.timestamp) continue;
+      const diff = r.timestamp - start0;
+      if (diff >= 0 && diff < 7 * 86400000) {
+        const idx = Math.floor(diff / 86400000);
+        if (idx >= 0 && idx < 7) {
+          minutes[idx] += Math.round((Number(r.duration) || 0) / 60);
+        }
+      }
+    }
+    await AsyncStorage.setItem(
+      WIDGET_FOCUS_WEEK_KEY,
+      JSON.stringify({ date: today0, values: minutes })
+    );
+    return minutes;
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function saveFocusSession(record) {
   const db = await getDb();
   await db.runAsync(
@@ -518,6 +562,7 @@ export async function saveFocusSession(record) {
     record.id, record.timestamp, record.goalName ?? record.locationName ?? null, record.duration ?? 0, record.category ?? null, record.note ?? null
   );
   await bumpRevision();
+  await syncWidgetFocusStats(record.timestamp || Date.now()).catch(() => {});
 }
 
 export async function updateFocusSession(id, patch) {
@@ -534,12 +579,14 @@ export async function updateFocusSession(id, patch) {
   const values = keys.map(k => normalized[k] ?? null);
   await db.runAsync(`UPDATE focus_sessions SET ${sets} WHERE id = ?`, ...values, id);
   await bumpRevision();
+  await syncWidgetFocusStats().catch(() => {});
 }
 
 export async function deleteFocusSession(id) {
   const db = await getDb();
   await db.runAsync('DELETE FROM focus_sessions WHERE id = ?', id);
   await bumpRevision();
+  await syncWidgetFocusStats().catch(() => {});
 }
 
 export async function countFocusSessions() {
@@ -630,16 +677,56 @@ export async function clearAll() {
 // 列清单与 camel/snake 兜底只维护这一份，避免两处漂移导致恢复丢字段。
 async function insertPayloadRows(db, payload) {
   const { trips = [], records = [], focusSessions = [] } = payload || {};
+
+  // 检查当前库中是否已有 active trip
+  const activeRow = await db.getFirstAsync('SELECT id FROM trips WHERE is_active = 1 LIMIT 1');
+  let hasActiveTrip = !!activeRow;
+
+  // 预先建立属于各个 trip 的记录最大时间戳映射，用于归档未结束行程时兜底 end_ts
+  const tripMaxTs = new Map();
+  for (const r of records) {
+    const tid = r.tripId || r.trip_id;
+    if (tid && r.timestamp) {
+      const prev = tripMaxTs.get(tid) || 0;
+      if (r.timestamp > prev) tripMaxTs.set(tid, r.timestamp);
+    }
+  }
+
   for (const trip of trips) {
+    const startTs = trip.startTs || trip.start_ts || 0;
+    let endTs = trip.endTs || trip.end_ts || null;
+    let isActive = trip.isActive ?? trip.is_active ?? false;
+    isActive = (isActive === 1 || isActive === true);
+
+    // 若当前已存在活跃行程，导入的进行中行程须降级为已结束，避免 idx_trips_one_active 冲突
+    if (isActive) {
+      if (hasActiveTrip) {
+        if (!activeRow || activeRow.id !== trip.id) {
+          isActive = false;
+          if (!endTs) {
+            endTs = tripMaxTs.get(trip.id) || startTs || Date.now();
+          }
+        }
+      } else {
+        hasActiveTrip = true;
+      }
+    }
+
     await db.runAsync(
       'INSERT OR IGNORE INTO trips (id, start_ts, end_ts, name, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-      trip.id, trip.startTs || trip.start_ts || 0, trip.endTs || trip.end_ts || null, trip.name || null, trip.isActive ? 1 : 0, trip.createdAt || trip.created_at || Date.now()
+      trip.id, startTs, endTs, trip.name || null, isActive ? 1 : 0, trip.createdAt || trip.created_at || Date.now()
     );
   }
+
+  // 收集当前库中已存在的所有合法 trip id，避免孤立 record 触发外键异常
+  const existingTrips = await db.getAllAsync('SELECT id FROM trips');
+  const validTripIds = new Set((existingTrips || []).map((t) => t.id));
+
   for (const r of records) {
     let tripId = r.tripId || r.trip_id;
-    if (!tripId) {
+    if (!tripId || !validTripIds.has(tripId)) {
       tripId = await findOrCreateTripForTimestamp(r.timestamp, db);
+      validTripIds.add(tripId);
     }
     await db.runAsync(
       'INSERT OR IGNORE INTO records (id, timestamp, location_name, lat, lng, mode, trip_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -666,6 +753,7 @@ export async function replaceAllData(payload) {
   });
   await AsyncStorage.removeItem(RECORDS_KEY);
   await bumpRevision();
+  await syncWidgetFocusStats().catch(() => {});
 }
 
 export async function importRecords(payload) {
@@ -679,6 +767,7 @@ export async function importRecords(payload) {
     await insertPayloadRows(db, payload);
   });
   await bumpRevision();
+  await syncWidgetFocusStats().catch(() => {});
   const totalImported = (records?.length || 0) + (focusSessions?.length || 0) + (trips?.length || 0);
   return { imported: totalImported, skipped: 0 };
 }

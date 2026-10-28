@@ -15,7 +15,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import PrivacyAgreement from './src/screens/PrivacyAgreement';
 import { LanguageProvider, useI18n } from './src/i18n/LanguageContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
-import { checkForUpdate } from './src/utils/updater';
+import { checkForUpdate, openUpdateUrl } from './src/utils/updater';
 import { initBackupSchedule } from './src/backup/schedule';
 import { runV2CleanupOnce } from './src/backup/cleanup';
 
@@ -229,6 +229,7 @@ function AppInner() {
   const { t } = useI18n();
   const { isDark, colors } = useTheme();
   const [privacyAgreed, setPrivacyAgreed] = useState(null); // null=检查中, false=待同意, true=已同意
+  const updateCheckedRef = React.useRef(false);
 
   useEffect(() => {
     AsyncStorage.getItem(PRIVACY_KEY)
@@ -241,27 +242,40 @@ function AppInner() {
     setPrivacyAgreed(true);
   };
 
-  // 启动时检查新版本与触发自动备份（仅在用户同意隐私政策后执行）
+  // 启动时检查新版本与触发自动备份（仅在用户同意隐私政策后执行一次，防止语言切换重弹）
   useEffect(() => {
     if (!privacyAgreed) return;
 
-    checkForUpdate().then(u => {
-      if (!u) return;
-      Alert.alert(
-        t('update.title'),
-        `${t('update.current', { c: u.currentVersion })}\n${t('update.latest', { l: u.latestVersion })}\n${t('update.body')}`,
-        [
-          { text: t('update.later'), style: 'cancel' },
-          { text: t('update.go'), onPress: () => Linking.openURL(u.downloadUrl) },
-        ],
-      );
-    });
+    if (!updateCheckedRef.current) {
+      updateCheckedRef.current = true;
+      (async () => {
+        try {
+          const dismissed = await AsyncStorage.getItem('timeflow_dismissed_update');
+          const u = await checkForUpdate();
+          if (!u || u.latestVersion === dismissed) return;
+          Alert.alert(
+            t('update.title'),
+            `${t('update.current', { c: u.currentVersion })}\n${t('update.latest', { l: u.latestVersion })}\n${t('update.body')}`,
+            [
+              {
+                text: t('update.later'),
+                style: 'cancel',
+                onPress: () => {
+                  AsyncStorage.setItem('timeflow_dismissed_update', u.latestVersion).catch(() => {});
+                },
+              },
+              { text: t('update.go'), onPress: () => openUpdateUrl(u) },
+            ],
+          );
+        } catch (e) {}
+      })();
+    }
 
     // 旧备份体系一次性清理（删旧备份目录与旧配置键，不动用户数据），完成后再启动新调度
     runV2CleanupOnce()
       .catch(() => {})
       .then(() => { initBackupSchedule(); });
-  }, [privacyAgreed, t]);
+  }, [privacyAgreed]);
 
   const navTheme = React.useMemo(() => {
     const base = isDark ? DarkTheme : DefaultTheme;

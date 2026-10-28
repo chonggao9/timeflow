@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRecords } from '../storage/store';
 import { getProfile, saveProfile } from '../storage/profile';
 import { getAmapKey, setAmapKey, getAmapLocKeyRaw, setAmapLocKey } from '../config';
-import { checkForUpdate } from '../utils/updater';
+import { checkForUpdate, openUpdateUrl } from '../utils/updater';
 import { diagnoseLocation } from '../utils/location';
 import { refreshWidget } from '../utils/widgetRefresh';
 import { useI18n } from '../i18n/LanguageContext';
@@ -249,7 +249,7 @@ export default function ProfileScreen({ route }) {
     if (!u) Alert.alert(t('profile.upToDate'), t('profile.version', { v: version }));
     else Alert.alert(t('update.title'), `${t('update.latest', { l: u.latestVersion })}\n${t('update.downloadHint')}`, [
       { text: t('update.later'), style: 'cancel' },
-      { text: t('update.go'), onPress: () => Linking.openURL(u.releaseUrl || u.downloadUrl) },
+      { text: t('update.go'), onPress: () => openUpdateUrl(u) },
     ]);
   };
 

@@ -1,4 +1,5 @@
-import { getTodayRecords, getRecords } from '../src/storage/store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getTodayRecords, getRecentRecordsForWidget, WIDGET_FOCUS_WEEK_KEY } from '../src/storage/store';
 import { isPlaceholderName } from '../src/utils/stats';
 import { loadState } from '../src/pomodoro/stateStore';
 import { settleAndPersist } from '../src/pomodoro/settle';
@@ -123,10 +124,11 @@ export async function buildFocusData(now = Date.now()) {
   const [{ state }, { strings, isDark }] = await Promise.all([settleAndPersist(now), langTheme()]);
   const d = deriveDisplay(state, Date.now());
 
-  // 今日已专注分钟数（已结番茄 + 当前正在专注消耗的分钟数）
+  // 今日已专注分钟数（已结番茄 + 当前正在专注消耗的分钟数，考虑自定义时长）
   const inProgressMin =
     d.mode === 'focus' && d.totalMs > d.remainingMs ? Math.floor((d.totalMs - d.remainingMs) / 60000) : 0;
-  const todayMin = (d.completedToday || 0) * 25 + inProgressMin;
+  const focusMin = (state && state.focusMin) || 25;
+  const todayMin = (d.completedToday || 0) * focusMin + inProgressMin;
 
   // 过去 7 天标签：前 6 天按日期推断，第 7 天固定为「今」/「Today」
   const weekLabels = [];
@@ -137,8 +139,19 @@ export async function buildFocusData(now = Date.now()) {
   }
   weekLabels.push(strings.todayWord || '今');
 
-  // 周统计基准（默认温和梯度，今日使用实际发生值）
-  const weekValues = [75, 50, 100, 60, 90, 120, todayMin];
+  // 周统计基准（前 6 天从缓存读取真实历史，第 7 天使用今日实时值）
+  let past6Days = [0, 0, 0, 0, 0, 0];
+  try {
+    const raw = await AsyncStorage.getItem(WIDGET_FOCUS_WEEK_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.values) && parsed.values.length === 7) {
+        past6Days = parsed.values.slice(0, 6);
+      }
+    }
+  } catch (e) {}
+
+  const weekValues = [...past6Days, todayMin];
 
   return {
     d,
@@ -154,18 +167,18 @@ export async function buildFocusData(now = Date.now()) {
 
 // 行程域：包含 Phase 3 的连续打卡天数、周状态与热力格
 export async function buildTravelData(now = Date.now()) {
-  const [allRecords, { strings, isDark }] = await Promise.all([getRecords().catch(() => []), langTheme()]);
-  const todayRecords = (Array.isArray(allRecords) ? allRecords : []).filter((r) => {
-    if (!r || !r.timestamp) return false;
-    const rd = new Date(r.timestamp);
-    const nd = new Date(now);
-    return rd.getFullYear() === nd.getFullYear() && rd.getMonth() === nd.getMonth() && rd.getDate() === nd.getDate();
-  });
+  const [[todayRecords, recentRecords], { strings, isDark }] = await Promise.all([
+    Promise.all([
+      getTodayRecords().catch(() => []),
+      getRecentRecordsForWidget(60, now).catch(() => []),
+    ]),
+    langTheme(),
+  ]);
 
   const timeline = deriveTimeline(todayRecords, strings, now);
-  const streakDays = calculateStreak(allRecords, now);
-  const weekStatus = deriveWeekStatus(allRecords, now);
-  const heatGrid = deriveHeatGrid(allRecords, now);
+  const streakDays = calculateStreak(recentRecords, now);
+  const weekStatus = deriveWeekStatus(recentRecords, now);
+  const heatGrid = deriveHeatGrid(recentRecords, now);
 
   const weekLabels = strings.weekdays
     ? [strings.weekdays[1], strings.weekdays[2], strings.weekdays[3], strings.weekdays[4], strings.weekdays[5], strings.weekdays[6], strings.weekdays[0]]

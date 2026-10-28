@@ -41,6 +41,7 @@ import {
   getTodayFocusSessions,
   updateFocusSession,
   deleteFocusSession,
+  syncWidgetFocusStats,
 } from '../storage/store';
 import { computePathStats, placeKey, UNNAMED, isPlaceholderName, formatDuration, formatTime } from '../utils/stats';
 import { getPlaceOptions } from '../utils/analytics';
@@ -160,26 +161,38 @@ export default function HomeScreen() {
   const [mapTrip, setMapTrip] = useState(null);
   const [receiptTrip, setReceiptTrip] = useState(null);
 
+  // 全表扫描指纹缓存：指纹未变时复用缓存，杜绝重复查全表
+  const topPlacesFpRef = useRef({ fp: null, places: [] });
+  const allFocusFpRef = useRef({ fp: null, list: [] });
+
   const loadToday = useCallback(async () => {
-    const [today, todayFocus] = await Promise.all([getTodayRecords(), getTodayFocusSessions()])
+    const [today, todayFocus] = await Promise.all([getTodayRecords(), getTodayFocusSessions()]);
     const sorted = [...today].sort((a, b) => a.timestamp - b.timestamp);
     setRecords(sorted);
     setFocusSessions([...todayFocus].sort((a, b) => a.timestamp - b.timestamp));
     const trip = await getCurrentTripId();
     setHasActiveTrip(!!trip);
 
-    // 常用地点快选（Top 5 最高频地名）
+    // 常用地点快选与全部专注记录（带指纹缓存，避免每次唤醒与刷新全表扫描）
     try {
-      const all = await getRecords();
-      const options = getPlaceOptions(all);
-      const topPlaces = options
-        .map((o) => o.name)
-        .filter((nm) => nm && !isPlaceholderName(nm) && nm !== UNNAMED)
-        .slice(0, 5);
-      setCommonPlaces(topPlaces);
-      // 全部专注记录：专注历史弹窗需要跨天查看
-      const allFocus = await getFocusSessions();
-      setAllFocusSessions([...allFocus].sort((a, b) => a.timestamp - b.timestamp));
+      const fp = await getRecordsFingerprint();
+      if (topPlacesFpRef.current.fp !== fp || !topPlacesFpRef.current.places.length) {
+        const all = await getRecords();
+        const options = getPlaceOptions(all);
+        const topPlaces = options
+          .map((o) => o.name)
+          .filter((nm) => nm && !isPlaceholderName(nm) && nm !== UNNAMED)
+          .slice(0, 5);
+        topPlacesFpRef.current = { fp, places: topPlaces };
+        setCommonPlaces(topPlaces);
+      }
+      if (allFocusFpRef.current.fp !== fp || !allFocusFpRef.current.list.length) {
+        const allFocus = await getFocusSessions();
+        const sortedFocus = [...allFocus].sort((a, b) => a.timestamp - b.timestamp);
+        allFocusFpRef.current = { fp, list: sortedFocus };
+        setAllFocusSessions(sortedFocus);
+      }
+      syncWidgetFocusStats().catch(() => {});
     } catch (e) {}
     return { today: sorted, focus: todayFocus };
   }, []);
@@ -545,14 +558,14 @@ export default function HomeScreen() {
   };
 
   const handleSaveFocus = async (data) => {
-    const tnow = Date.now();
+    const sessionTs = (data && data.timestamp) || Date.now();
     try {
       // timeflow_active_focus 由 PomodoroTimer 自行维护，保存成功后由它清理；
       // 这里直接落库并刷新今日数据。
       const id = makeId();
       await saveFocusSession({
         id,
-        timestamp: tnow,
+        timestamp: sessionTs,
         goalName: data.goalName,
         duration: data.duration,
         category: data.category,
@@ -562,8 +575,10 @@ export default function HomeScreen() {
       await loadToday();
       refreshPomodoroWidgets();
       notifyDataChanged();
+      return true;
     } catch (e) {
       Alert.alert(t('home.failTitle'), t('home.failBody'));
+      return false;
     }
   };
 
