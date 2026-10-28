@@ -1,19 +1,19 @@
 ========================================
-TimeFlow v1.2.4 Release Notes (Google Play - versionCode: 26)
+TimeFlow v1.2.8 Release Notes (Google Play - versionCode: 30)
 ========================================
 
-【1. 简体中文版 (zh-CN) - 适用于 Google Play 更新说明，已严格控制在 500 字符以内】
-v1.2.4 更新说明：
-• 🍅 番茄专注交互革新：转盘手势丝滑调节时长，番茄视觉放大居中，档位下移至拇指热区，8款治愈白噪音陪伴。
-• 🚀 首页架构与模式重构：分段控件丝滑切换室内专注与出行轨迹；双域数据深度隔离。
-• 💾 极简免密备份系统：移除密码心智负担，秒级免密恢复；支持条数对照预览与恢复前快照一键回退。
-• 🗺️ 深度洞察与详情升级：原生行程详情页、路线简图拓扑、同路线耗时智能对比、未命名地点快速补齐。
-• ✨ 启动体验与细节修复：窗口与状态栏零色差对齐冷启动；沉浸式隐私协议弹窗修复；出行方式横滑胶囊条。
+【1. 简体中文版 (zh-CN) - 适用于 Google Play Console 更新说明，严格控制在 500 字符以内】
+v1.2.8 更新说明：
+• 📊 小组件专注统计真实化：桌面今日统计周柱状图正式接入近7天真实专注记录，支持自定义时长动态换算。
+• 🛡️ 备份恢复与数据防丢失加固：修复合并恢复过程中的行程约束冲突；番茄钟持久化增加二次确认机制与真实时刻校准。
+• ⏱️ 行程超时判定优化：90分钟无打卡自动断开改以最新活动记录为基准，更贴合实际出行习惯。
+• 🔔 权限与合规体验升级：通知权限改为点击专注时按需延迟申请；全面对齐 Google Play 最新隐私合规政策。
+• ⚡ 性能与定位调优：优化小组件与常用地点数据读取链路，杜绝多余全表扫描；提升地图定位与逆地理编码精度。
 
 【2. 英文版 (en-US) - For Google Play Console "What's new", within 500 characters】
-v1.2.4 What's New:
-• 🍅 Focus Upgrade: Smooth circular dial gesture for timer adjustment, enlarged hero tomato, 8 soothing ambient soundscapes.
-• 🚀 Redesigned Home: Refined segmented control to switch between Indoor Focus and Travel Trips; isolated data domains.
-• 💾 Passwordless Fast Backup: Instant zero-delay restore with record diff preview, safety snapshot, and one-tap undo.
-• 🗺️ Native Trip Insights: Native trip detail view with route schematics, same-route trip comparisons, and quick unnamed-place backfill.
-• ✨ Seamless Launch & Polish: Zero-flicker launch screen matching Android window color; full-screen privacy modal fix.
+v1.2.8 What's New:
+• 📊 Real Widget Focus Stats: Weekly bar chart now tracks real 7-day focus history and supports dynamic custom durations.
+• 🛡️ Enhanced Backup & Data Safety: Fixed trip constraint conflicts during merge/restore; robust pomodoro persistence with real completion timestamps.
+• ⏱️ Refined Trip Continuity: 90-minute auto-split now calculates from your latest check-in time for accurate trip boundaries.
+• 🔔 Privacy & Permissions: Notification permission is now requested only on demand when starting focus. Fully compliant with Google Play policies.
+• ⚡ Performance & Polish: Indexed fingerprint caching for widgets and top places to eliminate full-table scans; improved location accuracy.

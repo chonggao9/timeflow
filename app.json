@@ -3,7 +3,7 @@
     "name": "TimeFlow",
     "slug": "timeflow",
     "scheme": "timeflow",
-    "version": "1.2.7",
+    "version": "1.2.8",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -35,7 +35,7 @@
           "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_KEY"
         }
       },
-      "versionCode": 29
+      "versionCode": 30
     },
     "plugins": [
       "./plugins/withRemoveMediaPermissions",
