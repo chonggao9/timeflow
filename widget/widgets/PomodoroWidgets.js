@@ -9,8 +9,13 @@ import { RADIUS_WIDGET, modePalette } from '../widgetTheme';
 
 export const FOCUS_DEEP_LINK = 'timeflow://focus';
 
-// 剩余占比（设计稿圆环随剩余时间收缩）
-const remainFrac = (d) => (d.totalMs > 0 ? Math.max(0, Math.min(1, d.remainingMs / d.totalMs)) : 0);
+// 圆环占比：运行中保持稳定激活满环（不画过时静态假进度，由 hh:mm 明确告知结束时刻）；
+// 暂停时显示当前真实静止进度；待开始态为准备满环。
+const remainFrac = (d) => {
+  if (d.running) return 1;
+  if (d.status === 'paused' && d.totalMs > 0) return Math.max(0, Math.min(1, d.remainingMs / d.totalMs));
+  return 1;
+};
 
 function playLabel(d, strings) {
   if (d.running) return strings.play.pause;
@@ -85,19 +90,19 @@ function ModeChips({ d, strings, pal }) {
             clickAction={`mode.${m}`}
             style={{
               flex: 1,
-              height: 32,
-              borderRadius: 16,
+              height: 24,
+              borderRadius: 12,
               backgroundColor: on ? pal.chipBg : pal.btnSecondary,
               borderWidth: on ? 1.5 : 0,
               borderColor: pal.accent,
               alignItems: 'center',
               justifyContent: 'center',
-              marginLeft: i === 0 ? 0 : 6,
+              marginLeft: i === 0 ? 0 : 4,
             }}
           >
             <TextWidget
               text={strings.mode[m]}
-              style={{ fontSize: 12, fontWeight: '700', color: on ? pal.chipText : pal.textSecondary }}
+              style={{ fontSize: 11, fontWeight: '700', color: on ? pal.chipText : pal.textSecondary }}
             />
           </FlexWidget>
         );
@@ -111,28 +116,28 @@ function PlayButton({ d, strings, pal }) {
     <FlexWidget
       clickAction="pomo.toggle"
       style={{
-        height: 44,
-        borderRadius: 22,
+        height: 32,
+        borderRadius: 16,
         backgroundColor: pal.btn,
         flexDirection: 'row',
         alignItems: 'center',
-        paddingLeft: 14,
-        paddingRight: 18,
+        paddingLeft: 10,
+        paddingRight: 14,
       }}
     >
       <SvgWidget
-        svg={iconSvg(d.running ? 'pause' : 'play', { size: 18, color: pal.btnText })}
-        style={{ width: 18, height: 18 }}
+        svg={iconSvg(d.running ? 'pause' : 'play', { size: 14, color: pal.btnText })}
+        style={{ width: 14, height: 14 }}
       />
       <TextWidget
         text={playLabel(d, strings)}
-        style={{ fontSize: 14, fontWeight: '700', color: pal.btnText, marginLeft: 6 }}
+        style={{ fontSize: 12, fontWeight: '700', color: pal.btnText, marginLeft: 4 }}
       />
     </FlexWidget>
   );
 }
 
-// 4×2 完整版：左圆环 + 右（模式 chips / 标题 / 循环点 / 开始·重置）
+// 4×2 完整版：左圆环 + 右（模式 chips / 标题 / 循环点 / 开始·重置），紧凑布局 <= 110dp
 export function PomodoroWidget4x2({ d, strings, pal }) {
   return (
     <FlexWidget
@@ -145,38 +150,39 @@ export function PomodoroWidget4x2({ d, strings, pal }) {
         borderRadius: RADIUS_WIDGET,
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 18,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
       }}
     >
-      <Ring d={d} strings={strings} pal={pal} size={120} bigSize={29} second="label" />
-      <FlexWidget style={{ flex: 1, flexDirection: 'column', marginLeft: 16 }}>
+      <Ring d={d} strings={strings} pal={pal} size={90} bigSize={22} second="label" />
+      <FlexWidget style={{ flex: 1, flexDirection: 'column', marginLeft: 12, justifyContent: 'center' }}>
         <ModeChips d={d} strings={strings} pal={pal} />
         <TextWidget
           text={strings.pomoTitle[d.mode]}
           maxLines={1}
           truncate="END"
-          style={{ fontSize: 15, fontWeight: '700', color: pal.textPrimary, marginTop: 7 }}
+          style={{ fontSize: 13, fontWeight: '700', color: pal.textPrimary, marginTop: 4 }}
         />
-        <FlexWidget style={{ marginTop: 3 }}>
+        <FlexWidget style={{ marginTop: 2 }}>
           <SubRow d={d} strings={strings} pal={pal} />
         </FlexWidget>
-        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', marginTop: 7 }}>
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
           <PlayButton d={d} strings={strings} pal={pal} />
           <FlexWidget
             clickAction="pomo.reset"
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 22,
+              width: 32,
+              height: 32,
+              borderRadius: 16,
               backgroundColor: pal.btnSecondary,
               alignItems: 'center',
               justifyContent: 'center',
-              marginLeft: 8,
+              marginLeft: 6,
             }}
           >
             <SvgWidget
-              svg={iconSvg('reset', { size: 20, color: pal.textSecondary })}
-              style={{ width: 20, height: 20 }}
+              svg={iconSvg('reset', { size: 16, color: pal.textSecondary })}
+              style={{ width: 16, height: 16 }}
             />
           </FlexWidget>
         </FlexWidget>
@@ -185,7 +191,7 @@ export function PomodoroWidget4x2({ d, strings, pal }) {
   );
 }
 
-// 2×2 圆环版：整卡点击 = 开始/暂停（盲操友好）
+// 2×2 圆环版：整卡点击 = 开始/暂停（盲操友好），紧凑布局 <= 110dp
 export function PomodoroWidget2x2({ d, strings, pal }) {
   return (
     <FlexWidget
@@ -198,23 +204,28 @@ export function PomodoroWidget2x2({ d, strings, pal }) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 14,
+        paddingVertical: 8,
+        paddingHorizontal: 8,
       }}
     >
-      <Ring d={d} strings={strings} pal={pal} size={112} bigSize={26} second="icon" />
+      <Ring d={d} strings={strings} pal={pal} size={70} bigSize={18} second="icon" />
       <FlexWidget
         style={{
           backgroundColor: pal.chipBg,
-          borderRadius: 12,
-          paddingHorizontal: 12,
-          paddingVertical: 4,
-          marginTop: 10,
+          borderRadius: 10,
+          paddingHorizontal: 8,
+          paddingVertical: 2,
+          marginTop: 6,
         }}
       >
         <TextWidget
-          text={`${strings.mode[d.mode]} · ${strings.status[d.status]}`}
+          text={
+            d.running && d.endsAtHHMM
+              ? `${strings.mode[d.mode]} · ${strings.endsAt.replace('{t}', d.endsAtHHMM)}`
+              : `${strings.mode[d.mode]} · ${strings.status[d.status]}`
+          }
           maxLines={1}
-          style={{ fontSize: 12, fontWeight: '700', color: pal.chipText }}
+          style={{ fontSize: 11, fontWeight: '700', color: pal.chipText }}
         />
       </FlexWidget>
     </FlexWidget>

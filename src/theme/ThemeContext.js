@@ -49,6 +49,20 @@ export function ThemeProvider({ children }) {
     return () => { cancelled = true; clearTimeout(t); };
   }, []);
 
+  // 监听外观变化（包含系统深浅色自动切换与手动切换）：触发小组件刷新
+  const lastDarkRef = React.useRef(null);
+  useEffect(() => {
+    if (!hydrated) return;
+    if (lastDarkRef.current === null) {
+      lastDarkRef.current = isDark;
+      return;
+    }
+    if (lastDarkRef.current !== isDark) {
+      lastDarkRef.current = isDark;
+      refreshAllWidgets().catch(() => {});
+    }
+  }, [isDark, hydrated]);
+
   // 切换外观：value: 'system' | 'light' | 'dark'
   const setTheme = useCallback(async (value) => {
     if (value === 'light' || value === 'dark') {

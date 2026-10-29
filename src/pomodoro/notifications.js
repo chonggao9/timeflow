@@ -4,8 +4,51 @@
 // 原则：通知只是提醒通道，状态正确性从不依赖它——所有调用 try-catch 吞错。
 // 用 state.notifId 精确取消，不用 cancelAll（防止误删 headless 排期的通知）。
 import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const CHANNEL_ID = 'pomodoro-end';
+export const LANG_KEY = 'timeflow_lang';
+export const FEEDBACK_KEY = 'timeflow_focus_feedback_type';
+
+const NOTIF_STRINGS = {
+  zh: {
+    channelName: '番茄钟结束提醒',
+    focusTitle: '收获一颗番茄',
+    focusBody: '番茄钟时间到了，快来查看你的收获吧',
+    restTitle: '休息结束',
+    restBody: '休息好了，开始下一个番茄吧',
+    pauseTitle: '番茄暂停中',
+    pauseBody: '已经暂停 10 分钟了，要继续专注吗？',
+  },
+  en: {
+    channelName: 'Pomodoro Timer Alert',
+    focusTitle: 'Pomodoro Complete',
+    focusBody: 'Time is up! Tap to record your focus session',
+    restTitle: 'Break is over',
+    restBody: 'Feeling refreshed? Start your next pomodoro',
+    pauseTitle: 'Focus Paused',
+    pauseBody: 'Paused for 10 minutes. Ready to jump back in?',
+  },
+};
+
+function inferLang() {
+  try {
+    const Localization = require('expo-localization');
+    const code = Localization.getLocales?.()?.[0]?.languageCode;
+    return code && code.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  } catch (e) {
+    return 'zh';
+  }
+}
+
+async function getLang() {
+  try {
+    const saved = await AsyncStorage.getItem(LANG_KEY);
+    return saved === 'zh' || saved === 'en' ? saved : inferLang();
+  } catch (e) {
+    return inferLang();
+  }
+}
 
 let handlerReady = false;
 
@@ -21,22 +64,35 @@ export function ensureNotificationSetup() {
         shouldSetBadge: false,
       }),
     });
-    Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-      name: '番茄钟结束提醒',
-      importance: Notifications.AndroidImportance.HIGH,
-      sound: 'default',
-      vibrationPattern: [0, 250, 250, 250],
+    getLang().then((lang) => {
+      const s = NOTIF_STRINGS[lang] || NOTIF_STRINGS.zh;
+      Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+        name: s.channelName,
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
+      }).catch(() => {});
     }).catch(() => {});
   } catch (e) {
     /* 静默 */
   }
 }
 
-function defaultTexts(state) {
+function defaultTexts(state, lang = 'zh') {
+  const s = NOTIF_STRINGS[lang] || NOTIF_STRINGS.zh;
   if (state.mode === 'focus') {
-    return { title: '收获一颗番茄', body: '番茄钟时间到了，快来查看你的收获吧' };
+    return { title: s.focusTitle, body: s.focusBody };
   }
-  return { title: '休息结束', body: '休息好了，开始下一个番茄吧' };
+  return { title: s.restTitle, body: s.restBody };
+}
+
+async function isSoundEnabled() {
+  try {
+    const feedback = await AsyncStorage.getItem(FEEDBACK_KEY);
+    return feedback !== 'silent' && feedback !== 'vibrate';
+  } catch (e) {
+    return true;
+  }
 }
 
 // 排期 endAt 时刻的结束通知，返回通知 id（失败返回 null）。
@@ -44,9 +100,18 @@ export async function scheduleEndNotification(state, texts) {
   try {
     ensureNotificationSetup();
     if (!state.running || !state.endAt || state.endAt <= Date.now()) return null;
-    const { title, body } = texts || defaultTexts(state);
+    let resolvedTexts = texts;
+    if (!resolvedTexts) {
+      const lang = await getLang();
+      resolvedTexts = defaultTexts(state, lang);
+    }
+    const hasSound = await isSoundEnabled();
     return await Notifications.scheduleNotificationAsync({
-      content: { title, body, sound: 'default' },
+      content: {
+        title: resolvedTexts.title,
+        body: resolvedTexts.body,
+        sound: hasSound ? 'default' : false,
+      },
       trigger: { type: 'date', date: new Date(state.endAt), channelId: CHANNEL_ID },
     });
   } catch (e) {
@@ -84,3 +149,32 @@ export async function syncNotifications(state, texts, prev = null) {
   }
   return state;
 }
+
+export async function schedulePauseReminder(minutes = 10, customTexts) {
+  try {
+    ensureNotificationSetup();
+    let resolvedTexts = customTexts;
+    if (!resolvedTexts) {
+      const lang = await getLang();
+      const s = NOTIF_STRINGS[lang] || NOTIF_STRINGS.zh;
+      resolvedTexts = { title: s.pauseTitle, body: s.pauseBody };
+    }
+    const triggerDate = new Date(Date.now() + Math.max(1, minutes) * 60 * 1000);
+    const hasSound = await isSoundEnabled();
+    return await Notifications.scheduleNotificationAsync({
+      content: {
+        title: resolvedTexts.title,
+        body: resolvedTexts.body,
+        sound: hasSound ? 'default' : false,
+      },
+      trigger: { type: 'date', date: triggerDate, channelId: CHANNEL_ID },
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function cancelPauseReminder(notifId) {
+  await cancelById(notifId);
+}
+

@@ -459,6 +459,7 @@ export async function saveRecord(record) {
     record.id, record.timestamp, record.locationName ?? null, record.lat ?? null, record.lng ?? null, record.mode ?? 'walk', tripId
   );
   await bumpRevision();
+  await syncWidgetSnapshot().catch(() => {});
 }
 
 export async function updateRecord(id, patch) {
@@ -470,6 +471,7 @@ export async function updateRecord(id, patch) {
   const values = keys.map(k => patch[k] ?? null);
   await db.runAsync(`UPDATE records SET ${sets} WHERE id = ?`, ...values, id);
   await bumpRevision();
+  await syncWidgetSnapshot().catch(() => {});
 }
 
 export async function deleteRecord(id) {
@@ -484,6 +486,7 @@ export async function deleteRecord(id) {
     }
   }
   await bumpRevision();
+  await syncWidgetSnapshot().catch(() => {});
 }
 
 export async function countRecords() {
@@ -524,36 +527,76 @@ export async function getFocusSessionById(id) {
 }
 
 export const WIDGET_FOCUS_WEEK_KEY = 'timeflow_widget_focus_week';
+export const WIDGET_SNAPSHOT_KEY = 'timeflow_widget_snapshot_v1';
 
-export async function syncWidgetFocusStats(now = Date.now()) {
+// 方案 B：小组件只读快照同步器（版本化派生数据，App 写入时落盘，组件只读快照，绝不直接碰 SQLite）
+export async function syncWidgetSnapshot(now = Date.now()) {
   try {
     const db = await getDb();
     const today0 = dayStart(now);
-    const start0 = today0 - 6 * 86400000;
-    const rows = await db.getAllAsync(
-      'SELECT timestamp, duration FROM focus_sessions WHERE timestamp >= ? ORDER BY timestamp ASC',
-      start0
+    const todayEnd = today0 + 86400000;
+    const sixtyDaysAgo = today0 - 60 * 86400000;
+    const sixDaysAgo = today0 - 6 * 86400000;
+
+    // 1. 查询今日行程打卡
+    const todayRecords = await db.getAllAsync(
+      `SELECT ${RECORD_COLS} FROM records WHERE timestamp >= ? AND timestamp < ? ORDER BY timestamp ASC`,
+      today0,
+      todayEnd
     );
-    const minutes = Array(7).fill(0);
-    for (const r of rows || []) {
+
+    // 2. 查询近 60 天时间戳（用于连续天数、周状态与热力图）
+    const recentRows = await db.getAllAsync(
+      'SELECT timestamp FROM records WHERE timestamp >= ? ORDER BY timestamp ASC',
+      sixtyDaysAgo
+    );
+
+    // 3. 查询过去 7 天专注时长（用于柱状图与今日已完成专注时长）
+    const focusRows = await db.getAllAsync(
+      'SELECT timestamp, duration FROM focus_sessions WHERE timestamp >= ? ORDER BY timestamp ASC',
+      sixDaysAgo
+    );
+    const focusMinutes = Array(7).fill(0);
+    for (const r of focusRows || []) {
       if (!r || !r.timestamp) continue;
-      const diff = r.timestamp - start0;
+      const diff = r.timestamp - sixDaysAgo;
       if (diff >= 0 && diff < 7 * 86400000) {
-        const idx = Math.floor(diff / 86400000);
-        if (idx >= 0 && idx < 7) {
-          minutes[idx] += Math.round((Number(r.duration) || 0) / 60);
+        const slot = Math.floor(diff / 86400000);
+        if (slot >= 0 && slot < 7) {
+          focusMinutes[slot] += Math.round((Number(r.duration) || 0) / 60);
         }
       }
     }
+
+    const snapshot = {
+      v: 1,
+      updatedAt: now,
+      travel: {
+        todayRecords: todayRecords || [],
+        recentTimestamps: (recentRows || []).map((r) => r.timestamp).filter(Boolean),
+        count: (todayRecords || []).length,
+      },
+      focus: {
+        todayCompletedMinutes: focusMinutes[6] || 0,
+        past6DaysMinutes: focusMinutes.slice(0, 6),
+      },
+    };
+
+    await AsyncStorage.setItem(WIDGET_SNAPSHOT_KEY, JSON.stringify(snapshot));
+    // 兼容原有的 WIDGET_FOCUS_WEEK_KEY
     await AsyncStorage.setItem(
       WIDGET_FOCUS_WEEK_KEY,
-      JSON.stringify({ date: today0, values: minutes })
+      JSON.stringify({ date: today0, values: focusMinutes })
     );
-    return minutes;
+
+    return snapshot;
   } catch (e) {
     return null;
   }
 }
+
+// 兼容别名
+export const syncWidgetFocusStats = syncWidgetSnapshot;
 
 export async function saveFocusSession(record) {
   const db = await getDb();
@@ -562,7 +605,7 @@ export async function saveFocusSession(record) {
     record.id, record.timestamp, record.goalName ?? record.locationName ?? null, record.duration ?? 0, record.category ?? null, record.note ?? null
   );
   await bumpRevision();
-  await syncWidgetFocusStats(record.timestamp || Date.now()).catch(() => {});
+  await syncWidgetSnapshot(record.timestamp || Date.now()).catch(() => {});
 }
 
 export async function updateFocusSession(id, patch) {
@@ -579,14 +622,14 @@ export async function updateFocusSession(id, patch) {
   const values = keys.map(k => normalized[k] ?? null);
   await db.runAsync(`UPDATE focus_sessions SET ${sets} WHERE id = ?`, ...values, id);
   await bumpRevision();
-  await syncWidgetFocusStats().catch(() => {});
+  await syncWidgetSnapshot().catch(() => {});
 }
 
 export async function deleteFocusSession(id) {
   const db = await getDb();
   await db.runAsync('DELETE FROM focus_sessions WHERE id = ?', id);
   await bumpRevision();
-  await syncWidgetFocusStats().catch(() => {});
+  await syncWidgetSnapshot().catch(() => {});
 }
 
 export async function countFocusSessions() {
@@ -753,7 +796,7 @@ export async function replaceAllData(payload) {
   });
   await AsyncStorage.removeItem(RECORDS_KEY);
   await bumpRevision();
-  await syncWidgetFocusStats().catch(() => {});
+  await syncWidgetSnapshot().catch(() => {});
 }
 
 export async function importRecords(payload) {

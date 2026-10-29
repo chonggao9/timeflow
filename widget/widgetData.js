@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getTodayRecords, getRecentRecordsForWidget, WIDGET_FOCUS_WEEK_KEY } from '../src/storage/store';
+import { WIDGET_SNAPSHOT_KEY, WIDGET_FOCUS_WEEK_KEY } from '../src/storage/store';
 import { isPlaceholderName } from '../src/utils/stats';
 import { loadState } from '../src/pomodoro/stateStore';
 import { settleAndPersist } from '../src/pomodoro/settle';
@@ -8,6 +8,18 @@ import { getWidgetLang, getWidgetTheme, makeStrings, fmtTime, fmtWeekday } from 
 import { modePalette, tripPalette, basePalette } from './widgetTheme';
 
 export const TIMELINE_MAX_ROWS = 4; // 4×2 时间轴最多 4 行（行高 26 × 4 ≈ 设计稿 tl 高 104）
+
+// 读取只读快照（纯 AsyncStorage，绝不直碰 SQLite）
+export async function loadWidgetSnapshot() {
+  try {
+    const raw = await AsyncStorage.getItem(WIDGET_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && parsed.v === 1 ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+}
 
 // 计算连续打卡天数（纯函数，同 ProfileScreen 算法）
 export function calculateStreak(records, now = Date.now()) {
@@ -94,7 +106,11 @@ export function deriveTimeline(records, strings, now = Date.now()) {
   const count = list.length;
   const nameOf = (r) => {
     const n = r && r.locationName;
-    return isPlaceholderName(n) ? strings.unnamed : n;
+    if (!n || isPlaceholderName(n)) {
+      const timeStr = r && r.timestamp ? fmtTime(r.timestamp) : '';
+      return timeStr ? strings.justChecked.replace('{t}', timeStr) : strings.unnamed;
+    }
+    return n;
   };
   const recent = list.slice(-TIMELINE_MAX_ROWS);
   const rows = recent.map((r, i) => ({
@@ -119,16 +135,24 @@ async function langTheme() {
   return { lang, strings: makeStrings(lang), isDark: theme.isDark };
 }
 
-// 番茄域：包含 Phase 3 的今日专注分钟与周柱状图
+// 番茄域：包含 Phase 3 的今日专注分钟与周柱状图（只读快照）
 export async function buildFocusData(now = Date.now()) {
-  const [{ state }, { strings, isDark }] = await Promise.all([settleAndPersist(now), langTheme()]);
+  const [{ state }, { strings, isDark }, snapshot] = await Promise.all([
+    settleAndPersist(now),
+    langTheme(),
+    loadWidgetSnapshot(),
+  ]);
   const d = deriveDisplay(state, Date.now());
 
-  // 今日已专注分钟数（已结番茄 + 当前正在专注消耗的分钟数，考虑自定义时长）
+  // 今日已专注分钟数（已结番茄 + 当前正在专注消耗的分钟数，优先使用真实快照聚合）
   const inProgressMin =
     d.mode === 'focus' && d.totalMs > d.remainingMs ? Math.floor((d.totalMs - d.remainingMs) / 60000) : 0;
   const focusMin = (state && state.focusMin) || 25;
-  const todayMin = (d.completedToday || 0) * focusMin + inProgressMin;
+  const completedBaseMin =
+    snapshot && snapshot.focus && typeof snapshot.focus.todayCompletedMinutes === 'number'
+      ? snapshot.focus.todayCompletedMinutes
+      : (d.completedToday || 0) * focusMin;
+  const todayMin = completedBaseMin + inProgressMin;
 
   // 过去 7 天标签：前 6 天按日期推断，第 7 天固定为「今」/「Today」
   const weekLabels = [];
@@ -139,17 +163,21 @@ export async function buildFocusData(now = Date.now()) {
   }
   weekLabels.push(strings.todayWord || '今');
 
-  // 周统计基准（前 6 天从缓存读取真实历史，第 7 天使用今日实时值）
+  // 周统计基准（前 6 天优先从快照读取真实历史，第 7 天使用今日实时值）
   let past6Days = [0, 0, 0, 0, 0, 0];
-  try {
-    const raw = await AsyncStorage.getItem(WIDGET_FOCUS_WEEK_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed?.values) && parsed.values.length === 7) {
-        past6Days = parsed.values.slice(0, 6);
+  if (snapshot && snapshot.focus && Array.isArray(snapshot.focus.past6DaysMinutes)) {
+    past6Days = snapshot.focus.past6DaysMinutes.slice(0, 6);
+  } else {
+    try {
+      const raw = await AsyncStorage.getItem(WIDGET_FOCUS_WEEK_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed?.values) && parsed.values.length === 7) {
+          past6Days = parsed.values.slice(0, 6);
+        }
       }
-    }
-  } catch (e) {}
+    } catch (e) {}
+  }
 
   const weekValues = [...past6Days, todayMin];
 
@@ -165,20 +193,26 @@ export async function buildFocusData(now = Date.now()) {
   };
 }
 
-// 行程域：包含 Phase 3 的连续打卡天数、周状态与热力格
+// 行程域：只读快照派生（完全不访问 SQLite）
 export async function buildTravelData(now = Date.now()) {
-  const [[todayRecords, recentRecords], { strings, isDark }] = await Promise.all([
-    Promise.all([
-      getTodayRecords().catch(() => []),
-      getRecentRecordsForWidget(60, now).catch(() => []),
-    ]),
+  const [snapshot, { strings, isDark }] = await Promise.all([
+    loadWidgetSnapshot(),
     langTheme(),
   ]);
 
+  let todayRecords = [];
+  let recentTimestamps = [];
+  if (snapshot && snapshot.travel) {
+    todayRecords = snapshot.travel.todayRecords || [];
+    recentTimestamps = snapshot.travel.recentTimestamps || [];
+  }
+
+  const recentObjList = recentTimestamps.map((ts) => (typeof ts === 'number' ? { timestamp: ts } : ts));
+
   const timeline = deriveTimeline(todayRecords, strings, now);
-  const streakDays = calculateStreak(recentRecords, now);
-  const weekStatus = deriveWeekStatus(recentRecords, now);
-  const heatGrid = deriveHeatGrid(recentRecords, now);
+  const streakDays = calculateStreak(recentObjList, now);
+  const weekStatus = deriveWeekStatus(recentObjList, now);
+  const heatGrid = deriveHeatGrid(recentObjList, now);
 
   const weekLabels = strings.weekdays
     ? [strings.weekdays[1], strings.weekdays[2], strings.weekdays[3], strings.weekdays[4], strings.weekdays[5], strings.weekdays[6], strings.weekdays[0]]

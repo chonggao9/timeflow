@@ -37,14 +37,14 @@ function CtaCircle({ strings, pal, size = 84 }) {
 // 时间轴单行：左（站点圆点 + 连接线段）+ 地名 + 时刻。last 行不画连接线。
 function TimelineRow({ row, strings, pal, last }) {
   return (
-    <FlexWidget style={{ height: 26, flexDirection: 'row', width: 'match_parent' }}>
-      <FlexWidget style={{ width: 18, height: 26, flexDirection: 'column', alignItems: 'center' }}>
+    <FlexWidget style={{ height: 22, flexDirection: 'row', alignItems: 'center', width: 'match_parent' }}>
+      <FlexWidget style={{ width: 14, height: 22, flexDirection: 'column', alignItems: 'center' }}>
         {row.cur ? (
           <FlexWidget
             style={{
-              width: 18,
-              height: 18,
-              borderRadius: 9,
+              width: 14,
+              height: 14,
+              borderRadius: 7,
               backgroundColor: pal.bg,
               borderWidth: 2,
               borderColor: pal.accent,
@@ -52,104 +52,108 @@ function TimelineRow({ row, strings, pal, last }) {
               justifyContent: 'center',
             }}
           >
-            <FlexWidget style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: pal.accent }} />
+            <FlexWidget style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: pal.accent }} />
           </FlexWidget>
         ) : (
           <FlexWidget
             style={{
-              width: 18,
-              height: 18,
-              borderRadius: 9,
+              width: 14,
+              height: 14,
+              borderRadius: 7,
               backgroundColor: pal.accent,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
             <SvgWidget
-              svg={iconSvg('check', { size: 10, color: pal.bg })}
-              style={{ width: 10, height: 10 }}
+              svg={iconSvg('check', { size: 8, color: pal.bg })}
+              style={{ width: 8, height: 8 }}
             />
           </FlexWidget>
         )}
         {!last && <FlexWidget style={{ width: 2, flex: 1, backgroundColor: pal.accent }} />}
       </FlexWidget>
-      <TextWidget
-        text={row.name}
-        maxLines={1}
-        truncate="END"
-        style={{
-          flex: 1,
-          fontSize: 13,
-          fontWeight: row.cur ? '700' : '500',
-          color: row.cur ? pal.textPrimary : pal.textSecondary,
-          marginLeft: 10,
-          alignSelf: 'center',
-        }}
-      />
+      <FlexWidget style={{ flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
+        <TextWidget
+          text={row.name}
+          maxLines={1}
+          truncate="END"
+          style={{
+            fontSize: 12,
+            fontWeight: row.cur ? '700' : '500',
+            color: row.cur ? pal.textPrimary : pal.textSecondary,
+          }}
+        />
+      </FlexWidget>
       <TextWidget
         text={row.time}
-        style={{ fontSize: 12, fontWeight: '700', color: pal.chipText, alignSelf: 'center' }}
+        style={{ fontSize: 11, fontWeight: '700', color: pal.chipText }}
       />
     </FlexWidget>
   );
 }
 
-// 4×2 今日行程：左（打卡圆钮 + 最近一站说明）+ 右（标题行 + 足迹时间轴）
+// 4×2 今日行程：左（打卡独立区）+ 右（时间轴独立打开 App 区），杜绝点击嵌套；高度核算 <= 110dp
 export function TravelWidget4x2({ timeline, strings, pal }) {
   const capMain = timeline.empty ? strings.todayTrip : timeline.latestName;
   const capSub = timeline.empty
     ? strings.emptyCtaSub
     : strings.justChecked.replace('{t}', timeline.latestTime);
+  const rows = (timeline.rows || []).slice(-3); // 最多保留 3 行足迹，确保 110dp 纵向不裁切
+
   return (
     <FlexWidget
-      clickAction="OPEN_URI"
-      clickActionData={{ uri: TRAVEL_DEEP_LINK }}
       style={{
         height: 'match_parent',
         width: 'match_parent',
         backgroundColor: pal.bg,
         borderRadius: RADIUS_WIDGET,
         flexDirection: 'row',
-        padding: 16,
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
       }}
     >
-      {/* 左列：打卡 CTA + 说明 */}
+      {/* 左列：独立打卡动作区（checkIn，与右列完全隔离） */}
       <FlexWidget
-        style={{ width: 104, flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
+        clickAction="checkIn"
+        style={{ width: 88, flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
       >
-        <FlexWidget clickAction="checkIn" style={{ width: 84, height: 84 }}>
-          <CtaCircle strings={strings} pal={pal} />
-        </FlexWidget>
-        <FlexWidget style={{ width: 104, flexDirection: 'column', alignItems: 'center', marginTop: 6 }}>
+        <CtaCircle strings={strings} pal={pal} size={58} />
+        <FlexWidget style={{ width: 88, flexDirection: 'column', alignItems: 'center', marginTop: 4 }}>
           <TextWidget
             text={capMain}
             maxLines={1}
             truncate="END"
-            style={{ fontSize: 12, fontWeight: '700', color: pal.textPrimary, width: 104, textAlign: 'center' }}
+            style={{ fontSize: 12, fontWeight: '700', color: pal.textPrimary, width: 88, textAlign: 'center' }}
           />
           <TextWidget
             text={capSub}
             maxLines={1}
             truncate="END"
-            style={{ fontSize: 11, color: pal.textSecondary, marginTop: 1, width: 104, textAlign: 'center' }}
+            style={{ fontSize: 10, color: pal.textSecondary, marginTop: 1, width: 88, textAlign: 'center' }}
           />
         </FlexWidget>
       </FlexWidget>
 
-      {/* 右列：标题 + 时间轴 */}
-      <FlexWidget style={{ flex: 1, flexDirection: 'column', marginLeft: 14 }}>
+      {/* 右列：独立打开 App 详情区（OPEN_URI，不与打卡重叠） */}
+      <FlexWidget
+        clickAction="OPEN_URI"
+        clickActionData={{ uri: TRAVEL_DEEP_LINK }}
+        style={{ flex: 1, flexDirection: 'column', marginLeft: 12, justifyContent: 'center' }}
+      >
         <FlexWidget
           style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: 'match_parent' }}
         >
-          <TextWidget text={strings.todayTrip} style={{ fontSize: 14, fontWeight: '700', color: pal.textPrimary }} />
+          <TextWidget text={strings.todayTrip} style={{ fontSize: 13, fontWeight: '700', color: pal.textPrimary }} />
           <TextWidget
             text={timeline.empty ? timeline.weekday : `${timeline.countText} · ${timeline.weekday}`}
-            style={{ fontSize: 12, color: pal.textSecondary }}
+            style={{ fontSize: 11, color: pal.textSecondary }}
           />
         </FlexWidget>
         {timeline.empty ? (
           <FlexWidget
-            style={{ flex: 1, width: 'match_parent', alignItems: 'center', justifyContent: 'center' }}
+            style={{ height: 66, width: 'match_parent', alignItems: 'center', justifyContent: 'center' }}
           >
             <TextWidget
               text={strings.emptyTimeline}
@@ -157,14 +161,14 @@ export function TravelWidget4x2({ timeline, strings, pal }) {
             />
           </FlexWidget>
         ) : (
-          <FlexWidget style={{ flexDirection: 'column', marginTop: 6 }}>
-            {timeline.rows.map((row, i) => (
+          <FlexWidget style={{ flexDirection: 'column', marginTop: 4 }}>
+            {rows.map((row, i) => (
               <TimelineRow
                 key={`${row.time}-${i}`}
                 row={row}
                 strings={strings}
                 pal={pal}
-                last={i === timeline.rows.length - 1}
+                last={i === rows.length - 1}
               />
             ))}
           </FlexWidget>
@@ -174,7 +178,7 @@ export function TravelWidget4x2({ timeline, strings, pal }) {
   );
 }
 
-// 2×2 一键打卡：整卡可点（盲操友好），下方显示最近一站 / 空态引导
+// 2×2 一键打卡：整卡可点（盲操友好），紧凑布局 <= 110dp
 export function TravelWidget2x2({ timeline, strings, pal }) {
   const main = timeline.empty ? strings.emptyTimeline : timeline.latestName;
   const sub = timeline.empty
@@ -191,13 +195,12 @@ export function TravelWidget2x2({ timeline, strings, pal }) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingTop: 16,
+        paddingVertical: 12,
         paddingHorizontal: 8,
-        paddingBottom: 14,
       }}
     >
-      <CtaCircle strings={strings} pal={pal} />
-      <FlexWidget style={{ flexDirection: 'column', alignItems: 'center', marginTop: 10, width: 'match_parent' }}>
+      <CtaCircle strings={strings} pal={pal} size={54} />
+      <FlexWidget style={{ flexDirection: 'column', alignItems: 'center', marginTop: 6, width: 'match_parent' }}>
         <TextWidget
           text={main}
           maxLines={1}

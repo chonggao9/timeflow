@@ -24,33 +24,26 @@ import {
   LegacyUpgradeCard,
 } from '../../widget/widgets/TravelWidgets';
 
-// 组件名 → JSX。bundle 可传入已构建的数据（taskHandler 复用，避免二次读库）。
+// 组件名 → JSX。保留 4 款核心组件，其余 9 款旧组件全部路由到 LegacyUpgradeCard 过渡卡。
 export function widgetJsx(name, bundle) {
   switch (name) {
     case 'PomodoroWidget4x2':
       return <PomodoroWidget4x2 {...bundle} />;
-    case 'PomodoroWidget4x1':
-      return <PomodoroWidget4x1 {...bundle} />;
     case 'PomodoroWidget2x2':
       return <PomodoroWidget2x2 {...bundle} />;
-    case 'PomodoroWidgetTomato2x2':
-      return <PomodoroWidgetTomato2x2 {...bundle} />;
-    case 'PomodoroWidgetDark2x2':
-      return <PomodoroWidgetDark2x2 {...bundle} />;
-    case 'PomodoroWidgetStats2x2':
-      return <PomodoroWidgetStats2x2 {...bundle} />;
     case 'TravelWidget4x2':
       return <TravelWidget4x2 {...bundle} />;
-    case 'TravelWidget4x1':
-      return <TravelWidget4x1 {...bundle} />;
     case 'TravelWidget2x2':
       return <TravelWidget2x2 {...bundle} />;
+    // 被合并的 9 款旧组件：统一渲染过渡提示卡，点击深链跳说明页
+    case 'PomodoroWidget4x1':
+    case 'PomodoroWidgetTomato2x2':
+    case 'PomodoroWidgetDark2x2':
+    case 'PomodoroWidgetStats2x2':
+    case 'TravelWidget4x1':
     case 'TravelWidgetWeek4x1':
-      return <TravelWidgetWeek4x1 {...bundle} />;
     case 'TravelWidgetMap2x2':
-      return <TravelWidgetMap2x2 {...bundle} />;
     case 'TravelWidgetHeat2x2':
-      return <TravelWidgetHeat2x2 {...bundle} />;
     case 'TimeFlowWidget':
       return <LegacyUpgradeCard {...bundle} />;
     default:
@@ -59,9 +52,8 @@ export function widgetJsx(name, bundle) {
 }
 
 async function buildBundleFor(name) {
-  const group = widgetGroup(name);
-  if (group === 'pomodoro') return buildFocusData();
-  if (group === 'travel') return buildTravelData();
+  if (name === 'PomodoroWidget4x2' || name === 'PomodoroWidget2x2') return buildFocusData();
+  if (name === 'TravelWidget4x2' || name === 'TravelWidget2x2') return buildTravelData();
   return buildLegacyData();
 }
 

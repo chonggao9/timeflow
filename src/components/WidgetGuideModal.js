@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -23,19 +24,11 @@ import { makeStrings } from '../../widget/widgetStrings';
 import {
   PomodoroWidget4x2,
   PomodoroWidget2x2,
-  PomodoroWidget4x1,
-  PomodoroWidgetTomato2x2,
-  PomodoroWidgetDark2x2,
-  PomodoroWidgetStats2x2,
 } from '../../widget/widgets/PomodoroWidgets';
 
 import {
   TravelWidget4x2,
   TravelWidget2x2,
-  TravelWidget4x1,
-  TravelWidgetWeek4x1,
-  TravelWidgetMap2x2,
-  TravelWidgetHeat2x2,
 } from '../../widget/widgets/TravelWidgets';
 
 // 双语示例数据生成器
@@ -88,7 +81,7 @@ const sampleHeatGrid = [
   1, 2, 2, 0, 2, 2, 2,
 ];
 
-// 动态小组件配置表（多语言支持）
+// 动态小组件配置表（多语言支持 - 精简为 4 款核心推荐组件）
 function getWidgetGroups(t, s) {
   return {
     pomo: [
@@ -107,20 +100,6 @@ function getWidgetGroups(t, s) {
         ),
       },
       {
-        k: 'p41',
-        size: '4×1',
-        name: t('widget.item.p41.name'),
-        sh: 'b',
-        w: 358,
-        h: 80,
-        s: 0.9,
-        d: t('widget.item.p41.desc'),
-        pts: [t('widget.item.p41.p1'), t('widget.item.p41.p2')],
-        render: ({ pal, strings }) => (
-          <PomodoroWidget4x1 d={s.pomo} strings={strings} pal={pal} />
-        ),
-      },
-      {
         k: 'p22ring',
         size: '2×2',
         name: t('widget.item.p22ring.name'),
@@ -132,53 +111,6 @@ function getWidgetGroups(t, s) {
         pts: [t('widget.item.p22ring.p1'), t('widget.item.p22ring.p2')],
         render: ({ pal, strings }) => (
           <PomodoroWidget2x2 d={s.pomo} strings={strings} pal={pal} />
-        ),
-      },
-      {
-        k: 'p22tomato',
-        size: '2×2',
-        name: t('widget.item.p22tomato.name'),
-        sh: 'c',
-        w: 170,
-        h: 168,
-        s: 1.08,
-        d: t('widget.item.p22tomato.desc'),
-        pts: [t('widget.item.p22tomato.p1'), t('widget.item.p22tomato.p2')],
-        render: ({ pal, strings }) => (
-          <PomodoroWidgetTomato2x2 d={s.pomo} strings={strings} pal={pal} />
-        ),
-      },
-      {
-        k: 'p22dark',
-        size: '2×2',
-        name: t('widget.item.p22dark.name'),
-        sh: 'c',
-        w: 170,
-        h: 168,
-        s: 1.08,
-        d: t('widget.item.p22dark.desc'),
-        pts: [t('widget.item.p22dark.p1'), t('widget.item.p22dark.p2')],
-        render: ({ darkPal, strings }) => (
-          <PomodoroWidgetDark2x2 d={s.pomo} strings={strings} darkPal={darkPal} />
-        ),
-      },
-      {
-        k: 'p22stat',
-        size: '2×2',
-        name: t('widget.item.p22stat.name'),
-        sh: 'c',
-        w: 170,
-        h: 168,
-        s: 1.08,
-        d: t('widget.item.p22stat.desc'),
-        pts: [t('widget.item.p22stat.p1'), t('widget.item.p22stat.p2')],
-        render: ({ pal, strings }) => (
-          <PomodoroWidgetStats2x2
-            strings={strings}
-            pal={pal}
-            todayMin={75}
-            weekBars={s.weekBars}
-          />
         ),
       },
     ],
@@ -198,39 +130,6 @@ function getWidgetGroups(t, s) {
         ),
       },
       {
-        k: 't41',
-        size: '4×1',
-        name: t('widget.item.t41.name'),
-        sh: 'b',
-        w: 358,
-        h: 80,
-        s: 0.9,
-        d: t('widget.item.t41.desc'),
-        pts: [t('widget.item.t41.p1'), t('widget.item.t41.p2')],
-        render: ({ pal, strings }) => (
-          <TravelWidget4x1 timeline={s.timeline} strings={strings} pal={pal} />
-        ),
-      },
-      {
-        k: 't41week',
-        size: '4×1',
-        name: t('widget.item.t41week.name'),
-        sh: 'b',
-        w: 358,
-        h: 80,
-        s: 0.9,
-        d: t('widget.item.t41week.desc'),
-        pts: [t('widget.item.t41week.p1'), t('widget.item.t41week.p2')],
-        render: ({ darkPal, strings }) => (
-          <TravelWidgetWeek4x1
-            streakDays={12}
-            weekDays={s.weekDays}
-            strings={strings}
-            darkPal={darkPal}
-          />
-        ),
-      },
-      {
         k: 't22cta',
         size: '2×2',
         name: t('widget.item.t22cta.name'),
@@ -242,44 +141,6 @@ function getWidgetGroups(t, s) {
         pts: [t('widget.item.t22cta.p1'), t('widget.item.t22cta.p2')],
         render: ({ pal, strings }) => (
           <TravelWidget2x2 timeline={s.timeline} strings={strings} pal={pal} />
-        ),
-      },
-      {
-        k: 't22map',
-        size: '2×2',
-        name: t('widget.item.t22map.name'),
-        sh: 'c',
-        w: 170,
-        h: 168,
-        s: 1.08,
-        d: t('widget.item.t22map.desc'),
-        pts: [t('widget.item.t22map.p1'), t('widget.item.t22map.p2')],
-        render: ({ pal, strings, isDark }) => (
-          <TravelWidgetMap2x2
-            timeline={{ ...s.timeline, count: 1 }}
-            strings={strings}
-            pal={pal}
-            isDark={isDark}
-          />
-        ),
-      },
-      {
-        k: 't22heat',
-        size: '2×2',
-        name: t('widget.item.t22heat.name'),
-        sh: 'c',
-        w: 170,
-        h: 168,
-        s: 1.08,
-        d: t('widget.item.t22heat.desc'),
-        pts: [t('widget.item.t22heat.p1'), t('widget.item.t22heat.p2')],
-        render: ({ darkPal, strings }) => (
-          <TravelWidgetHeat2x2
-            streakDays={12}
-            heatGrid={sampleHeatGrid}
-            strings={strings}
-            darkPal={darkPal}
-          />
         ),
       },
     ],
@@ -295,6 +156,33 @@ export default function WidgetGuideModal({ visible, onClose }) {
   const [group, setGroup] = useState('pomo'); // 'pomo' | 'trip'
   const [idx, setIdx] = useState(0);
   const [tipOpen, setTipOpen] = useState(false);
+  const [lastError, setLastError] = useState(null);
+
+  const loadLastError = useCallback(async () => {
+    try {
+      const raw = await AsyncStorage.getItem('widget_last_error');
+      if (raw) {
+        setLastError(JSON.parse(raw));
+      } else {
+        setLastError(null);
+      }
+    } catch (e) {
+      setLastError(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (visible) {
+      loadLastError();
+    }
+  }, [visible, loadLastError]);
+
+  const handleClearError = async () => {
+    try {
+      await AsyncStorage.removeItem('widget_last_error');
+      setLastError(null);
+    } catch (e) {}
+  };
 
   // 顶部分段滑块动画
   const segAnim = useRef(new Animated.Value(0)).current;
@@ -674,6 +562,49 @@ export default function WidgetGuideModal({ visible, onClose }) {
               </Text>
             )}
           </TouchableOpacity>
+
+          {/* 8. 小组件运行诊断 / 最近一次错误 */}
+          <View style={styles.diagCard}>
+            <View style={styles.diagHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View
+                  style={[
+                    styles.diagDot,
+                    { backgroundColor: lastError ? '#D93A2B' : '#4E8F4A' },
+                  ]}
+                />
+                <Text style={styles.diagTitle}>
+                  {lastError ? t('widget.diagLastError') : t('widget.diagTitle')}
+                </Text>
+              </View>
+              {lastError ? (
+                <TouchableOpacity onPress={handleClearError} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.diagClearText}>{t('widget.diagClear')}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {lastError ? (
+              <View style={styles.diagBody}>
+                <Text style={styles.diagText}>
+                  {t('widget.diagTarget').replace('{w}', lastError.widgetName || 'unknown')}
+                </Text>
+                <Text style={styles.diagText}>
+                  {t('widget.diagCode').replace('{c}', lastError.code || 'ERR_RENDER')}
+                </Text>
+                <Text style={styles.diagText}>
+                  {t('widget.diagTime').replace('{t}', new Date(lastError.ts).toLocaleString())}
+                </Text>
+                {lastError.message ? (
+                  <Text style={[styles.diagText, { marginTop: 4, opacity: 0.8 }]}>
+                    {lastError.message}
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={styles.diagNormalText}>{t('widget.diagStatusNormal')}</Text>
+            )}
+          </View>
         </ScrollView>
       </SafeAreaView>
     </Modal>
@@ -1034,6 +965,54 @@ function makeStyles(isDark, accentColor) {
       lineHeight: 20,
       color: isDark ? '#E5C492' : '#6B4306',
       marginTop: 10,
+    },
+
+    // 运行诊断
+    diagCard: {
+      backgroundColor: cardBg,
+      borderRadius: 16,
+      padding: 16,
+      marginTop: 14,
+      marginBottom: 28,
+      borderWidth: 1,
+      borderColor: borderLine,
+    },
+    diagHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    diagDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      marginRight: 8,
+    },
+    diagTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: ink,
+    },
+    diagClearText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: accentColor,
+    },
+    diagBody: {
+      marginTop: 10,
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: borderLine,
+    },
+    diagText: {
+      fontSize: 12,
+      color: sub,
+      lineHeight: 18,
+    },
+    diagNormalText: {
+      fontSize: 12,
+      color: sub,
+      marginTop: 8,
     },
   });
 }

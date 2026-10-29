@@ -5,7 +5,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, Linking, Platform, View, Text, Modal, TouchableOpacity, StyleSheet, BackHandler, ScrollView } from 'react-native';
+import { Alert, Linking, Platform, View, Text, Modal, TouchableOpacity, StyleSheet, BackHandler, ScrollView, AppState } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as NavigationBar from 'expo-navigation-bar';
@@ -18,6 +18,10 @@ import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { checkForUpdate, openUpdateUrl } from './src/utils/updater';
 import { initBackupSchedule } from './src/backup/schedule';
 import { runV2CleanupOnce } from './src/backup/cleanup';
+import { refreshAllWidgets } from './src/utils/widgetRefresh';
+import { settleAndPersist } from './src/pomodoro/settle';
+import { initMidnightSchedule } from './src/pomodoro/scheduler';
+import { syncWidgetSnapshot } from './src/storage/store';
 
 const Tab = createBottomTabNavigator();
 
@@ -241,6 +245,31 @@ function AppInner() {
     await AsyncStorage.setItem(PRIVACY_KEY, '1');
     setPrivacyAgreed(true);
   };
+
+  // 桌面小组件生命周期联动：回前台主动刷新、跨天清零番茄完成数与午夜定时刷新
+  useEffect(() => {
+    initMidnightSchedule();
+    let lastDateStr = new Date().toDateString();
+
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      if (nextState === 'active') {
+        const now = Date.now();
+        const currentDateStr = new Date(now).toDateString();
+        if (currentDateStr !== lastDateStr) {
+          lastDateStr = currentDateStr;
+          try {
+            await settleAndPersist(now);
+          } catch (e) {}
+        }
+        try {
+          await syncWidgetSnapshot(now);
+          await refreshAllWidgets();
+        } catch (e) {}
+      }
+    });
+
+    return () => sub.remove();
+  }, []);
 
   // 启动时检查新版本与触发自动备份（仅在用户同意隐私政策后执行一次，防止语言切换重弹）
   useEffect(() => {

@@ -191,29 +191,31 @@ test('progressBarSvg：0 进度无填充、半程宽度对应、越界钳制', (
   assert.ok(over.includes('width="140"')); // 钳制到 100%
 });
 
-test('widgetNames Phase 2：4x1 尺寸已注册且分组归属正确', () => {
-  assert.ok(POMODORO_WIDGETS.includes('PomodoroWidget4x1'));
-  assert.ok(TRAVEL_WIDGETS.includes('TravelWidget4x1'));
-  assert.strictEqual(widgetGroup('PomodoroWidget4x1'), 'pomodoro');
-  assert.strictEqual(widgetGroup('TravelWidget4x1'), 'travel');
-});
+test('widgetNames 精简方案：核心保留 4 款与过渡 9 款分组归属正确', () => {
+  assert.strictEqual(widgetGroup('PomodoroWidget4x2'), 'pomodoro');
+  assert.strictEqual(widgetGroup('PomodoroWidget2x2'), 'pomodoro');
+  assert.strictEqual(widgetGroup('TravelWidget4x2'), 'travel');
+  assert.strictEqual(widgetGroup('TravelWidget2x2'), 'travel');
+  assert.strictEqual(POMODORO_WIDGETS.length, 2);
+  assert.strictEqual(TRAVEL_WIDGETS.length, 2);
 
-// 6. Phase 3 扩展测试：全部 6 个扩展组件注册与 4 种新矢量图生成器
-test('widgetNames Phase 3：全部扩展组件已注册且分组路由无漏项', () => {
-  const pomoP3 = ['PomodoroWidgetTomato2x2', 'PomodoroWidgetDark2x2', 'PomodoroWidgetStats2x2'];
-  const travelP3 = ['TravelWidgetWeek4x1', 'TravelWidgetMap2x2', 'TravelWidgetHeat2x2'];
-
-  for (const name of pomoP3) {
-    assert.ok(POMODORO_WIDGETS.includes(name), `${name} 应在 POMODORO_WIDGETS 中`);
-    assert.strictEqual(widgetGroup(name), 'pomodoro');
+  const legacy9 = [
+    'TimeFlowWidget',
+    'PomodoroWidgetTomato2x2',
+    'PomodoroWidgetDark2x2',
+    'PomodoroWidget4x1',
+    'PomodoroWidgetStats2x2',
+    'TravelWidget4x1',
+    'TravelWidgetWeek4x1',
+    'TravelWidgetMap2x2',
+    'TravelWidgetHeat2x2',
+  ];
+  for (const name of legacy9) {
+    assert.ok(LEGACY_WIDGETS.includes(name), `${name} 应在 LEGACY_WIDGETS 过渡列表中`);
+    assert.strictEqual(widgetGroup(name), 'legacy');
   }
-  for (const name of travelP3) {
-    assert.ok(TRAVEL_WIDGETS.includes(name), `${name} 应在 TRAVEL_WIDGETS 中`);
-    assert.strictEqual(widgetGroup(name), 'travel');
-  }
-  assert.strictEqual(POMODORO_WIDGETS.length, 6);
-  assert.strictEqual(TRAVEL_WIDGETS.length, 6);
-  assert.strictEqual(ALL_WIDGETS.length, 13); // 6 + 6 + 1(Legacy)
+  assert.strictEqual(LEGACY_WIDGETS.length, 9);
+  assert.strictEqual(ALL_WIDGETS.length, 13);
 });
 
 test('focusWeekBarsSvg：生成 7 根柱子与对应周标签', () => {

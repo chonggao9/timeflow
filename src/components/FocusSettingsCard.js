@@ -8,6 +8,7 @@ import {
   Animated,
   Keyboard,
   useWindowDimensions,
+  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
@@ -22,10 +23,13 @@ export const FOCUS_AMBIENT_OPTIONS = [
   { key: 'ocean', icon: 'water-outline', label: 'pomodoro.ambient_ocean', defaultLabel: '海浪' },
   { key: 'forest', icon: 'leaf-outline', label: 'pomodoro.ambient_forest', defaultLabel: '森林' },
   { key: 'fire', icon: 'bonfire-outline', label: 'pomodoro.ambient_fire', defaultLabel: '篝火' },
-  { key: 'whitenoise', icon: 'disc-outline', label: 'pomodoro.ambient_whitenoise', defaultLabel: '白噪音' },
+  { key: 'train', icon: 'train-outline', label: 'pomodoro.ambient_train', defaultLabel: '列车' },
+  { key: 'stream', icon: 'water-outline', label: 'pomodoro.ambient_stream', defaultLabel: '溪流' },
 ];
 
 export const STORAGE_KEY_LAST_AMBIENT = 'timeflow_last_focus_ambient';
+export const STORAGE_KEY_HOLD_START = 'timeflow_focus_hold_start';
+export const STORAGE_KEY_FOCUS_FEEDBACK = 'timeflow_focus_feedback_type';
 
 export const ITEM_WIDTH = 72;
 export const ITEM_GAP = 8;
@@ -98,8 +102,41 @@ export default function FocusSettingsCard({
   const { width: winWidth } = useWindowDimensions();
   const [isNoteFocused, setIsNoteFocused] = useState(false);
 
-  // 初始估算卡片内视口宽度为屏幕宽度 - 外部内边距(32) - 卡片内边距(20)
   const [containerWidth, setContainerWidth] = useState(Math.max(260, winWidth - 52));
+  const [holdToStart, setHoldToStart] = useState(false);
+  const [feedbackType, setFeedbackType] = useState('sound'); // 'sound' | 'vibrate' | 'silent'
+
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY_HOLD_START).then((v) => {
+      setHoldToStart(v === '1');
+    }).catch(() => {});
+
+    AsyncStorage.getItem(STORAGE_KEY_FOCUS_FEEDBACK).then((v) => {
+      if (v === 'sound' || v === 'vibrate' || v === 'silent') {
+        setFeedbackType(v);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const handleToggleHoldToStart = useCallback(async (value) => {
+    setHoldToStart(value);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY_HOLD_START, value ? '1' : '0');
+    } catch (e) {}
+  }, []);
+
+  const handleSelectFeedbackType = useCallback(async (type) => {
+    setFeedbackType(type);
+    if (type === 'vibrate' || type === 'sound') {
+      try {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      } catch (e) {}
+    }
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY_FOCUS_FEEDBACK, type);
+    } catch (e) {}
+  }, []);
 
   const scrollRef = useRef(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -468,6 +505,111 @@ export default function FocusSettingsCard({
             </Svg>
           </View>
         </View>
+
+        {/* 第三行：防误触按住 1 秒开始设置 */}
+        <View
+          style={[
+            styles.holdSettingRow,
+            { borderTopColor: isDark ? '#3D312A' : '#F0E8DE' },
+          ]}
+        >
+          <View style={{ flex: 1, marginRight: 12 }}>
+            <Text
+              style={[
+                styles.holdSettingTitle,
+                { color: colors?.ink || (isDark ? '#F5EDE4' : '#2B211C') },
+              ]}
+            >
+              {t('pomodoro.settingHoldToStart', '按住 1 秒开始')}
+            </Text>
+            <Text
+              style={[
+                styles.holdSettingDesc,
+                { color: isDark ? '#8C7D73' : '#A6988D' },
+              ]}
+            >
+              {t('pomodoro.settingHoldToStartDesc', '防误触，开启后需按住 1 秒才启动专注')}
+            </Text>
+          </View>
+          <Switch
+            value={holdToStart}
+            onValueChange={handleToggleHoldToStart}
+            trackColor={{ false: isDark ? '#3D312A' : '#E0D6CB', true: '#D93A2B' }}
+            thumbColor={holdToStart ? '#FFFFFF' : (isDark ? '#8C7D73' : '#FAF6F0')}
+            accessibilityLabel={t('pomodoro.settingHoldToStart', '按住 1 秒开始')}
+          />
+        </View>
+
+        {/* 第四行：到期提醒反馈设置 */}
+        <View
+          style={[
+            styles.holdSettingRow,
+            { borderTopColor: isDark ? '#3D312A' : '#F0E8DE' },
+          ]}
+        >
+          <View style={{ flex: 1, marginRight: 8 }}>
+            <Text
+              style={[
+                styles.holdSettingTitle,
+                { color: colors?.ink || (isDark ? '#F5EDE4' : '#2B211C') },
+              ]}
+            >
+              {t('pomodoro.settingFeedbackTitle', '到期提醒反馈')}
+            </Text>
+            <Text
+              style={[
+                styles.holdSettingDesc,
+                { color: isDark ? '#8C7D73' : '#A6988D' },
+              ]}
+            >
+              {t('pomodoro.settingFeedbackDesc', '专注或休息结束时的提醒形式')}
+            </Text>
+          </View>
+
+          <View style={[styles.feedbackSegWrap, { backgroundColor: isDark ? '#1F1915' : '#EFE8DE' }]}>
+            {[
+              { key: 'sound', label: t('pomodoro.feedbackSound', '铃声'), icon: 'volume-high-outline' },
+              { key: 'vibrate', label: t('pomodoro.feedbackVibrate', '仅轻震'), icon: 'phone-portrait-outline' },
+              { key: 'silent', label: t('pomodoro.feedbackSilent', '静音'), icon: 'notifications-off-outline' },
+            ].map((opt) => {
+              const isSelected = feedbackType === opt.key;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[
+                    styles.feedbackSegBtn,
+                    isSelected && {
+                      backgroundColor: '#C63D31',
+                    },
+                  ]}
+                  onPress={() => handleSelectFeedbackType(opt.key)}
+                  activeOpacity={0.7}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isSelected }}
+                  accessibilityLabel={opt.label}
+                >
+                  <Ionicons
+                    name={opt.icon}
+                    size={11}
+                    color={isSelected ? '#FFFFFF' : (isDark ? '#8C7D73' : '#6B5B4F')}
+                    style={{ marginRight: 2 }}
+                  />
+                  <Text
+                    style={[
+                      styles.feedbackSegText,
+                      {
+                        color: isSelected ? '#FFFFFF' : (isDark ? '#8C7D73' : '#6B5B4F'),
+                        fontWeight: isSelected ? '700' : '500',
+                      },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -534,6 +676,39 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 24,
     justifyContent: 'center',
+  },
+  holdSettingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    marginTop: 2,
+  },
+  holdSettingTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  holdSettingDesc: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  feedbackSegWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 8,
+    padding: 2,
+  },
+  feedbackSegBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  feedbackSegText: {
+    fontSize: 11,
   },
 });
 

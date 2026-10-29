@@ -3,7 +3,7 @@
     "name": "TimeFlow",
     "slug": "timeflow",
     "scheme": "timeflow",
-    "version": "1.2.8",
+    "version": "1.2.9",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -35,7 +35,7 @@
           "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_KEY"
         }
       },
-      "versionCode": 30
+      "versionCode": 31
     },
     "plugins": [
       "./plugins/withRemoveMediaPermissions",
@@ -80,6 +80,7 @@
               "minHeight": "110dp",
               "targetCellWidth": 4,
               "targetCellHeight": 2,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             },
             {
@@ -90,6 +91,7 @@
               "minHeight": "40dp",
               "targetCellWidth": 4,
               "targetCellHeight": 1,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             },
             {
@@ -100,6 +102,7 @@
               "minHeight": "110dp",
               "targetCellWidth": 2,
               "targetCellHeight": 2,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             },
             {
@@ -110,6 +113,7 @@
               "minHeight": "110dp",
               "targetCellWidth": 2,
               "targetCellHeight": 2,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             },
             {
@@ -120,6 +124,7 @@
               "minHeight": "110dp",
               "targetCellWidth": 2,
               "targetCellHeight": 2,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             },
             {
@@ -130,6 +135,7 @@
               "minHeight": "110dp",
               "targetCellWidth": 2,
               "targetCellHeight": 2,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             },
             {
@@ -140,6 +146,7 @@
               "minHeight": "110dp",
               "targetCellWidth": 4,
               "targetCellHeight": 2,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             },
             {
@@ -150,6 +157,7 @@
               "minHeight": "40dp",
               "targetCellWidth": 4,
               "targetCellHeight": 1,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             },
             {
@@ -160,6 +168,7 @@
               "minHeight": "40dp",
               "targetCellWidth": 4,
               "targetCellHeight": 1,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             },
             {
@@ -170,6 +179,7 @@
               "minHeight": "110dp",
               "targetCellWidth": 2,
               "targetCellHeight": 2,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             },
             {
@@ -180,6 +190,7 @@
               "minHeight": "110dp",
               "targetCellWidth": 2,
               "targetCellHeight": 2,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             },
             {
@@ -190,6 +201,7 @@
               "minHeight": "110dp",
               "targetCellWidth": 2,
               "targetCellHeight": 2,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             },
             {
@@ -197,9 +209,10 @@
               "label": "TimeFlow 打卡（旧版）",
               "description": "已升级：请改用新版番茄专注/行程打卡组件",
               "minWidth": "250dp",
-              "minHeight": "120dp",
+              "minHeight": "110dp",
               "targetCellWidth": 4,
               "targetCellHeight": 2,
+              "resizeMode": "none",
               "updatePeriodMillis": 1800000
             }
           ]

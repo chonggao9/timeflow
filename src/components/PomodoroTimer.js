@@ -17,6 +17,7 @@ import {
   useWindowDimensions,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
 } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Reanimated, {
@@ -44,7 +45,12 @@ import {
   normalizeCategory,
 } from '../utils/focusCategories';
 import FocusHistoryModal from './FocusHistoryModal';
-import { STORAGE_KEY_LAST_AMBIENT } from './FocusSettingsCard';
+import AbandonActionModal from './AbandonActionModal';
+import {
+  STORAGE_KEY_LAST_AMBIENT,
+  STORAGE_KEY_HOLD_START,
+  STORAGE_KEY_FOCUS_FEEDBACK,
+} from './FocusSettingsCard';
 // 番茄引擎：App 与桌面小组件共用同一份状态（AsyncStorage timeflow_pomodoro_state）。
 // UI/动画不动，只把计时真值从组件内 refs 换成 engine 派生（deriveDisplay）。
 import {
@@ -59,24 +65,32 @@ import {
   LONG_MS,
   deriveDisplay,
   ackHarvest,
+  addExtraMinutes,
+  durationMs,
 } from '../pomodoro/engine';
 import { loadState, saveState } from '../pomodoro/stateStore';
 import { settleAndPersist } from '../pomodoro/settle';
-import { ensureNotificationSetup, syncNotifications } from '../pomodoro/notifications';
+import {
+  ensureNotificationSetup,
+  syncNotifications,
+  schedulePauseReminder,
+  cancelPauseReminder,
+} from '../pomodoro/notifications';
+import { schedulePomodoroEndRefresh } from '../pomodoro/scheduler';
 import { refreshPomodoroWidgets } from '../utils/widgetRefresh';
 
 // 时长与手势参数
 const DEFAULT_DURATION_MIN = 25;
-const MIN_MIN = 5;
-const MAX_MIN = 120; // 支持 5~120 分钟
+const MIN_MIN = 2;
+const MAX_MIN = 120; // 支持 2~120 分钟
 const STEP_MIN = 5;
 const STEP_PX = 10;
 const HOLD_MS = 1000; // 约 1 秒按住
-const ABANDON_CONFIRM_MS = 3000;
+const STORAGE_KEY_PERM_WARN_DATE = 'timeflow_perm_warn_date';
 const REST_DURATION_MIN = 5;
 const REST_DURATION_SEC = REST_DURATION_MIN * 60;
 const STORAGE_KEY_RECENT_GOALS = '@timeflow_recent_pomodoro_goals';
-const MAX_RECENT_GOALS = 5;
+const MAX_RECENT_GOALS = 3;
 // 休息时长统一由引擎常量派生，避免文案与逻辑漂移
 const SHORT_REST_MIN = SHORT_MS / 60000;
 const LONG_REST_MIN = LONG_MS / 60000;
@@ -88,8 +102,8 @@ const formatOrdinal = (num, currentLang) => {
   return num + (s[(v - 20) % 10] || s[v] || s[0]);
 };
 
-// 时长快捷档位：5 / 15 / 25 / 45 / 60，升序排列，统一不带单位
-const DURATION_PRESETS = [5, 15, 25, 45, 60];
+// 时长快捷档位：2 / 5 / 15 / 25 / 45 / 60，升序排列，统一不带单位
+const DURATION_PRESETS = [2, 5, 15, 25, 45, 60];
 
 // 收获态 8 个彩点散开参数（提取自 Interactive.dc.html）
 const BURST_PARTICLES = [
@@ -110,12 +124,9 @@ const AMBIENT_OPTIONS = [
   { key: 'ocean', icon: 'water-outline', label: 'pomodoro.ambient_ocean' },
   { key: 'forest', icon: 'leaf-outline', label: 'pomodoro.ambient_forest' },
   { key: 'fire', icon: 'bonfire-outline', label: 'pomodoro.ambient_fire' },
-  { key: 'whitenoise', icon: 'disc-outline', label: 'pomodoro.ambient_whitenoise' },
   { key: 'train', icon: 'train-outline', label: 'pomodoro.ambient_train' },
   { key: 'stream', icon: 'water-outline', label: 'pomodoro.ambient_stream' },
 ];
-
-
 
 const AMBIENT_SOUND_FILES = {
   rain: require('../../assets/sounds/rain.mp3'),
@@ -125,7 +136,6 @@ const AMBIENT_SOUND_FILES = {
   cafe: require('../../assets/sounds/cafe.mp3'),
   train: require('../../assets/sounds/train.mp3'),
   stream: require('../../assets/sounds/stream.mp3'),
-  whitenoise: require('../../assets/sounds/stream.mp3'),
 };
 
 const STORAGE_KEY_LAST_CATEGORY = 'timeflow_last_focus_category';
@@ -294,10 +304,19 @@ export default function PomodoroTimer({
   const [toast, setToast] = useState({ visible: false, message: '' });
   const toastTimerRef = useRef(null);
 
-  // 放弃二次确认状态
-  const [abandonArmed, setAbandonArmed] = useState(false);
-  const abandonArmedRef = useRef(false);
-  const abandonTimerRef = useRef(null);
+  // P1-1: 放弃弹层与部分收获状态
+  const [showAbandonModal, setShowAbandonModal] = useState(false);
+  const [isPartialHarvest, setIsPartialHarvest] = useState(false);
+  const isPartialHarvestRef = useRef(false);
+
+  // P1-2: 按住开始开关与 5 秒撤销条
+  const [holdToStartEnabled, setHoldToStartEnabled] = useState(false);
+  const [undoCountdown, setUndoCountdown] = useState(0);
+  const undoTimerRef = useRef(null);
+
+  // P1-3: 权限铺垫弹窗与被拒轻提示
+  const [showPermDialog, setShowPermDialog] = useState(false);
+  const [permDeniedBanner, setPermDeniedBanner] = useState(false);
 
   // 按住开始按钮文案提示
   const [holdEarlyRelease, setHoldEarlyRelease] = useState(false);
@@ -305,6 +324,9 @@ export default function PomodoroTimer({
 
   // 休息倒计时
   const [restTimeLeftSec, setRestTimeLeftSec] = useState(REST_DURATION_SEC);
+  const pauseNotifIdRef = useRef(null);
+  const [feedbackType, setFeedbackType] = useState('sound');
+  const feedbackTypeRef = useRef('sound');
 
   // 模态弹窗
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -560,29 +582,33 @@ export default function PomodoroTimer({
     check();
   }, []);
 
-  useEffect(() => {
-    if (Platform.OS !== 'android') return undefined;
-    const onBackPress = () => {
-      if (phase === 'done' || phase === 'rest' || phase === 'resting') {
-        return true;
-      }
-      return false;
-    };
-    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => sub?.remove?.();
-  }, [phase]);
+
 
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
 
+  // 加载按住开始防误触开关状态
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY_HOLD_START).then((v) => {
+      setHoldToStartEnabled(v === '1');
+    }).catch(() => {});
+
+    AsyncStorage.getItem(STORAGE_KEY_FOCUS_FEEDBACK).then((v) => {
+      if (v === 'sound' || v === 'vibrate' || v === 'silent') {
+        setFeedbackType(v);
+        feedbackTypeRef.current = v;
+      }
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-      if (abandonTimerRef.current) clearTimeout(abandonTimerRef.current);
+      if (undoTimerRef.current) clearInterval(undoTimerRef.current);
       if (holdReleaseTimerRef.current) clearTimeout(holdReleaseTimerRef.current);
       toastTimerRef.current = null;
-      abandonTimerRef.current = null;
+      undoTimerRef.current = null;
       holdReleaseTimerRef.current = null;
     };
   }, []);
@@ -814,6 +840,7 @@ export default function PomodoroTimer({
       saved = await saveState(saved);
     } catch (e) {}
     engineRef.current = saved;
+    schedulePomodoroEndRefresh(saved);
     refreshPomodoroWidgets();
     return saved;
   }, [t]);
@@ -952,15 +979,52 @@ export default function PomodoroTimer({
     }, 1500);
   }, []);
 
-  const startFocus = useCallback(async () => {
-    hapticImpact(Haptics.ImpactFeedbackStyle.Heavy);
-    if (Platform.OS === 'android' || Platform.OS === 'ios') {
-      Notifications.getPermissionsAsync().then(({ status }) => {
-        if (status !== 'granted') {
-          Notifications.requestPermissionsAsync().catch(() => {});
-        }
-      }).catch(() => {});
+  const startUndoTimer = useCallback(() => {
+    if (undoTimerRef.current) clearInterval(undoTimerRef.current);
+    setUndoCountdown(5);
+    let count = 5;
+    undoTimerRef.current = setInterval(() => {
+      count -= 1;
+      if (count <= 0) {
+        clearInterval(undoTimerRef.current);
+        undoTimerRef.current = null;
+        setUndoCountdown(0);
+      } else {
+        setUndoCountdown(count);
+      }
+    }, 1000);
+  }, []);
+
+  const handleUndoStart = useCallback(async () => {
+    if (undoTimerRef.current) {
+      clearInterval(undoTimerRef.current);
+      undoTimerRef.current = null;
     }
+    setUndoCountdown(0);
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium);
+    await stopAmbientSound();
+    await resetToIdle(true);
+  }, [resetToIdle, stopAmbientSound]);
+
+  const checkPermStatusOnRun = useCallback(async () => {
+    if (Platform.OS !== 'android' && Platform.OS !== 'ios') return;
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status === 'denied') {
+        const today = new Date().toISOString().slice(0, 10);
+        const lastWarn = await AsyncStorage.getItem(STORAGE_KEY_PERM_WARN_DATE);
+        if (lastWarn !== today) {
+          setPermDeniedBanner(true);
+          await AsyncStorage.setItem(STORAGE_KEY_PERM_WARN_DATE, today);
+        }
+      } else {
+        setPermDeniedBanner(false);
+      }
+    } catch (e) {}
+  }, []);
+
+  const executeStartFocus = useCallback(async () => {
+    hapticImpact(Haptics.ImpactFeedbackStyle.Heavy);
     const now = Date.now();
     const totalSec = durationMin * 60;
     const resolvedGoal = goalName.trim() || t('home.unnamedFocus', '未命名专注');
@@ -981,8 +1045,13 @@ export default function PomodoroTimer({
     engineRef.current = st;
 
     savedRef.current = false;
+    isPartialHarvestRef.current = false;
+    setIsPartialHarvest(false);
     setTimeLeftSec(totalSec);
     setPhaseAndRef('running');
+
+    startUndoTimer();
+    checkPermStatusOnRun();
 
     if (onStartFocus) {
       onStartFocus({
@@ -996,15 +1065,53 @@ export default function PomodoroTimer({
     if (ambient !== 'none') {
       await playAmbientSound(ambient);
     }
-  }, [durationMin, goalName, t, ambient, onStartFocus, ensureEngine, persistEngine, playAmbientSound]);
+  }, [durationMin, goalName, t, ambient, onStartFocus, ensureEngine, persistEngine, playAmbientSound, startUndoTimer, checkPermStatusOnRun]);
+
+  const handleStartPress = useCallback(async () => {
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      try {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status === 'undetermined') {
+          setShowPermDialog(true);
+          return;
+        }
+      } catch (e) {}
+    }
+    executeStartFocus();
+  }, [executeStartFocus]);
+
+  const handleAllowPermAndStart = useCallback(async () => {
+    setShowPermDialog(false);
+    try {
+      await Notifications.requestPermissionsAsync();
+    } catch (e) {}
+    executeStartFocus();
+  }, [executeStartFocus]);
+
+  const handleDismissPermAndStart = useCallback(() => {
+    setShowPermDialog(false);
+    executeStartFocus();
+  }, [executeStartFocus]);
+
+  const startFocus = handleStartPress;
+
+  const clearPauseReminder = useCallback(() => {
+    if (pauseNotifIdRef.current) {
+      cancelPauseReminder(pauseNotifIdRef.current);
+      pauseNotifIdRef.current = null;
+    }
+  }, []);
 
   // 前台计时到点：settle 推进状态机（completedToday++、模式循环、取消通知），
   // 会话进 pendingHarvests——收获页手动保存仍是 focus_sessions 唯一写入口径。
   const handleTimerDone = useCallback(async () => {
     if (phaseRef.current !== 'running') return;
+    clearPauseReminder();
     setPhaseAndRef('done'); // 先切相位防 interval 重入
     setTimeLeftSec(0);
-    hapticNotify(Haptics.NotificationFeedbackType.Success);
+    if (feedbackTypeRef.current !== 'silent') {
+      hapticNotify(Haptics.NotificationFeedbackType.Success);
+    }
     await stopAmbientSound();
     let state = engineRef.current;
     let harvested = null;
@@ -1024,7 +1131,7 @@ export default function PomodoroTimer({
       if (state) setTimeLeftSec(state.focusMin * 60);
       if (onRunningChange) onRunningChange(false);
     }
-  }, [stopAmbientSound, onRunningChange]);
+  }, [stopAmbientSound, onRunningChange, clearPauseReminder]);
 
   // 休息到点：结算落盘（回 focus 待开始），刷新组件
   const handleRestDone = useCallback(async () => {
@@ -1033,7 +1140,9 @@ export default function PomodoroTimer({
     try {
       restDoneHandlingRef.current = true;
       setPhaseAndRef('idle');
-      hapticNotify(Haptics.NotificationFeedbackType.Success);
+      if (feedbackTypeRef.current !== 'silent') {
+        hapticNotify(Haptics.NotificationFeedbackType.Success);
+      }
       const { state } = await settleAndPersist(Date.now());
       engineRef.current = state;
       setTimeLeftSec(state.focusMin * 60);
@@ -1057,10 +1166,15 @@ export default function PomodoroTimer({
     setTimeLeftSec(deriveDisplay(next, now).remainingSec);
     await pauseAmbientSound();
     await persistEngine(next, prev); // prev 携带 notifId：精确取消结束通知
-  }, [phase, pauseAmbientSound, persistEngine]);
+    // P2-1: 调度 10 分钟暂停超时提醒
+    clearPauseReminder();
+    const notifId = await schedulePauseReminder(10);
+    pauseNotifIdRef.current = notifId;
+  }, [phase, pauseAmbientSound, persistEngine, clearPauseReminder]);
 
   const resumeFocus = useCallback(async () => {
     if (phase !== 'paused') return;
+    clearPauseReminder();
     const prev = engineRef.current;
     if (!prev) return;
     const now = Date.now();
@@ -1069,67 +1183,146 @@ export default function PomodoroTimer({
     setTimeLeftSec(deriveDisplay(next, now).remainingSec);
     await resumeAmbientSound();
     await persistEngine(next, prev); // 重新排期结束通知
-  }, [phase, resumeAmbientSound, persistEngine]);
+  }, [phase, resumeAmbientSound, persistEngine, clearPauseReminder]);
 
-  // 放弃专注（二次确认机制；确认放弃后清空任务名）
-  const abandonFocus = useCallback(async () => {
-    if (abandonArmedRef.current) {
-      abandonArmedRef.current = false;
-      if (abandonTimerRef.current) {
-        clearTimeout(abandonTimerRef.current);
-        abandonTimerRef.current = null;
-      }
-      setAbandonArmed(false);
-      hapticImpact(Haptics.ImpactFeedbackStyle.Light);
-      await stopAmbientSound();
-      // 放弃 = 回当前模式满时长（pendingHarvests 不动，未保存收获保留）
-      const prev = engineRef.current;
-      const now = Date.now();
-      let next = engineReset(prev || createState({ now, focusMin: durationMin }), now);
-      next = { ...next, goalName: '' };
-      savedRef.current = false;
-      harvestedRef.current = null;
-      setGoalName('');
-      setPhaseAndRef('idle');
-      setTimeLeftSec(next.focusMin * 60);
-      engineRef.current = next;
-      await persistEngine(next, prev); // 取消结束通知 + 落盘 + 刷新组件
-      return;
-    }
-    abandonArmedRef.current = true;
-    setAbandonArmed(true);
+  // 放弃专注（弹出三选项底部弹层，支持提前结束并记入）
+  const onAbandonPress = useCallback(() => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Light);
-    if (abandonTimerRef.current) clearTimeout(abandonTimerRef.current);
-    abandonTimerRef.current = setTimeout(() => {
-      abandonArmedRef.current = false;
-      setAbandonArmed(false);
-      abandonTimerRef.current = null;
-    }, ABANDON_CONFIRM_MS);
-  }, [stopAmbientSound, persistEngine, durationMin]);
+    setShowAbandonModal(true);
+  }, []);
+
+  const handleModalContinue = useCallback(() => {
+    setShowAbandonModal(false);
+  }, []);
+
+  const handleModalAbandon = useCallback(async () => {
+    setShowAbandonModal(false);
+    clearPauseReminder();
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light);
+    await stopAmbientSound();
+    const prev = engineRef.current;
+    const now = Date.now();
+    let next = engineReset(prev || createState({ now, focusMin: durationMin }), now);
+    next = { ...next, goalName: '' };
+    savedRef.current = false;
+    harvestedRef.current = null;
+    setGoalName('');
+    setPhaseAndRef('idle');
+    setTimeLeftSec(next.focusMin * 60);
+    engineRef.current = next;
+    await persistEngine(next, prev); // 取消结束通知 + 落盘 + 刷新组件
+  }, [stopAmbientSound, durationMin, persistEngine, clearPauseReminder]);
+
+  const handleModalEarlyFinish = useCallback(async () => {
+    setShowAbandonModal(false);
+    clearPauseReminder();
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium);
+    await stopAmbientSound();
+    const now = Date.now();
+    const prev = engineRef.current;
+    const totalSec = durationMin * 60;
+    const focusedSec = Math.max(0, totalSec - timeLeftSec);
+    if (focusedSec < 60) return;
+
+    isPartialHarvestRef.current = true;
+    setIsPartialHarvest(true);
+
+    const partialHarvest = {
+      sessionId: (prev && prev.sessionId) || `focus-${now}`,
+      startTs: (prev && prev.startTs) || (now - focusedSec * 1000),
+      endAt: now,
+      durationSec: focusedSec,
+      category: (prev && prev.category) || categoryRef.current || 'study',
+      goalName: (prev && prev.goalName) || goalName.trim(),
+      ambient: (prev && prev.ambient) || ambient,
+      partial: true,
+    };
+    harvestedRef.current = partialHarvest;
+    savedRef.current = false;
+
+    // 状态机切回短休待开始模式，取消旧排期，但不增加 completedToday！
+    let next = engineReset(prev || createState({ now }), now);
+    next = engineSwitchMode(next, 'short', now);
+    next.remainingMs = SHORT_MS;
+    engineRef.current = next;
+
+    setPhaseAndRef('done');
+    setTimeLeftSec(0);
+    await persistEngine(next, prev);
+  }, [durationMin, timeLeftSec, goalName, ambient, stopAmbientSound, persistEngine, clearPauseReminder]);
+
+  const abandonFocus = onAbandonPress;
 
   const resetToIdle = useCallback(async (notifyParent = true) => {
+    clearPauseReminder();
     const now = Date.now();
     const prev = engineRef.current || createState({ now, focusMin: durationMin });
     // 回 focus 待开始（休息/收获关闭后统一落点）；pendingHarvests 不动
     let next = engineReset(prev, now);
     if (next.mode !== 'focus') next = engineSwitchMode(next, 'focus', now);
     next = { ...next, goalName: '' };
-    if (abandonTimerRef.current) {
-      clearTimeout(abandonTimerRef.current);
-      abandonTimerRef.current = null;
-    }
-    abandonArmedRef.current = false;
-    setAbandonArmed(false);
     setGoalName('');
     setIsNoteEditing(false);
     setPhaseAndRef('idle');
     setTimeLeftSec(next.focusMin * 60);
     setRestTimeLeftSec(REST_DURATION_SEC);
     savedRef.current = false;
+    isPartialHarvestRef.current = false;
+    setIsPartialHarvest(false);
     engineRef.current = next;
     if (notifyParent && onRunningChange) onRunningChange(false);
     await persistEngine(next, prev);
-  }, [persistEngine, durationMin, onRunningChange]);
+  }, [persistEngine, durationMin, onRunningChange, clearPauseReminder]);
+
+  // P2-2: 运行中 +5 分钟（上限 120 分钟）
+  const handleAdd5MinInRun = useCallback(async () => {
+    const prev = engineRef.current;
+    if (!prev) return;
+    const now = Date.now();
+    const currentTotalMin = Math.round(durationMs(prev) / 60000);
+    if (currentTotalMin >= MAX_MIN) {
+      showToast(t('pomodoro.reachMaxDuration', '已达到最大时长 120 分钟'));
+      return;
+    }
+    const next = addExtraMinutes(prev, 5, now);
+    if (next === prev) {
+      showToast(t('pomodoro.reachMaxDuration', '已达到最大时长 120 分钟'));
+      return;
+    }
+    hapticImpact(Haptics.ImpactFeedbackStyle.Light);
+    engineRef.current = next;
+    const display = deriveDisplay(next, now);
+    setTimeLeftSec(display.remainingSec);
+    await persistEngine(next, prev);
+    showToast(t('pomodoro.added5MinSuccess', '已延长 5 分钟'));
+  }, [showToast, persistEngine, t]);
+
+
+  const lastRestBackPressRef = useRef(0);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const onBackPress = () => {
+      if (phase === 'done') {
+        // 收获页返回：视为「稍后处理」，pendingHarvests 保持不动，回待开始，下次进入自动补显
+        resetToIdle(false);
+        return true;
+      }
+      if (phase === 'rest' || phase === 'resting') {
+        // 休息页返回：轻提示防误触，2 秒内再次按下才退出
+        const now = Date.now();
+        if (now - lastRestBackPressRef.current < 2000) {
+          resetToIdle(true);
+        } else {
+          lastRestBackPressRef.current = now;
+          showToast(t('pomodoro.pressAgainToSkipRest', '再按一次跳过休息'));
+        }
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub?.remove?.();
+  }, [phase, resetToIdle, showToast, t]);
 
   // 收获出队：用户确认（保存或计入）后即从 pendingHarvests 移除，防止重复补显。
   const ackCurrentHarvest = useCallback(async () => {
@@ -1161,6 +1354,7 @@ export default function PomodoroTimer({
           goalName: currentGoal || t('home.unnamedFocus', '未命名专注'),
           category: (h && h.category) || categoryRef.current || 'study',
           note: '',
+          partial: !!(h && h.partial),
         });
         if (ok !== false) {
           savedRef.current = true;
@@ -1196,6 +1390,34 @@ export default function PomodoroTimer({
       await startFocus();
     }
   }, [saveFocusRecord, startFocus]);
+
+  // 收获页「再来 5 分钟」：保存上一个番茄，以 5 分钟直接开启新番茄（沿用当前分类与任务名）
+  const startAnother5MinFocus = useCallback(async () => {
+    hapticImpact(Haptics.ImpactFeedbackStyle.Medium);
+    const ok = await saveFocusRecord();
+    if (ok) {
+      setDurationMin(5);
+      setTimeLeftSec(5 * 60);
+      const now = Date.now();
+      const prev = engineRef.current;
+      const initial = createState({
+        focusMin: 5,
+        now,
+        category: categoryRef.current || category,
+        goalName: goalName.trim() || t('home.unnamedFocus', '未命名专注'),
+        ambient,
+        completedToday: prev ? prev.completedToday : 0,
+      });
+      const started = engineStart(initial, now);
+      engineRef.current = started;
+      setPhaseAndRef('running');
+      if (onRunningChange) onRunningChange(true);
+      await persistEngine(started, prev);
+      if (ambient && ambient !== 'none') {
+        playAmbientSound(ambient);
+      }
+    }
+  }, [saveFocusRecord, category, goalName, ambient, t, onRunningChange, persistEngine, playAmbientSound]);
 
   // 运行中轻触胶囊修改专注目标
   const openEditGoalInRun = useCallback(() => {
@@ -1282,16 +1504,19 @@ export default function PomodoroTimer({
     }
   }, [holdProgressAnim, phase]);
 
-  // 按住按钮文案
+  // 启动按钮文案（支持按住模式与默认轻点模式）
   const holdButtonLabel = useMemo(() => {
-    if (holdEarlyRelease) {
-      return t('pomodoro.hold1sHint', '按住 1 秒开始');
+    if (holdToStartEnabled) {
+      if (holdEarlyRelease) {
+        return t('pomodoro.hold1sHint', '按住 1 秒开始');
+      }
+      if (phase === 'holding') {
+        return t('pomodoro.holding', '继续按住…');
+      }
+      return t('pomodoro.holdStartWithMin', '按住开始专注 · {min}分').replace('{min}', durationMin);
     }
-    if (phase === 'holding') {
-      return t('pomodoro.holding', '继续按住…');
-    }
-    return t('pomodoro.holdStartWithMin', '按住开始专注 · {min}分').replace('{min}', durationMin);
-  }, [holdEarlyRelease, phase, durationMin, t]);
+    return t('pomodoro.startFocusWithMin', { min: durationMin }).replace('{min}', durationMin);
+  }, [holdToStartEnabled, holdEarlyRelease, phase, durationMin, t]);
 
   // ==================== react-native-gesture-handler 转盘拖动 ====================
   const dragStartMinShared = useSharedValue(DEFAULT_DURATION_MIN);
@@ -1490,6 +1715,7 @@ export default function PomodoroTimer({
           {/* 番茄收获弹出区与 8 个散开彩点 */}
           <View style={styles.harvestVisualWrap}>
             {!reduceMotion &&
+              !isPartialHarvest &&
               BURST_PARTICLES.map((p, idx) => {
                 const translateX = harvestParticleAnim.interpolate({
                   inputRange: [0, 1],
@@ -1527,16 +1753,34 @@ export default function PomodoroTimer({
             </Reanimated.View>
           </View>
 
-          <Text style={styles.harvestTitle}>{t('pomodoro.harvestTitle', '收获一颗番茄')}</Text>
+          <Text style={styles.harvestTitle}>
+            {isPartialHarvest
+              ? t('pomodoro.partialHarvestTitle', '提前完成专注')
+              : t('pomodoro.harvestTitle', '收获一颗番茄')}
+          </Text>
           <Text style={styles.harvestSub}>
-            {t('pomodoro.harvestSub', {
-              n: todaySummary.count + 1,
-              cat: selectedCategoryMeta?.name || '',
-              min: durationMin,
-            })
-              .replace('{n}', todaySummary.count + 1)
-              .replace('{cat}', selectedCategoryMeta?.name || '')
-              .replace('{min}', durationMin)}
+            {isPartialHarvest
+              ? t('pomodoro.partialHarvestSub', {
+                  min: Math.max(1, Math.floor(((harvestedRef.current && harvestedRef.current.durationSec) || 60) / 60)),
+                }).replace(
+                  '{min}',
+                  Math.max(1, Math.floor(((harvestedRef.current && harvestedRef.current.durationSec) || 60) / 60))
+                )
+              : isLongRest
+              ? t('pomodoro.harvestSubLong', {
+                  n: todaySummary.count + 1,
+                  min: LONG_REST_MIN,
+                })
+                  .replace('{n}', todaySummary.count + 1)
+                  .replace('{min}', LONG_REST_MIN)
+              : t('pomodoro.harvestSub', {
+                  n: todaySummary.count + 1,
+                  cat: selectedCategoryMeta?.name || '',
+                  min: durationMin,
+                })
+                  .replace('{n}', todaySummary.count + 1)
+                  .replace('{cat}', selectedCategoryMeta?.name || '')
+                  .replace('{min}', durationMin)}
           </Text>
           {goalName.trim() ? <Text style={styles.harvestTaskText}>{goalName.trim()}</Text> : null}
 
@@ -1587,6 +1831,25 @@ export default function PomodoroTimer({
               </Text>
             </TouchableOpacity>
 
+            {/* P2-2: 再来 5 分钟冲刺 */}
+            <TouchableOpacity
+              style={[
+                styles.doneRestBtn,
+                {
+                  backgroundColor: isDark ? 'rgba(198, 61, 49, 0.16)' : '#FFF3F0',
+                  borderColor: isDark ? '#8A2A20' : '#F5C6CB',
+                },
+              ]}
+              onPress={startAnother5MinFocus}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t('pomodoro.another5Min', '再来 5 分钟')}
+            >
+              <Text style={[styles.doneRestBtnText, { color: '#C63D31' }]}>
+                {t('pomodoro.another5Min', '再来 5 分钟')}
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[
                 styles.doneRestBtn,
@@ -1599,13 +1862,17 @@ export default function PomodoroTimer({
               activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel={
-                isLongRest
+                isPartialHarvest
+                  ? t('pomodoro.saveAndRestShort', { min: SHORT_REST_MIN })
+                  : isLongRest
                   ? t('pomodoro.saveAndRestLong', { min: LONG_REST_MIN })
                   : t('pomodoro.saveAndRestShort', { min: SHORT_REST_MIN })
               }
             >
               <Text style={[styles.doneRestBtnText, { color: isDark ? '#F5EDE4' : '#2B211C' }]}>
-                {isLongRest
+                {isPartialHarvest
+                  ? t('pomodoro.saveAndRestShort', { min: SHORT_REST_MIN })
+                  : isLongRest
                   ? t('pomodoro.saveAndRestLong', { min: LONG_REST_MIN })
                   : t('pomodoro.saveAndRestShort', { min: SHORT_REST_MIN })}
               </Text>
@@ -1624,6 +1891,15 @@ export default function PomodoroTimer({
             </TouchableOpacity>
           </View>
         </ScrollView>
+
+        {/* Toast 提示 */}
+        {toast.visible && (
+          <View style={styles.toastWrap} pointerEvents="none">
+            <View style={styles.toastCard}>
+              <Text style={styles.toastText}>{toast.message}</Text>
+            </View>
+          </View>
+        )}
       </Animated.View>
     );
   }
@@ -1639,7 +1915,7 @@ export default function PomodoroTimer({
       >
         <View style={styles.restContent}>
           <Text style={[styles.restTitle, { color: isDark ? '#F5EDE4' : '#2B211C' }]}>
-            {t('pomodoro.relaxTitle', '放松一下')}
+            {isLongRest ? t('pomodoro.longRestTitle', '深度放松') : t('pomodoro.shortRestTitle', '小憩一下')}
           </Text>
 
           {/* 8 秒呼吸动画环与大倒计时 */}
@@ -1667,7 +1943,9 @@ export default function PomodoroTimer({
           </Animated.View>
 
           <Text style={[styles.restHint, { color: isDark ? '#A6988D' : '#6B5B4F' }]}>
-            {t('pomodoro.restHint', '让大脑喘口气，倒计时结束后会自动返回')}
+            {isLongRest
+              ? t('pomodoro.longRestHint', '已完成一组番茄，起身走动走动，彻底放松一下')
+              : t('pomodoro.shortRestHint', '喝口水，眨眨眼，稍后继续')}
           </Text>
 
           <TouchableOpacity
@@ -1688,6 +1966,15 @@ export default function PomodoroTimer({
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Toast 提示 */}
+        {toast.visible && (
+          <View style={styles.toastWrap} pointerEvents="none">
+            <View style={styles.toastCard}>
+              <Text style={styles.toastText}>{toast.message}</Text>
+            </View>
+          </View>
+        )}
       </Animated.View>
     );
   }
@@ -1706,6 +1993,59 @@ export default function PomodoroTimer({
           contentContainerStyle={styles.runningScrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* 5 秒可撤销开始条（P1-2） */}
+          {undoCountdown > 0 && (
+            <View style={styles.undoBarWrap}>
+              <View
+                style={[
+                  styles.undoBar,
+                  {
+                    backgroundColor: isDark ? '#2D221C' : '#F6EFE8',
+                    borderColor: isDark ? '#4A3B32' : '#E2D5C7',
+                  },
+                ]}
+              >
+                <Ionicons name="time-outline" size={16} color="#D93A2B" style={{ marginRight: 6 }} />
+                <Text style={[styles.undoBarText, { color: isDark ? '#F5EDE4' : '#2B211C' }]}>
+                  {t('pomodoro.undoStart', { n: undoCountdown }).replace('{n}', undoCountdown)}
+                </Text>
+                <TouchableOpacity
+                  onPress={handleUndoStart}
+                  style={styles.undoBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="撤销开始"
+                >
+                  <Text style={styles.undoBtnText}>{t('common.cancel', '撤销')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* 权限被拒轻提示条（P1-3，可点击跳系统设置） */}
+          {permDeniedBanner && (
+            <TouchableOpacity
+              style={[
+                styles.permBanner,
+                {
+                  backgroundColor: isDark ? 'rgba(217, 58, 43, 0.15)' : '#FDECEB',
+                  borderColor: isDark ? '#8A2A20' : '#F5C6CB',
+                },
+              ]}
+              onPress={() => Linking.openSettings()}
+              activeOpacity={0.7}
+              accessibilityRole="link"
+            >
+              <Ionicons name="notifications-off-outline" size={15} color="#D93A2B" style={{ marginRight: 6 }} />
+              <Text style={[styles.permBannerText, { color: isDark ? '#FF8A80' : '#D93A2B' }]} numberOfLines={1}>
+                {t('pomodoro.permBannerDenied', '提醒已关闭，时间到了不会响')}
+              </Text>
+              <Text style={[styles.permBannerBtn, { color: isDark ? '#FF8A80' : '#D93A2B' }]}>
+                {` [${t('pomodoro.permGoSetting', '去开启')}]`}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* 顶部第 N 次与分类胶囊 */}
           <View style={styles.runTopWrap}>
             <Text style={styles.runCountText}>
@@ -1773,15 +2113,38 @@ export default function PomodoroTimer({
             <Text style={styles.runStageText}>{stageHintText}</Text>
           </View>
 
+          {/* P2-2: 运行中延长 5 分钟 */}
+          <View style={styles.add5MinWrap}>
+            <TouchableOpacity
+              style={[
+                styles.add5MinBtn,
+                {
+                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#FAF6F0',
+                  borderColor: isDark ? 'rgba(255, 255, 255, 0.14)' : '#E8DDD0',
+                },
+              ]}
+              onPress={handleAdd5MinInRun}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t('pomodoro.add5Min', '+5 分钟')}
+            >
+              <Text style={[styles.add5MinText, { color: isDark ? '#D5C7BA' : '#5E4F44' }]}>
+                {t('pomodoro.add5Min', '+5 分钟')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* 按钮控制区 */}
           <View style={styles.runControlRow}>
             <TouchableOpacity
-              style={[styles.runQuitBtn, abandonArmed && styles.runQuitBtnArmed]}
+              style={styles.runQuitBtn}
               onPress={abandonFocus}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t('pomodoro.abandon', '放弃')}
             >
-              <Text style={[styles.runQuitBtnText, abandonArmed && styles.runQuitBtnTextArmed]}>
-                {abandonArmed ? t('pomodoro.confirmAbandon2', '再点一次放弃') : t('pomodoro.abandon', '放弃')}
+              <Text style={styles.runQuitBtnText}>
+                {t('pomodoro.abandon', '放弃')}
               </Text>
             </TouchableOpacity>
 
@@ -1948,6 +2311,25 @@ export default function PomodoroTimer({
             </View>
           </KeyboardAvoidingView>
         </Modal>
+
+        {/* 放弃专注三选项底部弹层（P1-1） */}
+        <AbandonActionModal
+          visible={showAbandonModal}
+          onClose={handleModalContinue}
+          onContinue={handleModalContinue}
+          onEarlyFinish={handleModalEarlyFinish}
+          onAbandon={handleModalAbandon}
+          focusedSec={Math.max(0, durationMin * 60 - timeLeftSec)}
+        />
+
+        {/* Toast 提示 */}
+        {toast.visible && (
+          <View style={styles.toastWrap} pointerEvents="none">
+            <View style={styles.toastCard}>
+              <Text style={styles.toastText}>{toast.message}</Text>
+            </View>
+          </View>
+        )}
       </Animated.View>
     );
   }
@@ -2219,29 +2601,50 @@ export default function PomodoroTimer({
             </TouchableOpacity>
           </View>
 
-          {/* 8. 开始按钮（长按 1 秒开始，带进度填充反馈） */}
+          {/* 8. 开始按钮（默认轻点开始，开启防误触时按住 1 秒开始） */}
           <View style={styles.startBtnBottomWrap}>
-            <Pressable
-              style={({ pressed }) => [styles.startBtn, pressed && { transform: [{ scale: 0.99 }] }]}
-              onPressIn={() => {
-                setPhaseAndRef('holding');
-                startHolding();
-              }}
-              onPressOut={cancelHolding}
-              accessibilityRole="button"
-              accessibilityActions={[{ name: 'activate', label: '开始专注' }]}
-              onAccessibilityAction={(event) => {
-                if (event.nativeEvent.actionName === 'activate') {
-                  startFocus();
-                }
-              }}
-            >
-              <View style={styles.startBtnInner}>
-                <Animated.View style={[styles.startBtnFill, { width: holdFillWidth }]} />
-                <Ionicons name="play" size={18} color="#FFFFFF" />
-                <Text style={styles.startBtnText}>{holdButtonLabel}</Text>
-              </View>
-            </Pressable>
+            {holdToStartEnabled ? (
+              <Pressable
+                style={({ pressed }) => [styles.startBtn, pressed && { transform: [{ scale: 0.99 }] }]}
+                onPressIn={() => {
+                  setPhaseAndRef('holding');
+                  startHolding();
+                }}
+                onPressOut={cancelHolding}
+                accessibilityRole="button"
+                accessibilityActions={[{ name: 'activate', label: t('pomodoro.startFocus', '开始专注') }]}
+                onAccessibilityAction={(event) => {
+                  if (event.nativeEvent.actionName === 'activate') {
+                    startFocus();
+                  }
+                }}
+              >
+                <View style={styles.startBtnInner}>
+                  <Animated.View style={[styles.startBtnFill, { width: holdFillWidth }]} />
+                  <Ionicons name="play" size={18} color="#FFFFFF" />
+                  <Text style={styles.startBtnText}>{holdButtonLabel}</Text>
+                </View>
+              </Pressable>
+            ) : (
+              <TouchableOpacity
+                style={styles.startBtn}
+                onPress={startFocus}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={holdButtonLabel}
+                accessibilityActions={[{ name: 'activate', label: t('pomodoro.startFocus', '开始专注') }]}
+                onAccessibilityAction={(event) => {
+                  if (event.nativeEvent.actionName === 'activate') {
+                    startFocus();
+                  }
+                }}
+              >
+                <View style={styles.startBtnInner}>
+                  <Ionicons name="play" size={18} color="#FFFFFF" />
+                  <Text style={styles.startBtnText}>{holdButtonLabel}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -2302,6 +2705,68 @@ export default function PomodoroTimer({
           onUpdateFocusSession={onUpdateFocusSession}
           onDeleteFocusSession={onDeleteFocusSession}
         />
+
+        {/* 放弃专注三选项底部弹层（P1-1） */}
+        <AbandonActionModal
+          visible={showAbandonModal}
+          onClose={handleModalContinue}
+          onContinue={handleModalContinue}
+          onEarlyFinish={handleModalEarlyFinish}
+          onAbandon={handleModalAbandon}
+          focusedSec={Math.max(0, durationMin * 60 - timeLeftSec)}
+        />
+
+        {/* 通知权限铺垫对话框（P1-3） */}
+        <Modal
+          visible={showPermDialog}
+          transparent
+          animationType="fade"
+          onRequestClose={handleDismissPermAndStart}
+        >
+          <View style={styles.modalBg}>
+            <View
+              style={[
+                styles.permDialogCard,
+                {
+                  backgroundColor: isDark ? '#231B18' : '#FFFFFF',
+                  borderColor: isDark ? '#3D312A' : '#EFE8DE',
+                },
+              ]}
+            >
+              <View style={styles.permDialogIconWrap}>
+                <Ionicons name="notifications-outline" size={32} color="#D93A2B" />
+              </View>
+              <Text style={[styles.permDialogTitle, { color: isDark ? '#F5EDE4' : '#2B211C' }]}>
+                {t('pomodoro.permDialogTitle', '开启专注到期提醒')}
+              </Text>
+              <Text style={[styles.permDialogDesc, { color: isDark ? '#A6988D' : '#6B5B4F' }]}>
+                {t('pomodoro.permDialogDesc', '仅在番茄钟到期或休息结束时提醒，不发送任何无关通知')}
+              </Text>
+              <TouchableOpacity
+                style={styles.permDialogPrimaryBtn}
+                onPress={handleAllowPermAndStart}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={t('pomodoro.permAllow', '允许提醒')}
+              >
+                <Text style={styles.permDialogPrimaryBtnText}>
+                  {t('pomodoro.permAllow', '允许提醒')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.permDialogLaterBtn}
+                onPress={handleDismissPermAndStart}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={t('pomodoro.permLater', '以后再说')}
+              >
+                <Text style={[styles.permDialogLaterBtnText, { color: isDark ? '#8C7D73' : '#8C7D73' }]}>
+                  {t('pomodoro.permLater', '以后再说')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
 
       {/* Toast 提示 */}
@@ -2693,6 +3158,25 @@ const styles = StyleSheet.create({
     color: '#6B5B4F',
     marginTop: 4,
   },
+  add5MinWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  add5MinBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    minHeight: 32,
+  },
+  add5MinText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
   runControlRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2712,17 +3196,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  runQuitBtnArmed: {
-    borderColor: '#D93A2B',
-  },
   runQuitBtnText: {
     fontSize: 15,
     fontWeight: '500',
     color: '#5E4F44',
-  },
-  runQuitBtnTextArmed: {
-    color: '#D93A2B',
-    fontWeight: '700',
   },
   runPauseBtn: {
     minWidth: 160,
@@ -3102,5 +3579,108 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#fff',
+  },
+  // 5 秒撤销条
+  undoBarWrap: {
+    width: '100%',
+    paddingHorizontal: 20,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  undoBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  undoBarText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginRight: 10,
+  },
+  undoBtn: {
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(217, 58, 43, 0.12)',
+  },
+  undoBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#D93A2B',
+  },
+  // 权限被拒轻提示条
+  permBanner: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  permBannerText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  permBannerBtn: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  // 权限说明对话框
+  permDialogCard: {
+    width: 290,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 24,
+    alignItems: 'center',
+  },
+  permDialogIconWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(217, 58, 43, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  permDialogTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  permDialogDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  permDialogPrimaryBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#D93A2B',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  permDialogPrimaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  permDialogLaterBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  permDialogLaterBtnText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
 });

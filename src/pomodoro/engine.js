@@ -5,7 +5,7 @@
 // （pendingHarvests 队列保留未保存会话，App 打开后补显收获页）。
 
 export const FOCUS_DEFAULT_MIN = 25;
-export const FOCUS_MIN_LIMIT = 5;
+export const FOCUS_MIN_LIMIT = 2;
 export const FOCUS_MAX_LIMIT = 120;
 export const SHORT_MS = 5 * 60 * 1000;
 export const LONG_MS = 15 * 60 * 1000;
@@ -19,7 +19,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 export function durationMs(state) {
   if (state.mode === 'short') return SHORT_MS;
   if (state.mode === 'long') return LONG_MS;
-  return (state.focusMin || FOCUS_DEFAULT_MIN) * 60 * 1000;
+  return (state.focusMin || FOCUS_DEFAULT_MIN) * 60 * 1000 + (state.extraMs || 0);
 }
 
 export function todayKey(now) {
@@ -40,6 +40,7 @@ export function createState(opts = {}) {
     completedToday: 0,
     updatedAt: now,
     focusMin,
+    extraMs: 0,
     completedDate: now ? todayKey(now) : null,
     settledEndAt: null,
     sessionId: null,
@@ -86,21 +87,23 @@ export function pause(state, now) {
 export function reset(state, now) {
   // 回当前模式满时长并停止；completedToday / pendingHarvests 不动
   const s = withDay(state, now);
-  return {
+  const next = {
     ...s,
     running: false,
     endAt: null,
-    remainingMs: durationMs(s),
+    extraMs: 0,
     sessionId: null,
     startTs: null,
     notifId: null,
   };
+  next.remainingMs = durationMs(next);
+  return next;
 }
 
 export function switchMode(state, mode, now) {
   if (mode !== 'focus' && mode !== 'short' && mode !== 'long') return state;
   const s = withDay(state, now);
-  const next = { ...s, mode, running: false, endAt: null, sessionId: null, startTs: null, notifId: null };
+  const next = { ...s, mode, running: false, endAt: null, extraMs: 0, sessionId: null, startTs: null, notifId: null };
   next.remainingMs = durationMs(next);
   return next;
 }
@@ -108,7 +111,10 @@ export function switchMode(state, mode, now) {
 export function setFocusMin(state, min, now) {
   const focusMin = clamp(Math.round(min), FOCUS_MIN_LIMIT, FOCUS_MAX_LIMIT);
   const s = { ...state, focusMin };
-  if (!s.running && s.mode === 'focus') s.remainingMs = focusMin * 60 * 1000;
+  if (!s.running && s.mode === 'focus') {
+    s.extraMs = 0;
+    s.remainingMs = focusMin * 60 * 1000;
+  }
   return s;
 }
 
@@ -144,7 +150,7 @@ export function settle(state, now) {
       sessionId: state.sessionId || `focus-${state.startTs || endedAt}`,
       startTs: state.startTs || endedAt - durationMs(state),
       endAt: endedAt,
-      durationSec: Math.round(durationMs(state) / 1000), // 满时长，非墙钟差值
+      durationSec: Math.round(durationMs(state) / 1000), // 满时长，含 extraMs，非墙钟差值
       category: state.category,
       goalName: state.goalName,
       ambient: state.ambient,
@@ -155,6 +161,7 @@ export function settle(state, now) {
     const nextState = {
       ...base,
       mode: nextMode,
+      extraMs: 0,
       completedToday: s.completedToday + 1,
       completedDate: todayKey(endedAt),
       remainingMs: nextMode === 'focus' ? s.focusMin * 60 * 1000 : nextMode === 'short' ? SHORT_MS : LONG_MS,
@@ -165,8 +172,36 @@ export function settle(state, now) {
 
   // 休息结束：回专注待开始，不落库不排队
   return {
-    state: { ...base, mode: 'focus', remainingMs: s.focusMin * 60 * 1000 },
+    state: { ...base, mode: 'focus', extraMs: 0, remainingMs: s.focusMin * 60 * 1000 },
     harvested: null,
+  };
+}
+
+export function addExtraMinutes(state, minutes, now) {
+  if (state.mode !== 'focus') return state;
+  const addMs = Math.max(0, minutes) * 60 * 1000;
+  if (!addMs) return state;
+  const currentTotal = durationMs(state);
+  const maxTotal = FOCUS_MAX_LIMIT * 60 * 1000;
+  const availableMs = Math.max(0, maxTotal - currentTotal);
+  const realAddMs = Math.min(addMs, availableMs);
+  if (realAddMs <= 0) return state;
+
+  const nextExtraMs = (state.extraMs || 0) + realAddMs;
+  if (state.running && state.endAt) {
+    return {
+      ...state,
+      extraMs: nextExtraMs,
+      endAt: state.endAt + realAddMs,
+      remainingMs: Math.max(0, (state.endAt + realAddMs) - now),
+      updatedAt: now,
+    };
+  }
+  return {
+    ...state,
+    extraMs: nextExtraMs,
+    remainingMs: (state.remainingMs || 0) + realAddMs,
+    updatedAt: now,
   };
 }
 
@@ -225,6 +260,7 @@ export function normalizeState(raw, now, opts = {}) {
     // 同版本容错：字段缺失/类型不对时逐项修正
     const base = { ...createState({ now, ...opts }), ...raw };
     base.focusMin = clamp(Number(base.focusMin) || FOCUS_DEFAULT_MIN, FOCUS_MIN_LIMIT, FOCUS_MAX_LIMIT);
+    base.extraMs = Math.max(0, Number(raw.extraMs) || 0);
     base.remainingMs = Number.isFinite(Number(raw.remainingMs))
       ? Math.max(0, Number(raw.remainingMs))
       : durationMs(base); // 缺字段时按当前模式满时长修正
