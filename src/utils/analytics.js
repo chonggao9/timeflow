@@ -1,6 +1,7 @@
 // @ts-check
 import { placeKey, median, UNNAMED, isPlaceholderName, TRIP_TIMEOUT_MS } from './stats.js';
 import { normalizeCategory } from './focusCategories.js';
+import { DAY_MS } from './dateUtils.js';
 
 // 地点清单：placeKey → { key, name, count }（按次数降序），供 A→B 选择器用
 // 只统计行程记录：专注目标的名称不是地点，混进来会污染地点选择器。
@@ -27,7 +28,7 @@ export function getPlaceOptions(records) {
 
 // 基于过去 90 天按当前时段（早/中/晚/夜间）与星期加权推荐常用地点
 export function getTimeContextPlaceOptions(records, limit = 6, now = Date.now()) {
-  const ninetyDaysAgo = now - 90 * 86400000;
+  const ninetyDaysAgo = now - 90 * DAY_MS;
   const curDate = new Date(now);
   const curHour = curDate.getHours();
   const curDay = curDate.getDay();
@@ -101,7 +102,7 @@ export function queryJourney(records, fromKey, toKey) {
       if (bIdx < 0) break;
       const A = sorted[aIdx], B = sorted[bIdx];
       const duration = B.timestamp - A.timestamp;
-      if (duration > 0 && duration < 86400000) {
+      if (duration > 0 && duration < DAY_MS) {
         const segs = [];
         const keys = [fromKey];
         for (let i = aIdx; i < bIdx; i++) {
@@ -162,7 +163,7 @@ export function queryJourney(records, fromKey, toKey) {
   const nowWeek = weekStart(Date.now());
   const weeklyTrend = [];
   for (let i = 7; i >= 0; i--) {
-    const wk = nowWeek - i * 7 * 86400000;
+    const wk = nowWeek - i * 7 * DAY_MS;
     const arr = weekMap.get(wk);
     weeklyTrend.push(arr && arr.length ? Math.round(median(arr) / 60000) : null);
   }
@@ -307,12 +308,12 @@ export function computeWeekTravelStats(records, lang = 'zh') {
   const todayZero = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
   const days = [];
-  const weekStartTs = todayZero - 6 * 86400000;
+  const weekStartTs = todayZero - 6 * DAY_MS;
   let totalMins = 0;
 
   for (let i = 0; i < 7; i++) {
-    const dayStart = weekStartTs + i * 86400000;
-    const dayEnd = dayStart + 86400000;
+    const dayStart = weekStartTs + i * DAY_MS;
+    const dayEnd = dayStart + DAY_MS;
     const d = new Date(dayStart);
     const dayOfWeek = d.getDay(); // 0 is Sun, 1 is Mon...
     const dayMapZh = ['日', '一', '二', '三', '四', '五', '六'];

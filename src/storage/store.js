@@ -6,6 +6,7 @@
 // 3. 任何修改业务表的写操作（插入/更新/删除/结程）必须调用 bumpRevision() 推进指纹，确保备份感知。
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SQLite from 'expo-sqlite';
+import { DAY_MS, dayStart } from '../utils/dateUtils';
 
 const RECORDS_KEY = 'timeflow_records';
 const RECORDS_REV_KEY = 'timeflow_data_rev';
@@ -43,13 +44,6 @@ export const TRIP_TIMEOUT_MS = 90 * 60 * 1000; // 90分钟无打卡自动断开�
 
 const makeTripId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-
-// 本地当日零点（epoch ms）；China 无 DST，86400000 即一天
-function dayStart(ts) {
-  const d = new Date(ts);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
 
 // SQLite 单例：打开 + 建表 + 一次性迁移。所有读写先 await 它。
 let dbPromise = null;
@@ -440,7 +434,7 @@ export async function setCurrentTripId(id) {
 // 策略：找同一天内时间相近（<= TRIP_TIMEOUT_MS）的现有 trip 进行聚合并扩展边界；否则新建已完结 trip。
 async function findOrCreateTripForTimestamp(ts, db) {
   const targetDay = dayStart(ts);
-  const nextDay = targetDay + 86400000;
+  const nextDay = targetDay + DAY_MS;
   // 查找同一天的现有 trips
   const sameDayTrips = await db.getAllAsync(
     'SELECT id, start_ts, end_ts, is_active FROM trips WHERE start_ts >= ? AND start_ts < ?',
@@ -505,7 +499,7 @@ export async function getRecords() {
 export async function getTodayRecords() {
   const db = await getDb();
   const start = dayStart(Date.now());
-  const end = start + 86400000;
+  const end = start + DAY_MS;
   return db.getAllAsync(
     `SELECT ${RECORD_COLS} FROM records WHERE timestamp >= ? AND timestamp < ? ORDER BY timestamp ASC`,
     start, end
@@ -578,7 +572,7 @@ export async function countRecords() {
 
 export async function getRecentRecordsForWidget(days = 60, now = Date.now()) {
   const db = await getDb();
-  const start = dayStart(now) - days * 86400000;
+  const start = dayStart(now) - days * DAY_MS;
   return db.getAllAsync('SELECT timestamp FROM records WHERE timestamp >= ? ORDER BY timestamp ASC', start);
 }
 
@@ -597,7 +591,7 @@ export async function getFocusSessions() {
 export async function getTodayFocusSessions() {
   const db = await getDb();
   const start = dayStart(Date.now());
-  const end = start + 86400000;
+  const end = start + DAY_MS;
   return db.getAllAsync(
     `SELECT ${FOCUS_COLS} FROM focus_sessions WHERE timestamp >= ? AND timestamp < ? ORDER BY timestamp ASC`,
     start, end
@@ -618,9 +612,9 @@ export async function syncWidgetSnapshot(now = Date.now()) {
   try {
     const db = await getDb();
     const today0 = dayStart(now);
-    const todayEnd = today0 + 86400000;
-    const sixtyDaysAgo = today0 - 60 * 86400000;
-    const sixDaysAgo = today0 - 6 * 86400000;
+    const todayEnd = today0 + DAY_MS;
+    const sixtyDaysAgo = today0 - 60 * DAY_MS;
+    const sixDaysAgo = today0 - 6 * DAY_MS;
 
     // 1. 查询今日行程打卡
     const todayRecords = await db.getAllAsync(
@@ -644,8 +638,8 @@ export async function syncWidgetSnapshot(now = Date.now()) {
     for (const r of focusRows || []) {
       if (!r || !r.timestamp) continue;
       const diff = r.timestamp - sixDaysAgo;
-      if (diff >= 0 && diff < 7 * 86400000) {
-        const slot = Math.floor(diff / 86400000);
+      if (diff >= 0 && diff < 7 * DAY_MS) {
+        const slot = Math.floor(diff / DAY_MS);
         if (slot >= 0 && slot < 7) {
           focusMinutes[slot] += Math.round((Number(r.duration) || 0) / 60);
         }

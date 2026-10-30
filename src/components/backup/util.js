@@ -1,5 +1,5 @@
-// 备份 UI 共享工具：时间/大小格式化、四态状态卡取数、语义色映射。
 import { STALE_MS } from '../../backup/state';
+import { DAY_MS } from '../../utils/dateUtils';
 
 export function formatSize(bytes) {
   if (!bytes || bytes <= 0) return '0 KB';
@@ -15,7 +15,7 @@ export function formatTime(ts, lang) {
   const mm = String(d.getMinutes()).padStart(2, '0');
   const now = new Date();
   const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const dayDiff = Math.round((startOf(now) - startOf(d)) / 86400000);
+  const dayDiff = Math.round((startOf(now) - startOf(d)) / DAY_MS);
   const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   if (lang === 'en') {
     if (dayDiff === 0) return `Today ${hh}:${mm}`;
@@ -28,7 +28,7 @@ export function formatTime(ts, lang) {
 }
 
 export function staleDays(lastSuccessAt) {
-  return Math.max(1, Math.floor((Date.now() - lastSuccessAt) / 86400000));
+  return Math.max(1, Math.floor((Date.now() - lastSuccessAt) / DAY_MS));
 }
 
 // 语义色 tone → { fg, bg }（用 theme token，不写死色值）

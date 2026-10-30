@@ -21,6 +21,7 @@ import {
   getCategoryMeta,
   normalizeCategory,
 } from '../utils/focusCategories';
+import { DAY_MS } from '../utils/dateUtils';
 
 export default function FocusHistoryModal({
   visible,
@@ -43,7 +44,7 @@ export default function FocusHistoryModal({
     const now = new Date();
     const todayZero = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const dayOfWeek = now.getDay() || 7; // 1(一) .. 7(日)
-    const weekZero = todayZero - (dayOfWeek - 1) * 86400000;
+    const weekZero = todayZero - (dayOfWeek - 1) * DAY_MS;
     const monthZero = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const start =
       range === 'today' ? todayZero :
