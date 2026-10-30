@@ -38,6 +38,10 @@ export function ThemeProvider({ children }) {
           setSkinState(savedSkin);
         } else {
           setSkinState(DEFAULT_SKIN);
+          if (savedSkin) {
+            // 旧皮肤迁移为 coral 并写回存储
+            AsyncStorage.setItem(STORAGE_KEY_SKIN, DEFAULT_SKIN).catch(() => {});
+          }
         }
       } catch (e) {
         // 兜底保持默认
@@ -84,24 +88,11 @@ export function ThemeProvider({ children }) {
     }
   }, []);
 
-  // 判断指定皮肤是否已解锁（预留接口，支持连续打卡天数判定）
-  const isSkinUnlocked = useCallback((skinId, currentStreak = 0) => {
-    const conf = SKINS[skinId];
-    if (!conf) return false;
-    if (conf.unlockType === 'always') return true;
-    if (conf.unlockType === 'streak') {
-      return (currentStreak || 0) >= (conf.unlockDays || 0);
-    }
-    return true;
-  }, []);
-
   const isSystem = mode === 'system';
-  const isDark = (skin === 'oled' || SKINS[skin]?.onlyDark)
-    ? true
-    : (isSystem ? systemScheme === 'dark' : mode === 'dark');
+  const isDark = isSystem ? systemScheme === 'dark' : mode === 'dark';
   const theme = isDark ? 'dark' : 'light';
 
-  // 动态生成包含统一 7 核心 Token 与兼容别名的颜色对象
+  // 动态生成包含统一核心 Token 与兼容别名的颜色对象
   const colors = useMemo(() => createThemeColors(skin, isDark), [skin, isDark]);
 
   const value = useMemo(
@@ -114,11 +105,10 @@ export function ThemeProvider({ children }) {
       isDark,
       setTheme,
       setSkin,
-      isSkinUnlocked,
       colors,
       hydrated,
     }),
-    [theme, mode, skin, isSystem, isDark, setTheme, setSkin, isSkinUnlocked, colors, hydrated]
+    [theme, mode, skin, isSystem, isDark, setTheme, setSkin, colors, hydrated]
   );
 
   return (

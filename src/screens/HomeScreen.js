@@ -33,6 +33,9 @@ import {
   ensureTrip,
   endTrip,
   getCurrentTripId,
+  getTrips,
+  updateTripName,
+  setCurrentTripId,
   getLastMode,
   setLastMode,
   getRecordsFingerprint,
@@ -44,7 +47,7 @@ import {
   syncWidgetFocusStats,
 } from '../storage/store';
 import { computePathStats, placeKey, UNNAMED, isPlaceholderName, formatDuration, formatTime } from '../utils/stats';
-import { getPlaceOptions } from '../utils/analytics';
+import { getPlaceOptions, getTimeContextPlaceOptions } from '../utils/analytics';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 import { getPositionFast, reverseGeocodeWithTimeout } from '../utils/location';
@@ -57,6 +60,11 @@ import PomodoroTimer from '../components/PomodoroTimer';
 import RouteMapScreen from './RouteMapScreen';
 import TripReceiptModal from '../components/TripReceiptModal';
 import BackfillModal from '../components/BackfillModal';
+import UndoBar from '../components/travel/UndoBar';
+import PointEditSheet from '../components/travel/PointEditSheet';
+import SegmentModeSheet from '../components/travel/SegmentModeSheet';
+import TripRenameModal from '../components/travel/TripRenameModal';
+import { scheduleTripReminder, cancelTripReminder } from '../services/tripNotifications';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -132,6 +140,9 @@ export default function HomeScreen() {
 
   const [estimate, setEstimate] = useState(null);
   const [hasActiveTrip, setHasActiveTrip] = useState(false);
+  const [trips, setTrips] = useState([]);
+  const [undoAction, setUndoAction] = useState(null);
+  const [renameTripTarget, setRenameTripTarget] = useState(null);
   const [locStatus, setLocStatus] = useState(null);
   const [activeLocStatus, setActiveLocStatus] = useState(null);
   const locAnim = useRef(new Animated.Value(0)).current;
@@ -142,9 +153,6 @@ export default function HomeScreen() {
 
   const [commonPlaces, setCommonPlaces] = useState([]);
   const [renameTarget, setRenameTarget] = useState(null);
-  const [draftName, setDraftName] = useState('');
-  const [draftMode, setDraftMode] = useState('walk');
-  const [draftTimestamp, setDraftTimestamp] = useState(Date.now());
 
   // 主打卡按钮物理下潜与环形蓄力充能进度
   const checkinScale = useRef(new Animated.Value(1)).current;
@@ -166,23 +174,24 @@ export default function HomeScreen() {
   const allFocusFpRef = useRef({ fp: null, list: [] });
 
   const loadToday = useCallback(async () => {
-    const [today, todayFocus] = await Promise.all([getTodayRecords(), getTodayFocusSessions()]);
+    const [today, todayFocus, allTrips] = await Promise.all([
+      getTodayRecords(),
+      getTodayFocusSessions(),
+      getTrips(),
+    ]);
     const sorted = [...today].sort((a, b) => a.timestamp - b.timestamp);
     setRecords(sorted);
     setFocusSessions([...todayFocus].sort((a, b) => a.timestamp - b.timestamp));
+    setTrips(allTrips);
     const trip = await getCurrentTripId();
     setHasActiveTrip(!!trip);
 
-    // 常用地点快选与全部专注记录（带指纹缓存，避免每次唤醒与刷新全表扫描）
+    // 常用地点快选与全部专注记录（基于 90 天按时段加权推荐）
     try {
       const fp = await getRecordsFingerprint();
       if (topPlacesFpRef.current.fp !== fp || !topPlacesFpRef.current.places.length) {
         const all = await getRecords();
-        const options = getPlaceOptions(all);
-        const topPlaces = options
-          .map((o) => o.name)
-          .filter((nm) => nm && !isPlaceholderName(nm) && nm !== UNNAMED)
-          .slice(0, 5);
+        const topPlaces = getTimeContextPlaceOptions(all, 6);
         topPlacesFpRef.current = { fp, places: topPlaces };
         setCommonPlaces(topPlaces);
       }
@@ -194,7 +203,7 @@ export default function HomeScreen() {
       }
       syncWidgetFocusStats().catch(() => {});
     } catch (e) {}
-    return { today: sorted, focus: todayFocus };
+    return { today: sorted, focus: todayFocus, trips: allTrips };
   }, []);
 
   // 初始化上次出行方式
@@ -294,14 +303,17 @@ export default function HomeScreen() {
     if (checkingInRef.current) return;
     checkingInRef.current = true;
     setLoading(true);
+    const hadActiveBefore = hasActiveTrip;
     try {
       // 与桌面小组件「打卡」同一段数据写入逻辑（quickCheckIn）：乐观落库占位记录。
-      // UI 反馈（振动/提示/补定位）仍留在本页；写入路径单一，避免两处漂移。
-      const { id } = await quickCheckIn({ mode });
+      const { id, tripId } = await quickCheckIn({ mode });
       await setLastMode(mode);
 
       if (isEndTrip) {
         await endTrip();
+        await cancelTripReminder();
+      } else {
+        await scheduleTripReminder(t('notification.tripReminderTitle'), t('notification.tripReminderBody'));
       }
 
       setLoading(false);
@@ -318,6 +330,15 @@ export default function HomeScreen() {
       setTimeout(() => setSuccess(false), isEndTrip ? 1500 : 1200);
 
       fillLocation(id);
+
+      // 5 秒内可撤销
+      setUndoAction({
+        type: isEndTrip ? 'endTrip' : 'checkin',
+        recordId: id,
+        tripId,
+        hadActiveBefore,
+        message: isEndTrip ? t('trip.undoEnded') : t('trip.undoCheckIn'),
+      });
     } catch (e) {
       setLoading(false);
       Vibration.vibrate([0, 40, 30, 40]);
@@ -452,59 +473,105 @@ export default function HomeScreen() {
     handleCheckIn(false);
   };
 
-  // ---- 打卡点编辑 ----
-  const openRename = (record) => {
-    setRenameTarget(record);
-    setDraftName(record.locationName && record.locationName !== UNNAMED ? record.locationName : '');
-    setDraftMode(record.mode || 'walk');
-    setDraftTimestamp(record.timestamp || Date.now());
+  // ---- 显式结束当前行程 ----
+  const handleDirectEndTrip = async (tripId) => {
+    Alert.alert(t('trip.endConfirmTitle', '结束当前行程？'), t('trip.endConfirmBody', '结束后，下次打卡将开启新的行程'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('trip.end', '结束行程'),
+        style: 'destructive',
+        onPress: async () => {
+          await endTrip();
+          await cancelTripReminder();
+          await loadToday();
+          refreshTravelWidgets();
+          notifyDataChanged();
+          setUndoAction({
+            type: 'endTrip',
+            tripId,
+            message: t('trip.undoEnded'),
+          });
+        },
+      },
+    ]);
   };
-  const closeRename = () => {
-    setRenameTarget(null);
-    setDraftName('');
-    setDraftMode('walk');
-    setDraftTimestamp(Date.now());
+
+  // ---- 撤销操作（打卡或结束行程） ----
+  const handleUndo = async () => {
+    if (!undoAction) return;
+    const action = undoAction;
+    setUndoAction(null);
+    try {
+      if (action.type === 'checkin' && action.recordId) {
+        await deleteRecord(action.recordId);
+        if (!action.hadActiveBefore && action.tripId) {
+          const db = await import('../storage/store').then((m) => m.getDb());
+          const countRow = await db.getFirstAsync('SELECT COUNT(*) AS c FROM records WHERE trip_id = ?', action.tripId);
+          if (countRow && countRow.c === 0) {
+            await db.runAsync('DELETE FROM trips WHERE id = ?', action.tripId);
+          }
+        }
+      } else if (action.type === 'endTrip' && action.tripId) {
+        await setCurrentTripId(action.tripId);
+        await scheduleTripReminder(t('notification.tripReminderTitle'), t('notification.tripReminderBody'));
+      }
+      Vibration.vibrate(20);
+      await loadToday();
+      refreshTravelWidgets();
+      notifyDataChanged();
+    } catch (e) {}
   };
-  const confirmRename = async () => {
-    if (!renameTarget) return;
-    const name = draftName.trim();
-    if (!name) {
-      Alert.alert(t('home.renameEmpty'));
-      return;
-    }
-    await updateRecord(renameTarget.id, {
-      locationName: name,
-      mode: draftMode,
-      timestamp: draftTimestamp,
+
+  // ---- 打卡点编辑抽屉 ----
+  const handleSavePointEdit = async (data) => {
+    if (!data || !data.id) return;
+    await updateRecord(data.id, {
+      locationName: data.locationName,
+      mode: data.mode,
+      timestamp: data.timestamp,
     });
-    closeRename();
+    setRenameTarget(null);
+    await loadToday();
+    refreshTravelWidgets();
+  };
+
+  const handleDeletePoint = async (id) => {
+    if (!id) return;
+    await deleteRecord(id);
+    setLocStatus(null);
+    setRenameTarget(null);
     await loadToday();
     refreshTravelWidgets();
   };
 
   const handleModalEndTrip = async () => {
     await endTrip();
-    closeRename();
+    await cancelTripReminder();
+    setRenameTarget(null);
     await loadToday();
+    refreshTravelWidgets();
+    notifyDataChanged();
     Alert.alert(t('trip.endedTitle', '提示'), t('trip.endedToast'));
   };
 
-  const confirmDelete = () => {
-    if (!renameTarget) return;
-    Alert.alert(t('home.deleteTitle'), t('home.deleteBody'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          await deleteRecord(renameTarget.id);
-          setLocStatus(null);
-          closeRename();
-          await loadToday();
-          refreshTravelWidgets();
-        },
-      },
-    ]);
+  // ---- 行内快捷设常用地点 ----
+  const handleQuickName = async (recordId, placeName) => {
+    await updateRecord(recordId, { locationName: placeName });
+    await loadToday();
+    refreshTravelWidgets();
+  };
+
+  // ---- 行程重命名 ----
+  const handleSaveTripName = async (tripId, name) => {
+    await updateTripName(tripId, name);
+    setRenameTripTarget(null);
+    await loadToday();
+  };
+
+  // ---- 相邻点补一站 ----
+  const handleAddStopBetween = ({ mode: segMode }) => {
+    if (segMode) setMode(segMode);
+    setBackfillVisible(true);
   };
 
   // ---- 补记打卡（BackfillModal） ----
@@ -570,6 +637,7 @@ export default function HomeScreen() {
         duration: data.duration,
         category: data.category,
         note: data.note,
+        partial: data.partial ? 1 : 0,
       });
       Vibration.vibrate(40);
       await loadToday();
@@ -752,17 +820,32 @@ export default function HomeScreen() {
           >
             <Timeline
               records={travelRecords}
+              trips={trips}
               estimate={estimate}
-              onRename={openRename}
+              onRename={setRenameTarget}
               onShowMap={setMapTrip}
               onShowReceipt={setReceiptTrip}
-              onChangeSegmentMode={handleOpenSegmentMode}
+              onChangeSegmentMode={setSegmentTarget}
+              onEndTrip={handleDirectEndTrip}
+              onRenameTrip={setRenameTripTarget}
+              onAddStopBetween={handleAddStopBetween}
+              onQuickName={handleQuickName}
+              onDeleteRecord={handleDeletePoint}
+              commonPlaces={commonPlaces}
               hasActiveTrip={hasActiveTrip}
             />
           </ScrollView>
 
           {/* 底部操作区：出行方式 + 补记 + 打卡 */}
           <View style={styles.bottomComposer}>
+            {/* 行程进行中：接下来的出行方式指示标签 */}
+            {hasActiveTrip && (
+              <View style={styles.nextModeRow}>
+                <Ionicons name="arrow-forward-circle-outline" size={13} color={colors.primaryStrong} />
+                <Text style={styles.nextModeTitle}>{t('home.nextModeLabel', '接下来的出行方式')}</Text>
+              </View>
+            )}
+
             {/* 出行方式横滑条：9 种方式一行排开，左右滑动取用 */}
             <ScrollView
               ref={modeStripRef}
@@ -811,7 +894,7 @@ export default function HomeScreen() {
                 <Text style={styles.backfillSquareText}>{t('home.backfill')}</Text>
               </TouchableOpacity>
 
-              {/* 核心打卡主按钮（带物理下潜与环形蓄力充能） */}
+              {/* 核心打卡主按钮（状态化：开始行程 / 到达打卡） */}
               <Animated.View style={[{ flex: 1 }, { transform: [{ scale: checkinScale }] }]}>
                 <Pressable
                   style={[
@@ -893,8 +976,12 @@ export default function HomeScreen() {
                       </View>
 
                       <View style={styles.checkinTextGroup}>
-                        <Text style={styles.checkinBtnTitle}>{t('checkin.btn')}</Text>
-                        <Text style={styles.checkinBtnSub}>{t('checkin.hint')}</Text>
+                        <Text style={styles.checkinBtnTitle}>
+                          {hasActiveTrip ? t('home.btnCheckIn', '到达打卡') : t('home.btnStartTrip', '开始行程')}
+                        </Text>
+                        <Text style={styles.checkinBtnSub}>
+                          {hasActiveTrip ? t('checkin.hint') : t('home.btnPressToStart', '点击开始行程')}
+                        </Text>
                       </View>
                     </View>
                   )}
@@ -922,6 +1009,14 @@ export default function HomeScreen() {
         </View>
       )}
 
+      {/* 5 秒操作撤销浮条 */}
+      <UndoBar
+        visible={!!undoAction}
+        message={undoAction?.message}
+        onUndo={handleUndo}
+        onDismiss={() => setUndoAction(null)}
+      />
+
       {/* 补记抽屉面板 */}
       <BackfillModal
         visible={backfillVisible}
@@ -931,151 +1026,33 @@ export default function HomeScreen() {
         initialMode={mode}
       />
 
-      {/* 地名编辑弹窗 */}
-      <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={closeRename}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('home.renameTitle')}</Text>
-            <Text style={styles.dialogSub}>{t('home.renameSub')}</Text>
-            <TextInput
-              style={styles.input}
-              value={draftName}
-              onChangeText={setDraftName}
-              placeholder={t('home.renamePlaceholder')}
-              placeholderTextColor="#9A8A80"
-              autoFocus={false}
-              returnKeyType="done"
-              onSubmitEditing={confirmRename}
-            />
+      {/* 打卡点分层编辑抽屉 */}
+      <PointEditSheet
+        visible={!!renameTarget}
+        record={renameTarget}
+        commonPlaces={commonPlaces}
+        hasActiveTrip={hasActiveTrip}
+        onSave={handleSavePointEdit}
+        onDelete={handleDeletePoint}
+        onEndTrip={handleModalEndTrip}
+        onClose={() => setRenameTarget(null)}
+      />
 
-            {/* 常用地点快选 */}
-            {commonPlaces.length > 0 && (
-              <View style={styles.quickPlaceWrap}>
-                <View style={styles.chipRow}>
-                  {commonPlaces.map((place, pIdx) => {
-                    const isSelected = draftName === place;
-                    return (
-                      <TouchableOpacity
-                        key={'rename-place-' + pIdx}
-                        style={[styles.quickChip, isSelected && styles.quickChipActive]}
-                        onPress={() => setDraftName(place)}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons
-                          name="location-outline"
-                          size={12}
-                          color={isSelected ? colors.primaryStrong : colors.ink2}
-                        />
-                        <Text style={[styles.quickChipText, isSelected && styles.quickChipTextActive]}>
-                          {place}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
+      {/* 修改路段出行方式抽屉 */}
+      <SegmentModeSheet
+        visible={!!segmentTarget}
+        currentMode={segmentTarget?.mode || 'walk'}
+        onSelectMode={handleConfirmSegmentMode}
+        onClose={() => setSegmentTarget(null)}
+      />
 
-            {/* 修改打卡时间 */}
-            <Text style={styles.dialogSectionLabel}>{t('home.editTime')}</Text>
-            <View style={styles.timeEditRow}>
-              <View style={styles.timeDisplayPill}>
-                <Ionicons name="time-outline" size={16} color="#B3302C" />
-                <Text style={styles.timeDisplayText}>{formatTime(draftTimestamp)}</Text>
-              </View>
-              <View style={styles.timeOffsetBtns}>
-                {[-10, -5, 5, 10].map((delta) => (
-                  <TouchableOpacity
-                    key={'time-adj-' + delta}
-                    style={styles.timeOffsetBtn}
-                    onPress={() => setDraftTimestamp((prev) => prev + delta * 60 * 1000)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.timeOffsetBtnText}>
-                      {delta > 0 ? `+${delta}分` : `${delta}分`}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* 修改出行方式 */}
-            <Text style={styles.dialogSectionLabel}>{t('home.editMode')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dialogModeScroll}>
-              {ALL_MODES.map((m) => {
-                const isSelected = draftMode === m;
-                return (
-                  <TouchableOpacity
-                    key={'rename-mode-' + m}
-                    style={[styles.dialogModeChip, isSelected && styles.dialogModeChipActive]}
-                    onPress={() => setDraftMode(m)}
-                    activeOpacity={0.7}
-                  >
-                    <ModeIcon mode={m} size={15} color={isSelected ? colors.primaryStrong : colors.ink2} />
-                    <Text style={[styles.dialogModeChipText, isSelected && styles.dialogModeChipTextActive]}>
-                      {t('mode.' + m)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            {/* 设为终点与删除 */}
-            <View style={styles.dialogActionRow}>
-              {hasActiveTrip && (
-                <TouchableOpacity style={styles.endTripBtn} onPress={handleModalEndTrip}>
-                  <Ionicons name="flag-outline" size={14} color="#5C4B43" />
-                  <Text style={styles.endTripBtnText}>{t('trip.markAsEnd')}</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.deleteLink} onPress={confirmDelete}>
-                <Ionicons name="trash-outline" size={14} color="#D63B3B" />
-                <Text style={styles.deleteLinkText}>{t('home.deleteBtn')}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* 确认 / 取消 */}
-            <View style={styles.dialogButtons}>
-              <TouchableOpacity style={styles.dialogBtnCancel} onPress={closeRename}>
-                <Text style={styles.dialogBtnCancelText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.dialogBtnConfirm} onPress={confirmRename}>
-                <Text style={styles.dialogBtnConfirmText}>{t('common.save')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 修改路段出行方式弹窗 */}
-      <Modal visible={!!segmentTarget} transparent animationType="fade" onRequestClose={() => setSegmentTarget(null)}>
-        <View style={styles.overlay}>
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>{t('home.changeSegmentMode')}</Text>
-            <View style={styles.segModeGrid}>
-              {ALL_MODES.map((m) => {
-                const isCur = (segmentTarget?.mode || 'walk') === m;
-                return (
-                  <TouchableOpacity
-                    key={'seg-mode-' + m}
-                    style={[styles.segModeItem, isCur && styles.segModeItemActive]}
-                    onPress={() => handleConfirmSegmentMode(m)}
-                    activeOpacity={0.7}
-                  >
-                    <ModeIcon mode={m} size={18} color={isCur ? colors.primaryStrong : colors.ink2} />
-                    <Text style={[styles.segModeText, isCur && styles.segModeTextActive]}>
-                      {t('mode.' + m)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <TouchableOpacity style={styles.dialogBtnCancelFull} onPress={() => setSegmentTarget(null)}>
-              <Text style={styles.dialogBtnCancelText}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* 行程命名弹窗 */}
+      <TripRenameModal
+        visible={!!renameTripTarget}
+        trip={renameTripTarget}
+        onSave={handleSaveTripName}
+        onClose={() => setRenameTripTarget(null)}
+      />
 
       {/* 轨迹地图模态框 */}
       {mapTrip && (
@@ -1207,6 +1184,18 @@ const makeStyles = (colors, isDark) =>
       shadowOpacity: 0.07,
       shadowRadius: 14,
       elevation: 8,
+    },
+    nextModeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginBottom: 6,
+      paddingHorizontal: 2,
+    },
+    nextModeTitle: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.primaryStrong,
     },
     modesStrip: {
       marginBottom: 10,

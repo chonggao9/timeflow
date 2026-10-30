@@ -127,8 +127,8 @@ test('buildPackage 结构与 counts 正确；凭证键不在白名单内', () =>
   assert.strictEqual(pkg.device, 'Pixel 7');
   assert.deepStrictEqual(pkg.counts, { records: 2, focus: 1, trips: 1 });
   assert.deepStrictEqual(extractCounts(sampleData), { records: 2, focus: 1, trips: 1 });
-  // 白名单只含 4 个偏好键，任何凭证键都不在其中
-  assert.deepStrictEqual(PREF_KEYS, ['timeflow_profile', 'timeflow_lang', 'timeflow_theme', 'timeflow_mode']);
+  // 白名单只含偏好键，任何凭证键都不在其中
+  assert.deepStrictEqual(PREF_KEYS, ['timeflow_profile', 'timeflow_lang', 'timeflow_theme', 'timeflow_skin', 'timeflow_mode']);
   assert.ok(!PREF_KEYS.some((k) => /amap|webdav|passphrase|password/i.test(k)));
   // prefs 原样进 data.prefs
   assert.strictEqual(pkg.data.prefs.timeflow_lang, 'zh');

@@ -3,6 +3,7 @@
 // App 彻底被杀时由 AppState 回前台、小组件点击前置结算、30分钟系统心跳兜底。
 import { settleAndPersist } from './settle';
 import { refreshPomodoroWidgets, refreshAllWidgets } from '../utils/widgetRefresh';
+import { syncWidgetSnapshot } from '../storage/store';
 
 let endTimer = null;
 let midnightTimer = null;
@@ -59,6 +60,7 @@ export function initMidnightSchedule() {
     midnightTimer = null;
     try {
       await settleAndPersist(Date.now());
+      await syncWidgetSnapshot(Date.now());
       await refreshAllWidgets();
     } catch (e) {}
     initMidnightSchedule(); // 排期下一天

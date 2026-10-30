@@ -1,3 +1,4 @@
+// @ts-check
 // 番茄专注状态机（纯函数，零 import）。
 // App（PomodoroTimer）与桌面小组件 headless 任务共用同一份状态：
 // 持久化于 AsyncStorage（见 stateStore.js），以 endAt 时间戳为准，杀进程可恢复。
@@ -16,6 +17,10 @@ export const LEGACY_ACTIVE_KEY = 'timeflow_active_focus';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+/**
+ * @param {import('../types').PomodoroState} state
+ * @returns {number}
+ */
 export function durationMs(state) {
   if (state.mode === 'short') return SHORT_MS;
   if (state.mode === 'long') return LONG_MS;
@@ -28,6 +33,10 @@ export function todayKey(now) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+/**
+ * @param {object} [opts]
+ * @returns {import('../types').PomodoroState}
+ */
 export function createState(opts = {}) {
   const now = opts.now || 0;
   const focusMin = clamp(opts.focusMin || FOCUS_DEFAULT_MIN, FOCUS_MIN_LIMIT, FOCUS_MAX_LIMIT);
@@ -129,11 +138,16 @@ export function nextModeAfterEnd(state) {
   return 'focus';
 }
 
+/**
+ * @param {import('../types').PomodoroState} state
+ * @param {number} now
+ * @returns {{ state: import('../types').PomodoroState, harvested: import('../types').Harvest | null }}
+ */
 export function settle(state, now) {
   // 唯一的状态迁移出口。未结束→原样返回（幂等）；已结束→推进模式循环。
   // harvested 非空 = App 侧应补显收获页（手动保存才写 focus_sessions）。
   if (!isEnded(state, now)) return { state, harvested: null };
-  const endedAt = state.endAt;
+  const endedAt = /** @type {number} */ (state.endAt);
   const s = withDay({ ...state }, endedAt); // 归属日按结束时刻算
   const base = {
     ...s,

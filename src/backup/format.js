@@ -1,3 +1,4 @@
+// @ts-check
 // 备份文件 V2 格式：构建 / 文件名校验解析 / 导入校验。
 // 纯函数模块（不依赖 RN/expo），可在 node 测试脚本中直接 require。
 //
@@ -17,6 +18,7 @@ export const PREF_KEYS = [
   'timeflow_profile',
   'timeflow_lang',
   'timeflow_theme',
+  'timeflow_skin',
   'timeflow_mode',
 ];
 
@@ -53,7 +55,13 @@ export function extractCounts(data) {
   };
 }
 
-// 组装完整备份包（明文对象，调用方负责序列化）
+/**
+ * 组装完整备份包（明文对象，调用方负责序列化）
+ * @param {{ records?: import('../types').TravelRecord[], trips?: import('../types').Trip[], focusSessions?: import('../types').FocusSession[] }} [data]
+ * @param {Record<string, any>} [prefs]
+ * @param {{ createdAt?: string, device?: string }} [meta]
+ * @returns {import('../types').BackupPackage}
+ */
 export function buildPackage(data, prefs, meta = {}) {
   const payload = {
     records: Array.isArray(data?.records) ? data.records : [],
@@ -84,6 +92,8 @@ function isRowArray(arr) {
  * - 旧版加密包（含 ciphertext，app:'TimeFlow' 大写也一并拒掉）
  * - 未来版本（v !== 1）
  * - data 字段类型不符
+ * @param {unknown} raw
+ * @returns {{ ok: true, pkg: import('../types').BackupPackage } | { ok: false, pkg?: undefined }}
  */
 export function validatePackage(raw) {
   let obj = raw;
@@ -91,8 +101,9 @@ export function validatePackage(raw) {
     try { obj = JSON.parse(raw); } catch (e) { return { ok: false }; }
   }
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return { ok: false };
-  if (obj.app !== BACKUP_APP || obj.v !== BACKUP_V) return { ok: false };
-  const d = obj.data;
+  const pkg = /** @type {any} */ (obj);
+  if (pkg.app !== BACKUP_APP || pkg.v !== BACKUP_V) return { ok: false };
+  const d = pkg.data;
   if (!d || typeof d !== 'object') return { ok: false };
   if (!isRowArray(d.records) || !isRowArray(d.focusSessions)) return { ok: false };
   // trips 行主键为 id + startTs（无 timestamp 字段），单独校验
@@ -100,5 +111,5 @@ export function validatePackage(raw) {
     return { ok: false };
   }
   if (d.prefs != null && (typeof d.prefs !== 'object' || Array.isArray(d.prefs))) return { ok: false };
-  return { ok: true, pkg: obj };
+  return { ok: true, pkg: /** @type {import('../types').BackupPackage} */ (pkg) };
 }

@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useEffect } from 'react';
 import { Pressable, Text, StyleSheet, View, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { shadow, radius } from '../theme';
+import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
+import { radius } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
 
@@ -96,6 +97,8 @@ export default function CheckInButton({ onPress, onLongPress, loading, success }
     outputRange: [0, 0.15, 0.4],
   });
 
+  const onPrimaryColor = colors.onPrimary || '#FFFFFF';
+
   return (
     <View style={styles.container}>
       <Animated.View style={[{ width: '100%' }, { transform: [{ scale: pressScale }, { scale: bounceAnim }] }]}>
@@ -112,6 +115,21 @@ export default function CheckInButton({ onPress, onLongPress, loading, success }
           delayLongPress={500}
           disabled={loading || isSuccess}
         >
+          {/* 135° SVG 渐变底色 (primary -> primary2) */}
+          {!isSuccess && !isEnded && (
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <Svg width="100%" height="100%">
+                <Defs>
+                  <SvgGradient id="checkInBtnGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <Stop offset="0%" stopColor={colors.primary} />
+                    <Stop offset="100%" stopColor={colors.primary2 || colors.primary} />
+                  </SvgGradient>
+                </Defs>
+                <Rect x="0" y="0" width="100%" height="100%" fill="url(#checkInBtnGrad)" />
+              </Svg>
+            </View>
+          )}
+
           {/* 长按充能内衬与底部发光条 */}
           <Animated.View
             style={[
@@ -135,9 +153,9 @@ export default function CheckInButton({ onPress, onLongPress, loading, success }
             {isSuccess ? (
               <Text style={styles.checkIcon}>{isEnded ? '🏁' : '✓'}</Text>
             ) : (
-              <Ionicons name="finger-print-outline" size={22} color="rgba(255,255,255,0.85)" style={styles.btnIcon} />
+              <Ionicons name="finger-print-outline" size={22} color={onPrimaryColor} style={[styles.btnIcon, { opacity: 0.92 }]} />
             )}
-            <Text style={[styles.label, isSuccess && styles.labelSuccess]}>{labelText}</Text>
+            <Text style={[styles.label, { color: onPrimaryColor }, isSuccess && styles.labelSuccess]}>{labelText}</Text>
           </View>
         </Pressable>
       </Animated.View>
@@ -164,7 +182,11 @@ const makeStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
     overflow: 'hidden',
-    ...shadow.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.32,
+    shadowRadius: 14,
+    elevation: 6,
   },
   buttonSuccess: {
     backgroundColor: colors.success,
@@ -178,6 +200,7 @@ const makeStyles = (colors) => StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
+    right: 0,
     bottom: 0,
     backgroundColor: '#FFFFFF',
     zIndex: 1,
@@ -207,7 +230,6 @@ const makeStyles = (colors) => StyleSheet.create({
     fontWeight: '800',
   },
   label: {
-    color: '#fff',
     fontSize: 19,
     fontWeight: '800',
     letterSpacing: 4,
@@ -215,6 +237,7 @@ const makeStyles = (colors) => StyleSheet.create({
   },
   labelSuccess: {
     letterSpacing: 1.5,
+    color: '#fff',
   },
   hintRow: {
     flexDirection: 'row',

@@ -55,6 +55,9 @@ console.log(`Auditing ${allFiles.length} source files for syntax & undeclared va
 let totalIssues = 0;
 
 for (const file of allFiles) {
+  if (file.endsWith('.d.ts')) {
+    continue;
+  }
   const code = fs.readFileSync(file, 'utf8');
   let ast;
   try {

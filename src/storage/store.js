@@ -1,3 +1,4 @@
+// @ts-check
 // 数据存储层：trips + records + focus_sessions + sync_meta。
 // AsyncStorage 仅保留纯本地偏好配置；业务数据全部进 SQLite。
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -93,7 +94,8 @@ function getDb() {
           goal_name TEXT,
           duration INTEGER NOT NULL,
           category TEXT,
-          note TEXT
+          note TEXT,
+          partial INTEGER DEFAULT 0
         );
         CREATE INDEX IF NOT EXISTS idx_focus_ts ON focus_sessions(timestamp);
         CREATE INDEX IF NOT EXISTS idx_focus_cat ON focus_sessions(category);
@@ -106,6 +108,11 @@ function getDb() {
           schema_version INTEGER NOT NULL DEFAULT 2
         );
       `);
+      try {
+        await db.execAsync('ALTER TABLE focus_sessions ADD COLUMN partial INTEGER DEFAULT 0;');
+      } catch (e) {
+        // 列已存在时静默跳过
+      }
       await initSyncMeta(db);
       return db;
     })();
@@ -332,10 +339,32 @@ export async function setLastMode(mode) {
 
 // ---------------- trips ----------------
 
+/**
+ * @returns {Promise<import('../types').Trip[]>}
+ */
 export async function getTrips() {
   const db = await getDb();
   const rows = await db.getAllAsync('SELECT id, start_ts AS startTs, end_ts AS endTs, name, is_active AS isActive, created_at AS createdAt FROM trips ORDER BY start_ts ASC');
   return rows.map(r => ({ ...r, isActive: !!r.isActive }));
+}
+
+export async function getTripById(id) {
+  if (!id) return null;
+  const db = await getDb();
+  const row = await db.getFirstAsync(
+    'SELECT id, start_ts AS startTs, end_ts AS endTs, name, is_active AS isActive, created_at AS createdAt FROM trips WHERE id = ?',
+    id
+  );
+  if (!row) return null;
+  return { ...row, isActive: !!row.isActive };
+}
+
+export async function updateTripName(id, name) {
+  if (!id) return;
+  const db = await getDb();
+  const val = name ? name.trim() : null;
+  await db.runAsync('UPDATE trips SET name = ? WHERE id = ?', val, id);
+  await bumpRevision();
 }
 
 export async function getActiveTrip() {
@@ -368,11 +397,18 @@ export async function ensureTrip() {
   if (id) return id;
   id = makeTripId();
   const now = Date.now();
-  await db.runAsync(
-    'INSERT INTO trips (id, start_ts, end_ts, name, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-    id, now, null, null, 1, now
-  );
-  return id;
+  try {
+    await db.runAsync(
+      'INSERT INTO trips (id, start_ts, end_ts, name, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      id, now, null, null, 1, now
+    );
+    return id;
+  } catch (e) {
+    // 捕获并发打卡时可能触发的 idx_trips_one_active 唯一约束冲突，重新读取胜出的 active trip
+    const activeId = await getCurrentTripId();
+    if (activeId) return activeId;
+    throw e;
+  }
 }
 
 export async function endTrip() {
@@ -396,18 +432,51 @@ export async function setCurrentTripId(id) {
 }
 
 // 根据 timestamp 查找所属 trip（用于补记/导入）。
-// 策略：找时间覆盖且未跨日/未超时的 trip；否则按相近时间创建/聚合。
+// 策略：找同一天内时间相近（<= TRIP_TIMEOUT_MS）的现有 trip 进行聚合并扩展边界；否则新建已完结 trip。
 async function findOrCreateTripForTimestamp(ts, db) {
-  const now = Date.now();
-  // 找同一天的现有 trip
-  const trips = await db.getAllAsync('SELECT id, start_ts, end_ts, is_active FROM trips WHERE start_ts <= ? AND (end_ts IS NULL OR end_ts >= ?)', ts, ts);
-  if (trips.length) {
-    const candidates = trips
-      .filter(t => now - (t.end_ts || t.start_ts) <= TRIP_TIMEOUT_MS && dayStart(now) === dayStart(t.start_ts))
-      .sort((a, b) => (b.end_ts || b.start_ts) - (a.end_ts || a.start_ts));
-    if (candidates.length) return candidates[0].id;
+  const targetDay = dayStart(ts);
+  const nextDay = targetDay + 86400000;
+  // 查找同一天的现有 trips
+  const sameDayTrips = await db.getAllAsync(
+    'SELECT id, start_ts, end_ts, is_active FROM trips WHERE start_ts >= ? AND start_ts < ?',
+    targetDay, nextDay
+  );
+
+  if (sameDayTrips && sameDayTrips.length) {
+    // 1. 优先找时间落在 start_ts 和 end_ts 之间的现有 trip
+    const containing = sameDayTrips.find(t => ts >= t.start_ts && (t.end_ts === null || ts <= t.end_ts));
+    if (containing) return containing.id;
+
+    // 2. 找与该点距离最近且 <= TRIP_TIMEOUT_MS 的同天 trip
+    let bestTrip = null;
+    let minDiff = Infinity;
+    for (const t of sameDayTrips) {
+      const start = t.start_ts;
+      const end = t.end_ts !== null ? t.end_ts : t.start_ts;
+      let diff = 0;
+      if (ts < start) {
+        diff = start - ts;
+      } else if (ts > end) {
+        diff = ts - end;
+      }
+      if (diff <= TRIP_TIMEOUT_MS && diff < minDiff) {
+        minDiff = diff;
+        bestTrip = t;
+      }
+    }
+
+    if (bestTrip) {
+      // 扩展该 trip 的起止边界（若需要）
+      if (ts < bestTrip.start_ts) {
+        await db.runAsync('UPDATE trips SET start_ts = ? WHERE id = ?', ts, bestTrip.id);
+      } else if (bestTrip.end_ts !== null && ts > bestTrip.end_ts && bestTrip.is_active === 0) {
+        await db.runAsync('UPDATE trips SET end_ts = ? WHERE id = ?', ts, bestTrip.id);
+      }
+      return bestTrip.id;
+    }
   }
-  // 新建 trip
+
+  // 没有同一天在超时范围内的行程，新建非活跃行程
   const id = makeTripId();
   await db.runAsync(
     'INSERT INTO trips (id, start_ts, end_ts, name, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -420,6 +489,9 @@ async function findOrCreateTripForTimestamp(ts, db) {
 
 const RECORD_COLS = 'id, timestamp, location_name AS locationName, lat, lng, mode, trip_id AS tripId';
 
+/**
+ * @returns {Promise<import('../types').TravelRecord[]>}
+ */
 export async function getRecords() {
   const db = await getDb();
   return db.getAllAsync(`SELECT ${RECORD_COLS} FROM records ORDER BY timestamp ASC`);
@@ -441,6 +513,10 @@ export async function getRecordById(id) {
   return db.getFirstAsync(`SELECT ${RECORD_COLS} FROM records WHERE id = ?`, id);
 }
 
+/**
+ * @param {import('../types').TravelRecord} record
+ * @returns {Promise<void>}
+ */
 export async function saveRecord(record) {
   const db = await getDb();
   let tripId = record.tripId;
@@ -503,8 +579,11 @@ export async function getRecentRecordsForWidget(days = 60, now = Date.now()) {
 
 // ---------------- focus_sessions ----------------
 
-const FOCUS_COLS = 'id, timestamp, goal_name AS goalName, duration, category, note';
+const FOCUS_COLS = 'id, timestamp, goal_name AS goalName, duration, category, note, COALESCE(partial, 0) AS partial';
 
+/**
+ * @returns {Promise<import('../types').FocusSession[]>}
+ */
 export async function getFocusSessions() {
   const db = await getDb();
   return db.getAllAsync(`SELECT ${FOCUS_COLS} FROM focus_sessions ORDER BY timestamp ASC`);
@@ -598,14 +677,18 @@ export async function syncWidgetSnapshot(now = Date.now()) {
 // 兼容别名
 export const syncWidgetFocusStats = syncWidgetSnapshot;
 
+/**
+ * @param {import('../types').FocusSession & { locationName?: string | null }} record
+ * @returns {Promise<void>}
+ */
 export async function saveFocusSession(record) {
   const db = await getDb();
   await db.runAsync(
-    'INSERT INTO focus_sessions (id, timestamp, goal_name, duration, category, note) VALUES (?, ?, ?, ?, ?, ?)',
-    record.id, record.timestamp, record.goalName ?? record.locationName ?? null, record.duration ?? 0, record.category ?? null, record.note ?? null
+    'INSERT INTO focus_sessions (id, timestamp, goal_name, duration, category, note, partial) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    record.id, record.timestamp, record.goalName ?? record.locationName ?? null, record.duration ?? 0, record.category ?? null, record.note ?? null, record.partial ? 1 : 0
   );
   await bumpRevision();
-  await syncWidgetSnapshot(record.timestamp || Date.now()).catch(() => {});
+  await syncWidgetSnapshot(Date.now()).catch(() => {});
 }
 
 export async function updateFocusSession(id, patch) {
@@ -714,6 +797,11 @@ export async function clearAll() {
   }
   await AsyncStorage.multiRemove([RECORDS_KEY, RECORDS_REV_KEY]);
   await bumpRevision();
+  await syncWidgetSnapshot().catch(() => {});
+  try {
+    const { refreshAllWidgets } = require('../utils/widgetRefresh');
+    refreshAllWidgets?.();
+  } catch (e) {}
 }
 
 // 共享插入逻辑（须在事务内调用）：replaceAllData 与 importRecords 复用，
@@ -778,8 +866,8 @@ async function insertPayloadRows(db, payload) {
   }
   for (const f of focusSessions) {
     await db.runAsync(
-      'INSERT OR IGNORE INTO focus_sessions (id, timestamp, goal_name, duration, category, note) VALUES (?, ?, ?, ?, ?, ?)',
-      f.id, f.timestamp, f.goalName ?? f.goal_name ?? f.locationName ?? null, f.duration ?? 0, f.category ?? null, f.note ?? null
+      'INSERT OR IGNORE INTO focus_sessions (id, timestamp, goal_name, duration, category, note, partial) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      f.id, f.timestamp, f.goalName ?? f.goal_name ?? f.locationName ?? null, f.duration ?? 0, f.category ?? null, f.note ?? null, f.partial ? 1 : 0
     );
   }
 }

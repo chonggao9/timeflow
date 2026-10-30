@@ -7,12 +7,18 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const CHANNEL_ID = 'pomodoro-end';
+export const CHANNEL_SOUND = 'pomodoro-end-sound';
+export const CHANNEL_VIBRATE = 'pomodoro-end-vibrate';
+export const CHANNEL_SILENT = 'pomodoro-end-silent';
 export const LANG_KEY = 'timeflow_lang';
 export const FEEDBACK_KEY = 'timeflow_focus_feedback_type';
 
 const NOTIF_STRINGS = {
   zh: {
     channelName: '番茄钟结束提醒',
+    channelSoundName: '番茄钟提醒（声音+震动）',
+    channelVibrateName: '番茄钟提醒（仅震动）',
+    channelSilentName: '番茄钟提醒（静音）',
     focusTitle: '收获一颗番茄',
     focusBody: '番茄钟时间到了，快来查看你的收获吧',
     restTitle: '休息结束',
@@ -22,6 +28,9 @@ const NOTIF_STRINGS = {
   },
   en: {
     channelName: 'Pomodoro Timer Alert',
+    channelSoundName: 'Pomodoro Alert (Sound & Vibrate)',
+    channelVibrateName: 'Pomodoro Alert (Vibrate only)',
+    channelSilentName: 'Pomodoro Alert (Silent)',
     focusTitle: 'Pomodoro Complete',
     focusBody: 'Time is up! Tap to record your focus session',
     restTitle: 'Break is over',
@@ -66,6 +75,29 @@ export function ensureNotificationSetup() {
     });
     getLang().then((lang) => {
       const s = NOTIF_STRINGS[lang] || NOTIF_STRINGS.zh;
+      // 1. 声音+震动渠道 (HIGH)
+      Notifications.setNotificationChannelAsync(CHANNEL_SOUND, {
+        name: s.channelSoundName,
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
+      }).catch(() => {});
+      // 2. 仅震动渠道 (HIGH, 无声音)
+      Notifications.setNotificationChannelAsync(CHANNEL_VIBRATE, {
+        name: s.channelVibrateName,
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: null,
+        enableVibrate: true,
+        vibrationPattern: [0, 250, 250, 250],
+      }).catch(() => {});
+      // 3. 静音渠道 (LOW, 无声音无震动)
+      Notifications.setNotificationChannelAsync(CHANNEL_SILENT, {
+        name: s.channelSilentName,
+        importance: Notifications.AndroidImportance.LOW,
+        sound: null,
+        enableVibrate: false,
+      }).catch(() => {});
+      // 兼容旧渠道
       Notifications.setNotificationChannelAsync(CHANNEL_ID, {
         name: s.channelName,
         importance: Notifications.AndroidImportance.HIGH,
@@ -86,12 +118,12 @@ function defaultTexts(state, lang = 'zh') {
   return { title: s.restTitle, body: s.restBody };
 }
 
-async function isSoundEnabled() {
+async function getFeedbackType() {
   try {
     const feedback = await AsyncStorage.getItem(FEEDBACK_KEY);
-    return feedback !== 'silent' && feedback !== 'vibrate';
+    return feedback === 'vibrate' || feedback === 'silent' ? feedback : 'sound';
   } catch (e) {
-    return true;
+    return 'sound';
   }
 }
 
@@ -105,14 +137,23 @@ export async function scheduleEndNotification(state, texts) {
       const lang = await getLang();
       resolvedTexts = defaultTexts(state, lang);
     }
-    const hasSound = await isSoundEnabled();
+    const feedback = await getFeedbackType();
+    let channelId = CHANNEL_SOUND;
+    let playSound = true;
+    if (feedback === 'vibrate') {
+      channelId = CHANNEL_VIBRATE;
+      playSound = false;
+    } else if (feedback === 'silent') {
+      channelId = CHANNEL_SILENT;
+      playSound = false;
+    }
     return await Notifications.scheduleNotificationAsync({
       content: {
         title: resolvedTexts.title,
         body: resolvedTexts.body,
-        sound: hasSound ? 'default' : false,
+        sound: playSound ? 'default' : false,
       },
-      trigger: { type: 'date', date: new Date(state.endAt), channelId: CHANNEL_ID },
+      trigger: { type: 'date', date: new Date(state.endAt), channelId },
     });
   } catch (e) {
     return null;
@@ -160,14 +201,23 @@ export async function schedulePauseReminder(minutes = 10, customTexts) {
       resolvedTexts = { title: s.pauseTitle, body: s.pauseBody };
     }
     const triggerDate = new Date(Date.now() + Math.max(1, minutes) * 60 * 1000);
-    const hasSound = await isSoundEnabled();
+    const feedback = await getFeedbackType();
+    let channelId = CHANNEL_SOUND;
+    let playSound = true;
+    if (feedback === 'vibrate') {
+      channelId = CHANNEL_VIBRATE;
+      playSound = false;
+    } else if (feedback === 'silent') {
+      channelId = CHANNEL_SILENT;
+      playSound = false;
+    }
     return await Notifications.scheduleNotificationAsync({
       content: {
         title: resolvedTexts.title,
         body: resolvedTexts.body,
-        sound: hasSound ? 'default' : false,
+        sound: playSound ? 'default' : false,
       },
-      trigger: { type: 'date', date: triggerDate, channelId: CHANNEL_ID },
+      trigger: { type: 'date', date: triggerDate, channelId },
     });
   } catch (e) {
     return null;

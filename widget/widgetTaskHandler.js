@@ -7,7 +7,7 @@ import { FlexWidget, TextWidget } from 'react-native-android-widget';
 
 import { widgetGroup, POMODORO_WIDGETS, TRAVEL_WIDGETS } from './widgetNames';
 import { buildFocusData, buildTravelData, buildLegacyData, loadWidgetSnapshot } from './widgetData';
-import { WIDGET_SNAPSHOT_KEY } from '../src/storage/store';
+import { WIDGET_SNAPSHOT_KEY, getLastMode, syncWidgetSnapshot } from '../src/storage/store';
 import { widgetJsx, refreshWidgets } from '../src/utils/widgetRefresh';
 import { handlePomodoroAction } from './pomodoroActions';
 import { checkInHeadless } from '../src/services/quickCheckIn';
@@ -150,12 +150,13 @@ export const widgetTaskHandler = async (props) => {
         lastCheckInTime = now;
 
         // 1) 点击即时反馈：乐观预更新快照并立即重绘自身（<50ms 响应，不卡顿）
+        const mode = await getLastMode();
         try {
           const snap = await loadWidgetSnapshot();
           if (snap && snap.travel) {
             const optList = [
               ...(snap.travel.todayRecords || []),
-              { id: `opt-${now}`, timestamp: now, locationName: null, mode: 'walk' },
+              { id: `opt-${now}`, timestamp: now, locationName: null, mode },
             ];
             const nextSnap = {
               ...snap,
@@ -174,9 +175,14 @@ export const widgetTaskHandler = async (props) => {
         }
 
         // 2) 真实后台落库与补位（复用 App 内部的 quickCheckIn）
-        const checkInId = await checkInHeadless({ mode: 'walk', timestamp: now });
+        const checkInId = await checkInHeadless({ mode, timestamp: now });
         if (!checkInId) {
+          // N9: 真实打卡失败，重新同步快照以回滚虚假的 opt- 记录
           await recordLastError(name, new Error('CheckIn failed'));
+          await syncWidgetSnapshot().catch(() => {});
+        } else {
+          // 真实打卡成功，刷新快照将 opt- 占位替换为真实入库记录
+          await syncWidgetSnapshot().catch(() => {});
         }
         await renderSelf(props);
         await refreshSiblings(TRAVEL_WIDGETS, name);

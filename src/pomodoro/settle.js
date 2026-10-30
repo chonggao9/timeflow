@@ -1,3 +1,4 @@
+// @ts-check
 // 番茄结算编排：App 前台与 widget headless 共用。
 // 已决策「保持手动保存」：结算只推进状态机（completedToday++、模式循环、pendingHarvests 入队），
 // 永不写 focus_sessions——落库仍由 App 收获页手动保存这一条路径（store.js 零改动）。

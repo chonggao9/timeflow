@@ -1,3 +1,4 @@
+// @ts-check
 // 番茄状态持久化层：AsyncStorage IO + 旧 key 一次性迁移 + CAS 乐观锁。
 // App（PomodoroTimer）与 widget headless 任务共用；engine.js 的纯函数不碰 IO。
 // AsyncStorage 惰性 require：让 scripts/test_pomodoro.js 能在纯 node 下注入假 storage
@@ -44,7 +45,11 @@ async function migrateLegacy(now) {
   return normalizeState(legacy, now, { completedToday });
 }
 
-// 读状态。永不 throw：STATE_KEY miss → 尝试旧 key 迁移（成功即落盘）→ 兜底 createState。
+/**
+ * 读状态。永不 throw：STATE_KEY miss → 尝试旧 key 迁移（成功即落盘）→ 兜底 createState。
+ * @param {number} [now]
+ * @returns {Promise<import('../types').PomodoroState>}
+ */
 export async function loadState(now = Date.now()) {
   const saved = await readJson(STATE_KEY);
   if (saved) return normalizeState(saved, now);
@@ -56,7 +61,11 @@ export async function loadState(now = Date.now()) {
   return createState({ now });
 }
 
-// 写状态：自动刷新 updatedAt（乐观锁版本号）。
+/**
+ * 写状态：自动刷新 updatedAt（乐观锁版本号）。
+ * @param {import('../types').PomodoroState} state
+ * @returns {Promise<import('../types').PomodoroState>}
+ */
 export async function saveState(state) {
   const next = { ...state, updatedAt: Date.now() };
   try {
@@ -67,8 +76,13 @@ export async function saveState(state) {
   return next;
 }
 
-// CAS 保存：重读 → updatedAt 与期望一致才应用变换并写入。
-// 不一致（App 与 headless 并发操作）返回 ok:false，调用方须重读重推导。
+/**
+ * CAS 保存：重读 → updatedAt 与期望一致才应用变换并写入。
+ * 不一致（App 与 headless 并发操作）返回 ok:false，调用方须重读重推导。
+ * @param {number} expectedUpdatedAt
+ * @param {(cur: import('../types').PomodoroState) => import('../types').PomodoroState} fn
+ * @returns {Promise<{ ok: true, state: import('../types').PomodoroState } | { ok: false, state: import('../types').PomodoroState }>}
+ */
 export async function saveStateCAS(expectedUpdatedAt, fn) {
   const current = await loadState();
   if (current.updatedAt !== expectedUpdatedAt) {

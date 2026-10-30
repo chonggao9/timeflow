@@ -1,0 +1,30 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": false,
+    "strictNullChecks": true,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src",
+    "widget",
+    "modules",
+    "App.js",
+    "index.js",
+    "src/types.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "android",
+    "plugins",
+    "scripts",
+    "docs",
+    "store_assets",
+    "**/*.test.js"
+  ]
+}

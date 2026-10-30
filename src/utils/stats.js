@@ -1,3 +1,4 @@
+// @ts-check
 // ---- 基础统计 ----
 export function median(arr) {
   if (!arr.length) return null;
@@ -31,6 +32,10 @@ export function isPlaceholderName(name) {
 // ---- 地点聚类 ----
 // 有真名优先按名字归并（改地名立即生效、一个点多个名字各自成条）；占位名（未命名）且
 // 有坐标仍按坐标格点（约 0.005° ≈ 550m 一格）分开，避免一堆"未命名"坍缩成一团。
+/**
+ * @param {Partial<import('../types').TravelRecord> | null | undefined} r
+ * @returns {string}
+ */
 export function placeKey(r) {
   const name = r?.locationName;
   if (name && !isPlaceholderName(name)) return `n:${name}`;

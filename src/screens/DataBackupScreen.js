@@ -510,7 +510,7 @@ const makeStyles = (colors) => StyleSheet.create({
   bannerBtnText: { color: '#FFFFFF', fontSize: 12.5, fontWeight: '700' },
 
   mainBtn: { height: 52, borderRadius: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 18, overflow: 'hidden' },
-  mainBtnText: { color: '#FFFFFF', fontSize: 15.5, fontWeight: '800' },
+  mainBtnText: { color: colors.onPrimary || '#FFFFFF', fontSize: 15.5, fontWeight: '800' },
   progressTrack: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: 0.25 },
   progressFill: { width: 90, height: '100%', backgroundColor: '#FFFFFF', borderRadius: 26 },
 

@@ -1,8 +1,13 @@
+// @ts-check
 // 数据内容哈希：用于「数据没有变化就不生成新备份」的跳过判定。
 // 纯函数模块（仅依赖 crypto-js），可在 node 测试脚本中直接 require。
 // 沿用旧版规范化思路：只取参与一致性对比的稳定字段，忽略易变外部量。
 import CryptoJS from 'crypto-js';
 
+/**
+ * @param {{ records?: any[], trips?: any[], focusSessions?: any[], prefs?: any }} [data]
+ * @returns {string}
+ */
 export function computeContentHash(data) {
   const normTrips = (data?.trips || []).map((t) => ({
     id: t.id, start: t.startTs ?? t.start_ts, end: t.endTs ?? t.end_ts, name: t.name ?? null,

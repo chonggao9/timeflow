@@ -1,3 +1,4 @@
+// @ts-check
 // 真 CSV 导出（可用 Excel 打开）：纯字符串构建，不依赖 RN/expo，可 node 测试。
 // 写入文件时由调用方在最前面加 UTF-8 BOM（﻿），保证 Excel 中文不乱码。
 
@@ -26,6 +27,9 @@ function row(cells) {
  * data: { trips, records, focusSessions }（collectData() 的输出子集）。
  * opts: { lang: 'zh'|'en', now: Date }
  * 三段结构：打卡 / 专注 / 行程，段间空行分隔。
+ * @param {{ records?: import('../types').TravelRecord[], trips?: import('../types').Trip[], focusSessions?: import('../types').FocusSession[] }} [data]
+ * @param {{ lang?: 'zh'|'en', now?: Date }} [opts]
+ * @returns {string}
  */
 export function buildCsv(data, opts = {}) {
   const zh = (opts.lang || 'zh') !== 'en';
@@ -50,10 +54,18 @@ export function buildCsv(data, opts = {}) {
 
   L.push(row([zh ? '【专注】' : '[Focus sessions]']));
   L.push(row(zh
-    ? ['ID', '时间', '目标', '时长（秒）', '分类', '备注']
-    : ['ID', 'Time', 'Goal', 'Duration (s)', 'Category', 'Note']));
+    ? ['ID', '时间', '目标', '时长（秒）', '分类', '备注', '提前结束']
+    : ['ID', 'Time', 'Goal', 'Duration (s)', 'Category', 'Note', 'Partial']));
   for (const f of focus) {
-    L.push(row([f.id, ts(f.timestamp), f.goalName, f.duration, f.category, f.note]));
+    L.push(row([
+      f.id,
+      ts(f.timestamp),
+      f.goalName,
+      f.duration,
+      f.category,
+      f.note,
+      f.partial ? (zh ? '是' : 'Yes') : (zh ? '否' : 'No')
+    ]));
   }
   L.push('');
 

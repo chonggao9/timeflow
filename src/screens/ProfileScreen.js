@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,10 @@ import {
   TextInput,
   Linking,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
+import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -67,8 +70,8 @@ function Row({ icon, label, value, onPress, danger, iconColor, iconBg }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const defaultIconColor = '#9A6B4B';
-  const defaultIconBg = '#F6ECE2';
+  const defaultIconColor = colors.ico;
+  const defaultIconBg = colors.icoBg;
 
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6}>
@@ -106,8 +109,22 @@ const THEME_OPTIONS = [
 export default function ProfileScreen({ route }) {
   const insets = useSafeAreaInsets();
   const { t, lang, isSystem, setLang } = useI18n();
-  const { colors, theme, skin, skins, isSystem: themeIsSystem, setTheme, setSkin, isSkinUnlocked } = useTheme();
+  const { colors, theme, skin, skins, isSystem: themeIsSystem, isDark, setTheme, setSkin } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const skinFadeAnim = useRef(new Animated.Value(1)).current;
+
+  const handleSelectSkin = (skinId) => {
+    if (skinId === skin) return;
+    skinFadeAnim.setValue(0.6);
+    setSkin(skinId);
+    Animated.timing(skinFadeAnim, {
+      toValue: 1,
+      duration: 280,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  };
 
   const [nickname, setNickname] = useState('');
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -431,55 +448,57 @@ export default function ProfileScreen({ route }) {
               })}
             </View>
 
-            {/* 2. 色彩皮肤 */}
+            {/* 2. 色彩皮肤（横向 3 张迷你首页预览卡） */}
             <Text style={styles.themeSectionTitle}>{t('theme.skinSection')}</Text>
-            <View style={styles.skinsGrid}>
+            <Animated.View style={[styles.skinsRow, { opacity: skinFadeAnim }]}>
               {(skins || []).map((s) => {
                 const active = skin === s.id;
-                const unlocked = isSkinUnlocked ? isSkinUnlocked(s.id, streakDays) : true;
+                const sTokens = isDark ? s.dark : s.light;
                 return (
                   <TouchableOpacity
                     key={s.id}
                     style={[
                       styles.skinCard,
                       active && styles.skinCardActive,
-                      !unlocked && styles.skinCardLocked,
                     ]}
-                    onPress={() => {
-                      if (!unlocked) {
-                        Alert.alert(
-                          t(s.nameKey),
-                          t('theme.streakDaysLeft', { n: Math.max(0, (s.unlockDays || 0) - streakDays) })
-                        );
-                        return;
-                      }
-                      setSkin(s.id);
-                    }}
-                    activeOpacity={0.7}
+                    onPress={() => handleSelectSkin(s.id)}
+                    activeOpacity={0.8}
                   >
-                    <View style={[styles.skinSwatchOuter, { borderColor: s.colorPreview }]}>
-                      <View style={[styles.skinSwatchInner, { backgroundColor: s.colorPreview }]} />
+                    {/* 迷你首页预览视口 */}
+                    <View style={[styles.miniScreen, { backgroundColor: sTokens.background, borderColor: sTokens.divider }]}>
+                      {/* 迷你卡片 */}
+                      <View style={[styles.miniCard, { backgroundColor: sTokens.card, borderColor: sTokens.divider }]}>
+                        <View style={[styles.miniAccentDot, { backgroundColor: sTokens.accent }]} />
+                        <View style={[styles.miniCardLine, { backgroundColor: sTokens.textSecondary, opacity: 0.35 }]} />
+                      </View>
+                      {/* 迷你打卡渐变按钮 */}
+                      <View style={[styles.miniButton, { backgroundColor: sTokens.primary }]}>
+                        <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
+                          <Defs>
+                            <SvgGradient id={`miniGrad-${s.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                              <Stop offset="0%" stopColor={sTokens.primary} />
+                              <Stop offset="100%" stopColor={sTokens.primary2 || sTokens.primary} />
+                            </SvgGradient>
+                          </Defs>
+                          <Rect x="0" y="0" width="100%" height="100%" rx={4} ry={4} fill={`url(#miniGrad-${s.id})`} />
+                        </Svg>
+                        <View style={[styles.miniBtnInnerDot, { backgroundColor: sTokens.onPrimary || '#FFF' }]} />
+                      </View>
                     </View>
-                    <View style={styles.skinInfo}>
-                      <Text
-                        style={[styles.skinName, active && styles.skinNameActive]}
-                        numberOfLines={1}
-                      >
+
+                    {/* 下方标题与选中状态 */}
+                    <View style={styles.skinBottomRow}>
+                      <Text style={[styles.skinName, active && styles.skinNameActive]} numberOfLines={1}>
                         {t(s.nameKey)}
                       </Text>
-                      {!unlocked && (
-                        <Text style={styles.skinLockedLabel} numberOfLines={1}>
-                          {t('theme.skinUnlockDays', { days: s.unlockDays })}
-                        </Text>
+                      {active && (
+                        <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
                       )}
                     </View>
-                    {active && (
-                      <Ionicons name="checkmark-circle" size={17} color={colors.primary} />
-                    )}
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </Animated.View>
 
             <TouchableOpacity
               style={styles.dialogCloseBtn}
@@ -805,7 +824,7 @@ const makeStyles = (colors) => StyleSheet.create({
   dialogCancel: { backgroundColor: colors.chip },
   dialogCancelText: { fontSize: 14, color: colors.ink2, fontWeight: '600' },
   dialogOk: { backgroundColor: colors.primary },
-  dialogOkText: { fontSize: 14, color: '#fff', fontWeight: '700' },
+  dialogOkText: { fontSize: 14, color: colors.onPrimary || '#fff', fontWeight: '700' },
   langOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -856,61 +875,83 @@ const makeStyles = (colors) => StyleSheet.create({
     color: colors.primary,
     fontWeight: '700',
   },
-  skinsGrid: {
+  skinsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    gap: 8,
   },
   skinCard: {
-    width: '48.5%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 13,
+    flex: 1,
+    padding: 6,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: colors.divider,
     backgroundColor: colors.card,
-    marginBottom: 8,
+    alignItems: 'center',
   },
   skinCardActive: {
     borderColor: colors.primary,
     backgroundColor: colors.primaryTint,
   },
-  skinCardLocked: {
-    opacity: 0.65,
+  miniScreen: {
+    width: '100%',
+    height: 72,
+    borderRadius: 9,
+    borderWidth: 1,
+    padding: 6,
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+    position: 'relative',
   },
-  skinSwatchOuter: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
+  miniCard: {
+    width: '100%',
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 0.5,
+    paddingHorizontal: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  miniAccentDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  miniCardLine: {
+    flex: 1,
+    height: 3,
+    borderRadius: 1.5,
+  },
+  miniButton: {
+    width: '100%',
+    height: 16,
+    borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 6,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  skinSwatchInner: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+  miniBtnInnerDot: {
+    width: 6,
+    height: 2,
+    borderRadius: 1,
   },
-  skinInfo: {
-    flex: 1,
+  skinBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 6,
+    gap: 3,
   },
   skinName: {
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.textPrimary,
   },
   skinNameActive: {
     color: colors.primary,
     fontWeight: '700',
-  },
-  skinLockedLabel: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    marginTop: 1,
   },
   dialogCloseBtn: {
     marginTop: 14,
@@ -923,6 +964,6 @@ const makeStyles = (colors) => StyleSheet.create({
   dialogCloseText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.onPrimary || '#FFFFFF',
   },
 });

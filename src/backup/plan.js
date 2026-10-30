@@ -1,3 +1,4 @@
+// @ts-check
 // 纯决策函数：保留策略（prune）与恢复预览（replace/merge 条数）。
 // 不依赖 RN/expo，可在 node 测试脚本中直接 require。
 

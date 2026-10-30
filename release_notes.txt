@@ -1,19 +1,30 @@
 ========================================
-TimeFlow v1.2.9 Release Notes (Google Play - versionCode: 31)
+TimeFlow v1.3.1 Release Notes (Google Play - versionCode: 34)
 ========================================
 
 【1. 简体中文版 (zh-CN) - 适用于 Google Play Console 更新说明，严格控制在 500 字符以内】
-v1.2.9 更新说明：
-• 🍅 番茄时钟交互人性化：默认轻触即开始并提供 5 秒快速撤销条；支持自选「长按 1 秒防误触」开关。
-• 🛡️ 弹性专注与记录保护：放弃专注支持提前结算（专注满 1 分钟即可保存，不丢工作）；收获页按返回键自动保留记录。
-• ⏱️ 灵活冲刺与时长延展：专注中支持随时「+5 分钟」（上限 120 分钟）；收获页支持一键「再来 5 分钟」快速收尾。
-• 🔔 到期反馈与防遗忘提醒：新增到期提醒反馈设置（铃声 / 仅轻震 / 静音）；专注暂停超过 10 分钟自动调度轻提醒。
-• ⚡ 细节与启动体验升级：新增 2 分钟微启动档位；最近 3 个专注目标自动去重记忆；修复长休文案与通知权限引导。
+v1.3.1 更新说明：
+• 📊 统计洞察「诚实与优雅」：
+  - 番茄数仅统计完整番茄，支持标记提前结束，剔除虚假放弃率；
+  - 引入公平同进度环比，上期为 0 诚实呈现；
+  - 新增月度 7 列日历热力图，杜绝手势冲突并支持时段下钻；
+  - 出行历史采用独立全屏弹层，预览最近 3 条行程并内联切换。
+• 🚶 行程轨迹交互优雅化：
+  - 动态打卡按钮显式提示行程状态；
+  - 90 分钟自动结束与 80 分钟贴心到站提醒；
+  - 打卡与结束行程支持 5 秒倒计时一键撤销；
+  - 分层编辑抽屉与早中晚高频地点推荐。
+• 🛡️ 架构与稳定性加固：全面解耦组件，单元测试与全量审计通过。
 
 【2. 英文版 (en-US) - For Google Play Console "What's new", within 500 characters】
-v1.2.9 What's New:
-• 🍅 Human-Centered Focus Timer: Tap to start instantly with a 5s undo bar; optional 1s hold-to-start anti-mistouch switch.
-• 🛡️ Safe Early Finish: Early finish option saves focused time (>1m) without losing hard work; back button safely defers harvest.
-• ⏱️ Flexible Duration: Add +5m on the fly (up to 120m); quick "Another 5 min" button on harvest screen for final sprints.
-• 🔔 Custom Feedback: Choose between Sound, Vibrate only, or Silent; gentle reminder if paused for over 10m.
-• ⚡ Polished Experience: 2-minute micro-start preset; memory chips for recent tasks; improved long-break messages.
+v1.3.1 What's New:
+• 📊 Honest & Elegant Insights:
+  - Pomodoros only count completed sessions; early finished flagged honestly.
+  - Fair like-for-like progress comparison (no false 100% or misleading drop).
+  - 7-column Monthly Calendar Heatmap with tap-to-drilldown.
+  - Dedicated travel history modal with 3 recent trips preview and inline detail.
+• 🚶 Elegant Travel & Timeline:
+  - Dynamic check-in button & transparent 90m auto-end rule with 80m reminder.
+  - 5s undo bar for check-ins and ending trips.
+  - Layered edit sheet & time-weighted suggestions.
+• 🛡️ Architecture: Decoupled components and full test coverage.
