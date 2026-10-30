@@ -140,6 +140,10 @@ export interface PomodoroState {
   notifId: string | null;
   /** 待落盘/待展示的收获会话队列 (上限 10) */
   pendingHarvests: Harvest[];
+  /** 仅作用于本轮的基础时长 (毫秒)，为空时使用 focusMin */
+  runMs?: number | null;
+  /** 队列满等异常状态标记 */
+  blocked?: boolean;
 }
 
 /** 备份 V2 数据包明文结构 (对应 format.js buildPackage) */
@@ -219,4 +223,13 @@ export interface RawFocusRow {
   note?: string | null;
   partial?: 0 | 1 | boolean;
   [key: string]: any;
+}
+
+/** 撤销操作状态 */
+export interface UndoState {
+  type: 'checkin' | 'endTrip';
+  recordId?: string | null;
+  tripId?: string | null;
+  hadActiveBefore?: boolean;
+  message?: string;
 }

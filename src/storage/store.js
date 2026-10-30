@@ -1,6 +1,9 @@
 // @ts-check
 // 数据存储层：trips + records + focus_sessions + sync_meta。
-// AsyncStorage 仅保留纯本地偏好配置；业务数据全部进 SQLite。
+// 存储边界说明：
+// 1. Expo SQLite 仅限 App 进程使用，桌面小组件进程唯一数据通道为 AsyncStorage/SharedPreferences 快照。
+// 2. 业务数据必须走已封装的 store 函数，禁止在业务与 UI 组件层拼接执行裸 SQL。
+// 3. 任何修改业务表的写操作（插入/更新/删除/结程）必须调用 bumpRevision() 推进指纹，确保备份感知。
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SQLite from 'expo-sqlite';
 
@@ -419,6 +422,7 @@ export async function endTrip() {
   const lastRecord = await db.getFirstAsync('SELECT timestamp FROM records WHERE trip_id = ? ORDER BY timestamp DESC LIMIT 1', active.id);
   const endTs = lastRecord ? lastRecord.timestamp : Date.now();
   await db.runAsync('UPDATE trips SET is_active = 0, end_ts = ? WHERE id = ?', endTs, active.id);
+  await bumpRevision();
 }
 
 export async function setCurrentTripId(id) {
@@ -429,6 +433,7 @@ export async function setCurrentTripId(id) {
       await db.runAsync('UPDATE trips SET is_active = 1 WHERE id = ?', id);
     }
   });
+  await bumpRevision();
 }
 
 // 根据 timestamp 查找所属 trip（用于补记/导入）。
@@ -541,10 +546,10 @@ export async function saveRecord(record) {
 export async function updateRecord(id, patch) {
   const db = await getDb();
   const colMap = { locationName: 'location_name', lat: 'lat', lng: 'lng', mode: 'mode', tripId: 'trip_id' };
-  const keys = Object.keys(patch);
-  if (!keys.length) return;
-  const sets = keys.map(k => `${colMap[k] || k} = ?`).join(', ');
-  const values = keys.map(k => patch[k] ?? null);
+  const validKeys = Object.keys(patch || {}).filter(k => k in colMap);
+  if (!validKeys.length) return;
+  const sets = validKeys.map(k => `${colMap[k]} = ?`).join(', ');
+  const values = validKeys.map(k => patch[k] ?? null);
   await db.runAsync(`UPDATE records SET ${sets} WHERE id = ?`, ...values, id);
   await bumpRevision();
   await syncWidgetSnapshot().catch(() => {});
@@ -743,28 +748,6 @@ export async function setSyncMeta(patch) {
   await db.runAsync(`UPDATE sync_meta SET ${updates.join(', ')} WHERE user_id = 'local'`, ...values);
 }
 
-// ---------------- 兼容层 ----------------
-
-export async function getUnifiedRecords() {
-  const [records, focusSessions] = await Promise.all([getRecords(), getFocusSessions()]);
-  const unified = [
-    ...records.map(r => ({ ...r, duration: null, category: null, note: null })),
-    ...focusSessions.map(f => ({
-      id: f.id,
-      timestamp: f.timestamp,
-      locationName: f.goalName,
-      lat: null,
-      lng: null,
-      mode: 'focus',
-      tripId: null,
-      duration: f.duration,
-      category: f.category,
-      note: f.note,
-    })),
-  ];
-  return unified.sort((a, b) => a.timestamp - b.timestamp);
-}
-
 // ---------------- 全局工具 ----------------
 
 export async function getRecordsFingerprint() {
@@ -932,6 +915,9 @@ async function importV1Records(records) {
   });
   const after = (await countRecords()) + (await countFocusSessions());
   const imported = after - before;
-  if (imported > 0) await bumpRevision();
+  if (imported > 0) {
+    await bumpRevision();
+    await syncWidgetSnapshot().catch(() => {});
+  }
   return { imported, skipped: list.length - imported + skippedInvalid };
 }

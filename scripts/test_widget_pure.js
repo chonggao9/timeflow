@@ -268,6 +268,60 @@ test('heatGridSvg：生成 28 个热力色块与今日高亮边框', () => {
   assert.strictEqual(rects.length, 29); // 28 个格子 + 1 个今日外边框
 });
 
+const { normalizeSnapshotForDay } = require('../widget/snapshotNormalize');
+
+test('normalizeSnapshotForDay：跨 0/1/2/3/6/7 天校正（清零、左移与过滤）', () => {
+  const baseTs = new Date(2026, 9, 20, 10, 0, 0).getTime(); // 2026-10-20
+  const sampleSnapshot = {
+    v: 1,
+    updatedAt: baseTs,
+    travel: {
+      count: 2,
+      todayRecords: [
+        { id: 'r1', timestamp: baseTs - 3600000, mode: 'walk', locationName: 'A', lat: null, lng: null, tripId: null },
+        { id: 'r2', timestamp: baseTs, mode: 'bike', locationName: 'B', lat: null, lng: null, tripId: null },
+      ],
+    },
+    focus: {
+      todayCompletedMinutes: 50,
+      past6DaysMinutes: [10, 20, 30, 40, 50, 60],
+    },
+  };
+
+  // 1. 同天 (跨 0 天)：原样返回
+  const sameDay = normalizeSnapshotForDay(sampleSnapshot, baseTs + 3600000);
+  assert.strictEqual(sameDay.travel.count, 2);
+  assert.strictEqual(sameDay.focus.todayCompletedMinutes, 50);
+
+  // 2. 次日 (跨 1 天)：today 归 0，昨日 50 分钟并入 past6 末尾
+  const nextDay = baseTs + 86400000;
+  const day1 = normalizeSnapshotForDay(sampleSnapshot, nextDay);
+  assert.strictEqual(day1.focus.todayCompletedMinutes, 0);
+  assert.deepStrictEqual(day1.focus.past6DaysMinutes, [20, 30, 40, 50, 60, 50]);
+  assert.strictEqual(day1.travel.count, 0);
+  assert.deepStrictEqual(day1.travel.todayRecords, []);
+
+  // 3. 跨 2 天：平移 2 天
+  const day2 = normalizeSnapshotForDay(sampleSnapshot, baseTs + 2 * 86400000);
+  assert.strictEqual(day2.focus.todayCompletedMinutes, 0);
+  assert.deepStrictEqual(day2.focus.past6DaysMinutes, [30, 40, 50, 60, 50, 0]);
+
+  // 4. 跨 3 天：平移 3 天
+  const day3 = normalizeSnapshotForDay(sampleSnapshot, baseTs + 3 * 86400000);
+  assert.strictEqual(day3.focus.todayCompletedMinutes, 0);
+  assert.deepStrictEqual(day3.focus.past6DaysMinutes, [40, 50, 60, 50, 0, 0]);
+
+  // 5. 跨 6 天：仅保留最后 1 天的 50 分钟，其余全 0
+  const day6 = normalizeSnapshotForDay(sampleSnapshot, baseTs + 6 * 86400000);
+  assert.strictEqual(day6.focus.todayCompletedMinutes, 0);
+  assert.deepStrictEqual(day6.focus.past6DaysMinutes, [50, 0, 0, 0, 0, 0]);
+
+  // 6. 跨 7 天及以上：全归 0
+  const day7 = normalizeSnapshotForDay(sampleSnapshot, baseTs + 7 * 86400000);
+  assert.strictEqual(day7.focus.todayCompletedMinutes, 0);
+  assert.deepStrictEqual(day7.focus.past6DaysMinutes, [0, 0, 0, 0, 0, 0]);
+});
+
 console.log('');
 if (failures.length) {
   console.error(`❌ ${failures.length} 个用例失败：${failures.join('、')}`);

@@ -15,7 +15,6 @@
     "release": "node scripts/release.js",
     "build:local": "node scripts/build_local.js",
     "build:aab": "node scripts/build_local.js --aab",
-    "postinstall": "patch-package",
     "ios": "expo run:ios"
   },
   "dependencies": {

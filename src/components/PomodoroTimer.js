@@ -1271,6 +1271,10 @@ export default function PomodoroTimer({
     await stopAmbientSound();
     const now = Date.now();
     const prev = engineRef.current;
+    if ((prev?.pendingHarvests || []).length >= MAX_PENDING_HARVESTS) {
+      showToast(t('pomodoro.pendingLimitDesc', '您有较多待确认的专注记录，请先处理后再开始新番茄'));
+      return;
+    }
     const elapsedMs = prev ? Math.max(0, durationMs(prev) - deriveDisplay(prev, now).remainingMs) : 0;
     const focusedSec = Math.max(0, Math.round(elapsedMs / 1000));
     if (focusedSec < 60) return;
@@ -1296,7 +1300,7 @@ export default function PomodoroTimer({
     let next = engineReset(prev || createState({ now }), now);
     next = engineSwitchMode(next, 'short', now);
     next.remainingMs = SHORT_MS;
-    next.pendingHarvests = [...(next.pendingHarvests || []), partialHarvest].slice(-MAX_PENDING_HARVESTS);
+    next.pendingHarvests = [...(next.pendingHarvests || []), partialHarvest];
     engineRef.current = next;
 
     setPhaseAndRef('done');
@@ -1460,9 +1464,13 @@ export default function PomodoroTimer({
   // 收获页「再来 5 分钟」：保存上一个番茄，以 5 分钟直接开启新番茄（沿用当前分类与任务名，不篡改默认时长）
   const startAnother5MinFocus = useCallback(async () => {
     hapticImpact(Haptics.ImpactFeedbackStyle.Medium);
+    if ((engineRef.current?.pendingHarvests || []).length >= MAX_PENDING_HARVESTS) {
+      showToast(t('pomodoro.pendingLimitDesc', '您有较多待确认的专注记录，请先处理后再开始新番茄'));
+      return;
+    }
     const ok = await saveFocusRecord();
     if (ok) {
-      // 不篡改用户的全局 durationMin 偏好，仅单次设置 5 分钟
+      // 不篡改用户的全局 durationMin 偏好，仅单次设置 5 分钟 runMs
       setTimeLeftSec(5 * 60);
       const now = Date.now();
       const prev = engineRef.current;
@@ -1475,9 +1483,16 @@ export default function PomodoroTimer({
         goalName: currentGoal,
         ambient,
         extraMs: 0,
+        runMs: 5 * 60 * 1000,
+        sessionId: null,
+        startTs: null,
         remainingMs: 5 * 60 * 1000,
       };
       const started = engineStart(prepared, now);
+      if (started.blocked) {
+        showToast(t('pomodoro.pendingLimitDesc', '您有较多待确认的专注记录，请先处理后再开始新番茄'));
+        return;
+      }
       engineRef.current = started;
       setPhaseAndRef('running');
       if (onRunningChange) onRunningChange(true);

@@ -331,6 +331,60 @@ async function main() {
     assert.strictEqual(fake.map[LEGACY_ACTIVE_KEY], legacy); // 旧 key 保留（回滚保险）
   });
 
+  await test('runMs 临时轮次时长：5分钟轮、结算300秒、reset清空回默认时长', () => {
+    // 1. 设置 runMs 为 5 分钟
+    let s = createState({ now: T0, focusMin: 25 });
+    s.runMs = 5 * MIN;
+    assert.strictEqual(durationMs(s), 5 * MIN);
+    s.extraMs = 2 * MIN;
+    assert.strictEqual(durationMs(s), 7 * MIN); // extraMs 叠加在 runMs 上
+
+    // 2. 启动并结算
+    s.extraMs = 0;
+    s.remainingMs = 5 * MIN;
+    s = start(s, T0);
+    assert.strictEqual(s.endAt, T0 + 5 * MIN);
+    const { state: next, harvested } = settle(s, T0 + 5 * MIN);
+    assert.ok(harvested);
+    assert.strictEqual(harvested.durationSec, 300); // 结算为 300 秒
+    assert.strictEqual(next.runMs, null); // settle 后自动清空 runMs
+
+    // 3. reset 同样清空 runMs 回归默认 focusMin
+    s.runMs = 5 * MIN;
+    const resetState = reset(s, T0);
+    assert.strictEqual(resetState.runMs, null);
+    assert.strictEqual(resetState.remainingMs, 25 * MIN);
+  });
+
+  await test('待收获队列满 10 条守卫：start 拦截打上 blocked，settle 保持 running+过期 endAt', () => {
+    let s = createState({ now: T0 });
+    // 塞满 10 条
+    s.pendingHarvests = Array(MAX_PENDING_HARVESTS).fill(0).map((_, i) => ({
+      sessionId: `focus-${i}`,
+      startTs: T0,
+      endAt: T0 + 25 * MIN,
+      durationSec: 1500,
+      category: 'work',
+      goalName: '',
+      ambient: 'none',
+      completedToday: i + 1,
+    }));
+
+    // 1. 尝试 start 开启新番茄：被守卫拦截，保持停止并标 blocked: true
+    const blockedStart = start(s, T0);
+    assert.strictEqual(blockedStart.running, false);
+    assert.strictEqual(blockedStart.blocked, true);
+
+    // 2. 模拟已有番茄运行中到点 settle：拒绝入队丢弃旧记录，标 blocked: true，保持 running 与过期 endAt
+    const runningExpired = { ...s, running: true, endAt: T0 + 25 * MIN };
+    const { state: settledBlocked, harvested } = settle(runningExpired, T0 + 30 * MIN);
+    assert.strictEqual(harvested, null);
+    assert.strictEqual(settledBlocked.running, true);
+    assert.strictEqual(settledBlocked.blocked, true);
+    assert.strictEqual(settledBlocked.endAt, T0 + 25 * MIN);
+    assert.strictEqual(settledBlocked.pendingHarvests.length, MAX_PENDING_HARVESTS);
+  });
+
   __useStorage(null);
 
   console.log('');

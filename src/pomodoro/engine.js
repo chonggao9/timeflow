@@ -24,7 +24,10 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 export function durationMs(state) {
   if (state.mode === 'short') return SHORT_MS;
   if (state.mode === 'long') return LONG_MS;
-  return (state.focusMin || FOCUS_DEFAULT_MIN) * 60 * 1000 + (state.extraMs || 0);
+  const baseMs = (typeof state.runMs === 'number' && state.runMs > 0)
+    ? state.runMs
+    : (state.focusMin || FOCUS_DEFAULT_MIN) * 60 * 1000;
+  return baseMs + (state.extraMs || 0);
 }
 
 export function todayKey(now) {
@@ -59,6 +62,8 @@ export function createState(opts = {}) {
     ambient: opts.ambient || 'none',
     notifId: null,
     pendingHarvests: [],
+    runMs: null,
+    blocked: false,
   };
 }
 
@@ -73,11 +78,16 @@ function withDay(state, now) {
 
 export function start(state, now) {
   if (state.running) return state; // 幂等
+  // 满队列守卫：超过上限拒绝开启，保持原状并打上 blocked 标记
+  if (state.mode === 'focus' && (state.pendingHarvests || []).length >= MAX_PENDING_HARVESTS) {
+    return { ...state, blocked: true };
+  }
   let s = withDay(state, now);
   const remaining = s.remainingMs > 0 ? s.remainingMs : durationMs(s);
   return {
     ...s,
     running: true,
+    blocked: false,
     startTs: s.startTs || now,
     sessionId: s.sessionId || `focus-${s.startTs || now}`,
     endAt: now + remaining,
@@ -104,6 +114,8 @@ export function reset(state, now) {
     sessionId: null,
     startTs: null,
     notifId: null,
+    runMs: null,
+    blocked: false,
   };
   next.remainingMs = durationMs(next);
   return next;
@@ -112,7 +124,18 @@ export function reset(state, now) {
 export function switchMode(state, mode, now) {
   if (mode !== 'focus' && mode !== 'short' && mode !== 'long') return state;
   const s = withDay(state, now);
-  const next = { ...s, mode, running: false, endAt: null, extraMs: 0, sessionId: null, startTs: null, notifId: null };
+  const next = {
+    ...s,
+    mode,
+    running: false,
+    endAt: null,
+    extraMs: 0,
+    sessionId: null,
+    startTs: null,
+    notifId: null,
+    runMs: null,
+    blocked: false,
+  };
   next.remainingMs = durationMs(next);
   return next;
 }
@@ -122,6 +145,7 @@ export function setFocusMin(state, min, now) {
   const s = { ...state, focusMin };
   if (!s.running && s.mode === 'focus') {
     s.extraMs = 0;
+    s.runMs = null;
     s.remainingMs = focusMin * 60 * 1000;
   }
   return s;
@@ -160,6 +184,13 @@ export function settle(state, now) {
   };
 
   if (state.mode === 'focus') {
+    // 满队列时加 blocked:true，保持 running + 过期 endAt，腾出后再结算
+    if ((s.pendingHarvests || []).length >= MAX_PENDING_HARVESTS) {
+      return {
+        state: { ...s, blocked: true },
+        harvested: null,
+      };
+    }
     const harvested = {
       sessionId: state.sessionId || `focus-${state.startTs || endedAt}`,
       startTs: state.startTs || endedAt - durationMs(state),
@@ -171,11 +202,13 @@ export function settle(state, now) {
       completedToday: s.completedToday + 1,
     };
     const nextMode = nextModeAfterEnd(s);
-    const queue = [...(s.pendingHarvests || []), harvested].slice(-MAX_PENDING_HARVESTS);
+    const queue = [...(s.pendingHarvests || []), harvested];
     const nextState = {
       ...base,
       mode: nextMode,
       extraMs: 0,
+      runMs: null,
+      blocked: false,
       completedToday: s.completedToday + 1,
       completedDate: todayKey(endedAt),
       remainingMs: nextMode === 'focus' ? s.focusMin * 60 * 1000 : nextMode === 'short' ? SHORT_MS : LONG_MS,
@@ -186,7 +219,7 @@ export function settle(state, now) {
 
   // 休息结束：回专注待开始，不落库不排队
   return {
-    state: { ...base, mode: 'focus', extraMs: 0, remainingMs: s.focusMin * 60 * 1000 },
+    state: { ...base, mode: 'focus', extraMs: 0, runMs: null, blocked: false, remainingMs: s.focusMin * 60 * 1000 },
     harvested: null,
   };
 }
@@ -283,6 +316,8 @@ export function normalizeState(raw, now, opts = {}) {
     if (!['focus', 'short', 'long'].includes(base.mode)) base.mode = 'focus';
     base.running = !!base.running && base.endAt != null;
     if (!base.running) base.endAt = null;
+    base.runMs = (typeof raw.runMs === 'number' && raw.runMs > 0) ? raw.runMs : null;
+    base.blocked = !!raw.blocked;
     return base;
   }
 

@@ -10,9 +10,46 @@ import {
   formatShortDuration,
 } from '../../utils/analytics';
 import { formatDuration } from '../../utils/stats';
+import { getCategoryMeta } from '../../utils/focusCategories';
 import CalendarHeatmap from './CalendarHeatmap';
 import ChartDrilldownList from './ChartDrilldownList';
 import { radius } from '../../theme';
+
+const PERIOD_I18N_MAP = {
+  morning: { label: 'insights.timeMorning', span: 'insights.timeMorningSpan' },
+  afternoon: { label: 'insights.timeAfternoon', span: 'insights.timeAfternoonSpan' },
+  evening: { label: 'insights.timeEvening', span: 'insights.timeEveningSpan' },
+  lateNight: { label: 'insights.timeLateNight', span: 'insights.timeLateNightSpan' },
+};
+
+function getPeriodLabel(periodKey, t) {
+  const item = PERIOD_I18N_MAP[periodKey];
+  return item ? t(item.label) : '';
+}
+
+function getPeriodSpan(periodKey, t) {
+  const item = PERIOD_I18N_MAP[periodKey];
+  return item ? t(item.span) : '';
+}
+
+function getCatDisplayName(cat, t) {
+  if (!cat) return '';
+  if (cat.key === 'uncategorized' || cat.key === 'insights.uncategorized') {
+    return t('insights.uncategorized');
+  }
+  const meta = getCategoryMeta(cat.key, t);
+  if (!meta.key) {
+    return cat.name;
+  }
+  return meta.name;
+}
+
+function getTaskDisplayName(taskName, t) {
+  if (!taskName || taskName === '未命名专注' || taskName.toLowerCase() === 'unnamed focus') {
+    return t('home.unnamedFocus');
+  }
+  return taskName;
+}
 
 export default function FocusInsights({
   focusSessions = [],
@@ -47,25 +84,30 @@ export default function FocusInsights({
     setExpandedCats(prev => ({ ...prev, [catKey]: !prev[catKey] }));
   };
 
-  // 生成智能分析一句话
+  // 生成智能分析一句话 (由 i18n 模板驱动)
   const summaryText = useMemo(() => {
     if (filteredList.length === 0) return null;
     const peak = metrics.peakPeriod;
-    const peakStr = peak && peak.sec > 0 ? `${peak.label}（${peak.span}）` : null;
+    const peakStr = peak && peak.sec > 0
+      ? t('insights.summaryPeakSpan', {
+          label: getPeriodLabel(peak.key, t),
+          span: getPeriodSpan(peak.key, t),
+        })
+      : null;
     const topCat = metrics.categories && metrics.categories.length > 0 ? metrics.categories[0] : null;
 
-    if (lang === 'en') {
-      let s = `Completed ${metrics.pomodoroCount || 0} full pomodoros, total ${formatShortDuration(metrics.totalSec || 0)}.`;
-      if (peakStr) s += ` Most active in ${peakStr}.`;
-      if (topCat && topCat.count > 0) s += ` Focused primarily on ${topCat.name}.`;
-      return s;
+    let s = t('insights.summaryBase', {
+      count: metrics.pomodoroCount || 0,
+      duration: formatShortDuration(metrics.totalSec || 0),
+    });
+    if (peakStr) {
+      s += t('insights.summaryPeak', { peak: peakStr });
     }
-
-    let s = `共完成 ${metrics.pomodoroCount || 0} 个完整番茄，专注 ${formatShortDuration(metrics.totalSec || 0)}。`;
-    if (peakStr) s += ` 最常在${peakStr}专注。`;
-    if (topCat && topCat.count > 0) s += ` 重点投入在「${topCat.name}」。`;
+    if (topCat && topCat.count > 0) {
+      s += t('insights.summaryCategory', { category: getCatDisplayName(topCat, t) });
+    }
     return s;
-  }, [metrics, filteredList, lang]);
+  }, [metrics, filteredList, t]);
 
   // 下钻记录
   const drilldownData = useMemo(() => {
@@ -305,7 +347,7 @@ export default function FocusInsights({
                       activeOpacity={0.7}
                     >
                       <Text style={[styles.catDistName, { color: colors.ink }]} numberOfLines={1}>
-                        {cat.name}
+                        {getCatDisplayName(cat, t)}
                       </Text>
                       <View style={styles.catDistRight}>
                         <Text style={[styles.catDistCount, { color: colors.ink3 }]}>
@@ -349,7 +391,7 @@ export default function FocusInsights({
                             activeOpacity={0.7}
                           >
                             <Text style={[styles.catTaskName, { color: colors.ink }]} numberOfLines={1}>
-                              • {task.name}
+                              • {getTaskDisplayName(task.name, t)}
                             </Text>
                             <Text style={[styles.catTaskDur, { color: colors.ink2 }]}>
                               {formatShortDuration(task.sec)}
@@ -389,9 +431,9 @@ export default function FocusInsights({
                   <View key={p.key} style={styles.goldenRow}>
                     <View style={styles.goldenLeftCol}>
                       <Text style={[styles.goldenPeriodName, { color: isPeak ? colors.primary : colors.ink }, isPeak && { fontWeight: '700' }]}>
-                        {p.label}{isPeak ? ` ${t('insights.peakTag')}` : ''}
+                        {getPeriodLabel(p.key, t)}{isPeak ? ` ${t('insights.peakTag')}` : ''}
                       </Text>
-                      <Text style={[styles.goldenSpan, { color: colors.ink3 }]}>{p.span}</Text>
+                      <Text style={[styles.goldenSpan, { color: colors.ink3 }]}>{getPeriodSpan(p.key, t)}</Text>
                     </View>
                     <View style={[styles.goldenBarTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
                       {p.sec > 0 && (
