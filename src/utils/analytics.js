@@ -1080,4 +1080,23 @@ export function computeTravelTrendBars(records = [], range = 'week', nowInput = 
   return bars;
 }
 
+/**
+ * 紧凑时长格式化（用于统计卡片与趋势图表）：
+ * 0 -> '0m'
+ * 45s -> '<1m'
+ * 3600s -> '1h'
+ * 3660s -> '1h 1m'
+ * @param {number} sec 秒数
+ * @returns {string}
+ */
+export function formatShortDuration(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  if (s === 0) return '0m';
+  if (s < 60) return '<1m';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  return `${m}m`;
+}
+
 

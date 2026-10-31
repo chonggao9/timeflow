@@ -81,11 +81,12 @@ export function normalizeCategory(raw) {
  */
 export function getCategoryMeta(key, t) {
   const category = getCategoryByKey(key);
+  const translate = typeof t === 'function' ? t : ((k) => k);
 
   if (category) {
     return {
       ...category,
-      name: t(category.i18nKey),
+      name: translate(category.i18nKey),
     };
   }
 
@@ -94,7 +95,7 @@ export function getCategoryMeta(key, t) {
     i18nKey: UNCATEGORIZED.i18nKey,
     emoji: UNCATEGORIZED.emoji,
     color: UNCATEGORIZED.color,
-    name: t(UNCATEGORIZED.i18nKey),
+    name: translate(UNCATEGORIZED.i18nKey),
   };
 }
 
