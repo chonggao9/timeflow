@@ -17,7 +17,7 @@ import { formatDuration, formatTime, isPlaceholderName, placeKey } from '../../u
 import CalendarHeatmap from './CalendarHeatmap';
 import ChartDrilldownList from './ChartDrilldownList';
 import ModeIcon from '../ModeIcon';
-import { radius } from '../../theme';
+import { radius, shadow } from '../../theme';
 
 export default function TravelInsights({
   travelRecords = [],
@@ -139,17 +139,17 @@ export default function TravelInsights({
       {/* 未命名地点置顶提醒 */}
       {unnamedRecords.length > 0 && (
         <TouchableOpacity
-          style={[styles.unnamedBanner, { backgroundColor: isDark ? 'rgba(255, 159, 10, 0.15)' : 'rgba(255, 149, 0, 0.10)', borderColor: isDark ? '#FF9F0A' : '#F59E0B' }]}
+          style={[styles.unnamedBanner, { backgroundColor: colors.warnBg, borderColor: colors.warn }]}
           onPress={() => onStartRenameRecord && onStartRenameRecord(unnamedRecords[0])}
           activeOpacity={0.7}
         >
           <View style={styles.unnamedLeft}>
-            <Ionicons name="location-outline" size={18} color={isDark ? '#FF9F0A' : '#D97706'} />
-            <Text style={[styles.unnamedText, { color: isDark ? '#FF9F0A' : '#B45309' }]}>
+            <Ionicons name="location-outline" size={18} color={colors.warn} />
+            <Text style={[styles.unnamedText, { color: colors.warn }]}>
               {t('insights.unnamedBannerTitle', { n: unnamedRecords.length })}
             </Text>
           </View>
-          <View style={[styles.unnamedBtn, { backgroundColor: isDark ? '#FF9F0A' : '#D97706' }]}>
+          <View style={[styles.unnamedBtn, { backgroundColor: colors.warn }]}>
             <Text style={styles.unnamedBtnText}>{t('insights.goName')}</Text>
           </View>
         </TouchableOpacity>
@@ -158,7 +158,7 @@ export default function TravelInsights({
       {/* 3 核心指标卡 */}
       <View style={styles.overviewGrid}>
         {/* 总行程 */}
-        <View style={[styles.overviewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.overviewCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <Text style={[styles.overviewNum, { color: colors.ink }]}>{travelMetrics.tripCount}</Text>
           <Text style={[styles.overviewLabel, { color: colors.ink2 }]}>
             {t('insights.travelTotalTrips')}
@@ -169,7 +169,7 @@ export default function TravelInsights({
         </View>
 
         {/* 在途总时长 */}
-        <View style={[styles.overviewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.overviewCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <Text style={[styles.overviewNum, { color: colors.ink }]}>
             {formatShortDuration(travelMetrics.totalDurSec)}
           </Text>
@@ -184,7 +184,7 @@ export default function TravelInsights({
         </View>
 
         {/* 最常走路线 */}
-        <View style={[styles.overviewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.overviewCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <Text style={[styles.overviewNumSmall, { color: colors.ink }]} numberOfLines={1}>
             {travelMetrics.topRouteStr}
           </Text>
@@ -200,7 +200,7 @@ export default function TravelInsights({
       </View>
 
       {!hasData ? (
-        <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <Ionicons name="map-outline" size={44} color={colors.ink3} />
           <Text style={[styles.emptyTitle, { color: colors.ink }]}>
             {t('insights.empty.title')}
@@ -234,7 +234,7 @@ export default function TravelInsights({
             </View>
           ) : (
             // 本周 / 全部 柱状图
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
               <View style={styles.cardHeader}>
                 <Text style={[styles.sectionTitle, { color: colors.ink }]}>
                   {t('insights.weeklyTrendTitle')}
@@ -320,7 +320,7 @@ export default function TravelInsights({
 
           {/* ③ 高频路线与规律分析 */}
           {activeRoute && journeyStats && (
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
               <View style={styles.cardHeader}>
                 <View style={styles.routeHeaderLeft}>
                   <Text style={[styles.sectionTitle, { color: colors.ink }]}>
@@ -375,7 +375,7 @@ export default function TravelInsights({
 
           {/* ④ 交通方式占比 */}
           {modeStats.length > 0 && (
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
               <View style={styles.cardHeader}>
                 <Text style={[styles.sectionTitle, { color: colors.ink }]}>
                   {t('home.editMode')}
@@ -409,7 +409,7 @@ export default function TravelInsights({
           )}
 
           {/* ⑤ 决策 3：底部先预览最近 3 条出行记录 + 查看全部入口 */}
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             <View style={styles.cardHeader}>
               <Text style={[styles.sectionTitle, { color: colors.ink }]}>
                 {t('insights.recentTrips')}
@@ -433,13 +433,13 @@ export default function TravelInsights({
                     key={trip.tripId || `trip-${idx}`}
                     style={[
                       styles.recentItem,
-                      idx < recent3Trips.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                      idx < recent3Trips.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.line },
                     ]}
                     onPress={() => onSelectTripDetail && onSelectTripDetail(trip)}
                     activeOpacity={0.7}
                   >
                     <View style={styles.recentLeft}>
-                      <View style={[styles.modeIconBox, { backgroundColor: colors.canvas }]}>
+                      <View style={[styles.modeIconBox, { backgroundColor: colors.chip }]}>
                         <ModeIcon mode={trip.mode || 'walk'} size={16} color={colors.primary} />
                       </View>
                       <View style={styles.recentMeta}>
@@ -498,15 +498,17 @@ const styles = StyleSheet.create({
   },
   overviewGrid: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
   overviewCard: {
     flex: 1,
-    padding: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
     borderRadius: radius.md,
     borderWidth: 1,
     alignItems: 'center',
     gap: 4,
+    ...shadow.card,
   },
   overviewNum: {
     fontSize: 18,
@@ -525,10 +527,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   card: {
-    padding: 14,
-    borderRadius: radius.lg,
+    padding: 16,
+    borderRadius: 20,
     borderWidth: 1,
     gap: 12,
+    ...shadow.card,
   },
   cardHeader: {
     flexDirection: 'row',

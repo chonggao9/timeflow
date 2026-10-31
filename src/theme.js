@@ -112,6 +112,8 @@ export function createThemeColors(skinId = DEFAULT_SKIN, isDark = false) {
     ink3: derivedInk3,
     line: t.divider,
     line2: t.divider,
+    border: t.divider,
+    canvas: t.background,
     past: derivedPast,
     chip: derivedChip,
     scrim: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(15,20,25,0.36)',
@@ -142,6 +144,7 @@ export const lightColors = createThemeColors(DEFAULT_SKIN, false);
 export const darkColors = createThemeColors(DEFAULT_SKIN, true);
 
 export const radius = {
+  full: 999,
   xl: 28,
   lg: 22,
   md: 16,

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { useI18n } from '../../i18n/LanguageContext';
-import { radius } from '../../theme';
+import { radius, shadow } from '../../theme';
 
 export default function CalendarHeatmap({
   data,               // { days: [ [ { dateStr, dayOfMonth, isCurrentMonth, isToday, level, value, records } ] ], maxVal }
@@ -44,7 +44,7 @@ export default function CalendarHeatmap({
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.line }]}>
       {/* 星期表头 */}
       <View style={styles.headerRow}>
         {weekHeaders.map((header, idx) => (
@@ -136,10 +136,11 @@ export default function CalendarHeatmap({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: radius.lg,
+    borderRadius: 20,
     borderWidth: 1,
-    padding: 14,
+    padding: 16,
     marginVertical: 10,
+    ...shadow.card,
   },
   headerRow: {
     flexDirection: 'row',

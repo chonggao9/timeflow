@@ -13,7 +13,7 @@ import { formatDuration } from '../../utils/stats';
 import { getCategoryMeta } from '../../utils/focusCategories';
 import CalendarHeatmap from './CalendarHeatmap';
 import ChartDrilldownList from './ChartDrilldownList';
-import { radius } from '../../theme';
+import { radius, shadow } from '../../theme';
 
 const PERIOD_I18N_MAP = {
   morning: { label: 'insights.timeMorning', span: 'insights.timeMorningSpan' },
@@ -133,10 +133,10 @@ export default function FocusInsights({
     <View style={styles.container}>
       {/* 智能分析一句话结论置顶 */}
       {summaryText && (
-        <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.summaryCard, { backgroundColor: colors.primarySoft, borderColor: colors.primary + '33' }]}>
           <View style={styles.summaryHead}>
-            <Ionicons name="sparkles" size={16} color={colors.primary} />
-            <Text style={[styles.summaryHeadText, { color: colors.primary }]}>
+            <Ionicons name="sparkles" size={16} color={colors.primaryStrong} />
+            <Text style={[styles.summaryHeadText, { color: colors.primaryStrong }]}>
               {t('insights.summaryPrefix')}
             </Text>
           </View>
@@ -147,7 +147,7 @@ export default function FocusInsights({
       {/* ① 3 核心指标卡 */}
       <View style={styles.overviewGrid}>
         {/* 专注时长 + 同进度公平对比 */}
-        <View style={[styles.overviewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.overviewCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <Text style={[styles.overviewNum, { color: colors.ink }]}>
             {formatShortDuration(metrics.totalSec)}
           </Text>
@@ -160,7 +160,7 @@ export default function FocusInsights({
               metrics.growthRate > 0
                 ? { color: colors.primary }
                 : metrics.growthRate < 0
-                ? { color: colors.danger || '#FF453A' }
+                ? { color: colors.danger }
                 : { color: colors.ink3 },
             ]}
           >
@@ -175,7 +175,7 @@ export default function FocusInsights({
         </View>
 
         {/* 番茄数（只计完整，副标含提前结束） */}
-        <View style={[styles.overviewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.overviewCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <Text style={[styles.overviewNum, { color: colors.ink }]}>
             {metrics.pomodoroCount}
           </Text>
@@ -190,7 +190,7 @@ export default function FocusInsights({
         </View>
 
         {/* 最长单次 */}
-        <View style={[styles.overviewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.overviewCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <Text style={[styles.overviewNum, { color: colors.ink }]}>
             {metrics.longestSec > 0 ? `${Math.round(metrics.longestSec / 60)}m` : '0m'}
           </Text>
@@ -206,7 +206,7 @@ export default function FocusInsights({
       </View>
 
       {!hasData ? (
-        <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <Ionicons name="timer-outline" size={44} color={colors.ink3} />
           <Text style={[styles.emptyTitle, { color: colors.ink }]}>
             {range === 'today'
@@ -246,7 +246,7 @@ export default function FocusInsights({
             </View>
           ) : (
             // 今天 3 小时段 / 本周天 / 全部柱状图
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
               <View style={styles.cardHeader}>
                 <Text style={[styles.sectionTitle, { color: colors.ink }]}>
                   {t('insights.trendTitle')}
@@ -326,7 +326,7 @@ export default function FocusInsights({
           )}
 
           {/* ③ 分类分布 */}
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             <View style={styles.cardHeader}>
               <Text style={[styles.sectionTitle, { color: colors.ink }]}>
                 {t('insights.categoryDist')}
@@ -379,7 +379,7 @@ export default function FocusInsights({
 
                     {/* 展开的 Top 5 任务 */}
                     {isExpanded && cat.topTasks && cat.topTasks.length > 0 && (
-                      <View style={[styles.catTasksBox, { backgroundColor: colors.canvas }]}>
+                      <View style={[styles.catTasksBox, { backgroundColor: colors.chip }]}>
                         <Text style={[styles.catTasksTitle, { color: colors.ink3 }]}>
                           {t('insights.topTasks')}
                         </Text>
@@ -411,7 +411,7 @@ export default function FocusInsights({
           </View>
 
           {/* ④ 专注习惯 (黄金时段) */}
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             <View style={styles.cardHeader}>
               <Text style={[styles.sectionTitle, { color: colors.ink }]}>
                 {t('insights.habitTitle')}
@@ -464,10 +464,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   summaryCard: {
-    padding: 14,
-    borderRadius: radius.lg,
+    padding: 16,
+    borderRadius: 18,
     borderWidth: 1,
     gap: 6,
+    ...shadow.sm,
   },
   summaryHead: {
     flexDirection: 'row',
@@ -484,15 +485,17 @@ const styles = StyleSheet.create({
   },
   overviewGrid: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
   overviewCard: {
     flex: 1,
-    padding: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
     borderRadius: radius.md,
     borderWidth: 1,
     alignItems: 'center',
     gap: 4,
+    ...shadow.card,
   },
   overviewNum: {
     fontSize: 18,
@@ -507,10 +510,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   card: {
-    padding: 14,
-    borderRadius: radius.lg,
+    padding: 16,
+    borderRadius: 20,
     borderWidth: 1,
     gap: 12,
+    ...shadow.card,
   },
   cardHeader: {
     flexDirection: 'row',

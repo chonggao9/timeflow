@@ -97,12 +97,12 @@ export default function TravelHistoryModal({
 
     return (
       <TouchableOpacity
-        style={[styles.tripCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+        style={[styles.tripCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
         onPress={() => setSelectedTrip(trip)}
         activeOpacity={0.7}
       >
         <View style={styles.tripHead}>
-          <View style={[styles.modeWrap, { backgroundColor: colors.canvas }]}>
+          <View style={[styles.modeWrap, { backgroundColor: colors.chip }]}>
             <ModeIcon mode={trip.mode} size={16} color={colors.primary} />
           </View>
           <Text style={[styles.tripTitle, { color: colors.ink }]} numberOfLines={1}>
@@ -145,7 +145,7 @@ export default function TravelHistoryModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={[styles.modalRoot, { backgroundColor: colors.canvas, paddingTop: insets.top }]}>
+      <View style={[styles.modalRoot, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
         {selectedTrip ? (
           // 详情视图：内联切换，不新建 Modal
           <TripDetailView
@@ -161,7 +161,7 @@ export default function TravelHistoryModal({
           // 列表视图
           <View style={styles.listContainer}>
             {/* 顶栏 */}
-            <View style={[styles.topBar, { borderBottomColor: colors.border }]}>
+            <View style={[styles.topBar, { borderBottomColor: colors.line }]}>
               <TouchableOpacity
                 style={styles.closeBtn}
                 onPress={onClose}
@@ -177,7 +177,7 @@ export default function TravelHistoryModal({
 
             {/* 搜索框 */}
             <View style={styles.searchSection}>
-              <View style={[styles.searchBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: colors.line }]}>
                 <Ionicons name="search" size={16} color={colors.ink3} />
                 <TextInput
                   style={[styles.searchInput, { color: colors.ink }]}
@@ -204,8 +204,8 @@ export default function TravelHistoryModal({
                   style={[
                     styles.chip,
                     {
-                      backgroundColor: modeFilter === null ? colors.primary : colors.card,
-                      borderColor: modeFilter === null ? colors.primary : colors.border,
+                      backgroundColor: modeFilter === null ? colors.primaryStrong : colors.surface,
+                      borderColor: modeFilter === null ? colors.primaryStrong : colors.line,
                     },
                   ]}
                   onPress={() => setModeFilter(null)}
@@ -213,7 +213,7 @@ export default function TravelHistoryModal({
                   <Text
                     style={[
                       styles.chipText,
-                      { color: modeFilter === null ? colors.card : colors.ink2, fontWeight: modeFilter === null ? '700' : '500' },
+                      { color: modeFilter === null ? '#FFFFFF' : colors.ink2, fontWeight: modeFilter === null ? '700' : '500' },
                     ]}
                   >
                     {t('insights.tripHistoryAllModes')}
@@ -227,8 +227,8 @@ export default function TravelHistoryModal({
                       style={[
                         styles.chip,
                         {
-                          backgroundColor: active ? colors.primary : colors.card,
-                          borderColor: active ? colors.primary : colors.border,
+                          backgroundColor: active ? colors.primaryStrong : colors.surface,
+                          borderColor: active ? colors.primaryStrong : colors.line,
                         },
                       ]}
                       onPress={() => setModeFilter(active ? null : m)}
@@ -236,7 +236,7 @@ export default function TravelHistoryModal({
                       <Text
                         style={[
                           styles.chipText,
-                          { color: active ? colors.card : colors.ink2, fontWeight: active ? '700' : '500' },
+                          { color: active ? '#FFFFFF' : colors.ink2, fontWeight: active ? '700' : '500' },
                         ]}
                       >
                         {t('mode.' + m)}
@@ -326,9 +326,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   chip: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: radius.full,
+    borderRadius: 16,
     borderWidth: 1,
   },
   chipText: {
@@ -356,11 +356,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   tripCard: {
-    borderRadius: radius.md,
+    borderRadius: 16,
     borderWidth: 1,
-    padding: 12,
-    marginBottom: 8,
+    padding: 14,
+    marginBottom: 10,
     gap: 8,
+    ...shadow.sm,
   },
   tripHead: {
     flexDirection: 'row',

@@ -6,7 +6,7 @@ import { useI18n } from '../../i18n/LanguageContext';
 import { formatDuration, formatTime, isPlaceholderName } from '../../utils/stats';
 import { getCategoryMeta } from '../../utils/focusCategories';
 import ModeIcon from '../ModeIcon';
-import { radius } from '../../theme';
+import { radius, shadow } from '../../theme';
 
 export default function ChartDrilldownList({
   title,              // e.g. "10月30日 明细"
@@ -20,7 +20,7 @@ export default function ChartDrilldownList({
 
   if (!items || items.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.line }]}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.ink }]}>{title || t('insights.drilldownTitle')}</Text>
           {onClose && (
@@ -35,7 +35,7 @@ export default function ChartDrilldownList({
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.line }]}>
       <View style={styles.header}>
         <View style={styles.titleArea}>
           <Text style={[styles.title, { color: colors.ink }]}>{title || t('insights.drilldownTitle')}</Text>
@@ -63,7 +63,7 @@ export default function ChartDrilldownList({
                 key={item.id ? `focus-${item.id}` : `focus-idx-${idx}`}
                 style={[
                   styles.itemRow,
-                  idx < items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                  idx < items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.line },
                 ]}
               >
                 <View style={styles.itemLeft}>
@@ -113,14 +113,14 @@ export default function ChartDrilldownList({
               key={item.id ? `trv-${item.id}` : `trv-idx-${idx}`}
               style={[
                 styles.itemRow,
-                idx < items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                idx < items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.line },
               ]}
               disabled={!onPressItem}
               onPress={() => onPressItem && onPressItem(item)}
               activeOpacity={0.7}
             >
               <View style={styles.itemLeft}>
-                <View style={[styles.modeWrap, { backgroundColor: colors.canvas }]}>
+                <View style={[styles.modeWrap, { backgroundColor: colors.chip }]}>
                   <ModeIcon mode={item.mode || 'walk'} size={18} color={colors.primary} />
                 </View>
                 <View style={styles.itemMeta}>
@@ -146,10 +146,11 @@ export default function ChartDrilldownList({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: radius.lg,
+    borderRadius: 20,
     borderWidth: 1,
-    padding: 14,
+    padding: 16,
     marginVertical: 10,
+    ...shadow.card,
   },
   header: {
     flexDirection: 'row',

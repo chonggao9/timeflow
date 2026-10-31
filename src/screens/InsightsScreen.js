@@ -25,7 +25,7 @@ import {
 import { computePathStats, isPlaceholderName } from '../utils/stats';
 import { useTheme } from '../theme/ThemeContext';
 import { useI18n } from '../i18n/LanguageContext';
-import { radius } from '../theme';
+import { radius, shadow } from '../theme';
 
 import FocusInsights from '../components/insights/FocusInsights';
 import TravelInsights from '../components/insights/TravelInsights';
@@ -414,7 +414,7 @@ const makeStyles = (colors, isDark) =>
   StyleSheet.create({
     screen: {
       flex: 1,
-      backgroundColor: colors.canvas,
+      backgroundColor: colors.bg,
     },
     topBar: {
       flexDirection: 'row',
@@ -425,19 +425,20 @@ const makeStyles = (colors, isDark) =>
     },
     segmentedControl: {
       flexDirection: 'row',
-      backgroundColor: colors.card,
-      borderRadius: radius.full,
+      backgroundColor: colors.chip,
+      borderRadius: 20,
       padding: 3,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.line,
     },
     segmentBtn: {
-      paddingHorizontal: 16,
-      paddingVertical: 6,
-      borderRadius: radius.full,
+      paddingHorizontal: 18,
+      paddingVertical: 7,
+      borderRadius: 16,
     },
     segmentBtnActive: {
-      backgroundColor: colors.primary,
+      backgroundColor: colors.surface,
+      ...shadow.sm,
     },
     segmentText: {
       fontSize: 13,
@@ -445,19 +446,20 @@ const makeStyles = (colors, isDark) =>
       color: colors.ink2,
     },
     segmentTextActive: {
-      color: colors.card,
+      color: colors.primaryStrong,
       fontWeight: '700',
     },
     historyBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: radius.md,
-      backgroundColor: colors.card,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 16,
+      backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.line,
+      ...shadow.sm,
     },
     historyBtnText: {
       fontSize: 13,
@@ -467,30 +469,31 @@ const makeStyles = (colors, isDark) =>
     rangeRow: {
       flexDirection: 'row',
       paddingHorizontal: 16,
-      paddingBottom: 10,
+      paddingBottom: 12,
       gap: 8,
     },
     rangeChip: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 6,
-      borderRadius: radius.full,
-      backgroundColor: colors.card,
+      paddingVertical: 7,
+      borderRadius: 16,
+      backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.line,
+      ...shadow.sm,
     },
     rangeChipActive: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
+      backgroundColor: colors.primaryStrong,
+      borderColor: colors.primaryStrong,
     },
     rangeChipText: {
       fontSize: 12,
-      fontWeight: '500',
+      fontWeight: '600',
       color: colors.ink2,
     },
     rangeChipTextActive: {
-      color: colors.card,
+      color: '#FFFFFF',
       fontWeight: '700',
     },
     scroll: {
@@ -498,6 +501,7 @@ const makeStyles = (colors, isDark) =>
     },
     scrollContent: {
       paddingHorizontal: 16,
+      paddingBottom: 28,
       gap: 12,
     },
     modalMask: {
@@ -509,12 +513,13 @@ const makeStyles = (colors, isDark) =>
     },
     dialogBox: {
       width: '100%',
-      backgroundColor: colors.card,
+      backgroundColor: colors.surface,
       borderRadius: radius.lg,
       padding: 20,
       gap: 14,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.line,
+      ...shadow.lg,
     },
     dialogTitle: {
       fontSize: 16,
@@ -528,13 +533,13 @@ const makeStyles = (colors, isDark) =>
     },
     dialogInput: {
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.line,
       borderRadius: radius.md,
       paddingHorizontal: 12,
       paddingVertical: 10,
       fontSize: 14,
       color: colors.ink,
-      backgroundColor: colors.canvas,
+      backgroundColor: colors.chip,
     },
     presetRow: {
       flexDirection: 'row',
@@ -545,9 +550,9 @@ const makeStyles = (colors, isDark) =>
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: radius.sm,
-      backgroundColor: colors.canvas,
+      backgroundColor: colors.chip,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.line,
     },
     presetText: {
       fontSize: 12,
@@ -563,9 +568,10 @@ const makeStyles = (colors, isDark) =>
       paddingHorizontal: 16,
       paddingVertical: 8,
       borderRadius: radius.md,
+      backgroundColor: colors.chip,
     },
     dialogBtnPrimary: {
-      backgroundColor: colors.primary,
+      backgroundColor: colors.primaryStrong,
     },
     dialogBtnText: {
       fontSize: 13,
@@ -573,6 +579,6 @@ const makeStyles = (colors, isDark) =>
       color: colors.ink2,
     },
     dialogBtnPrimaryText: {
-      color: colors.card,
+      color: '#FFFFFF',
     },
   });
